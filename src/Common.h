@@ -16,16 +16,20 @@
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef UTILS_H_
-#define UTILS_H_
+#ifndef COMMON_H_
+#define COMMON_H_
 
-#include "Common.h"
+#include <cassert>
+#include <cmath>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
+#include <cstdint>
 
-class Strings {
-public:
-  static string Format(const char * fmt, ...);
-  static void Append(string & dest, const char * fmt, ...);
-};
+#include <string>
 
+#include <glog/logging.h>
+
+using  std::string;
 
 #endif
