@@ -79,42 +79,54 @@ public:
 };
 
 
-////////////////////////////////// StratumServer //////////////////////////////
+/////////////////////////////////// StratumServer //////////////////////////////
 class StratumServer {
-  // pool stratum server addr
-  struct sockaddr_in upPoolSocketAddr_;
+  static const uint8_t kUpSessionCount_ = 5;
+  bool running_;
+
+  vector<string>   upPoolHost_;
+  vector<uint16_t> upPoolPort_;
+  string upPoolUserName_;
 
   // up stream connnects
-  std::vector<UpStratumClient *> upSessions_;
+  vector<UpStratumClient *> upSessions_;
 
   // down stream connections
-  std::vector<StratumSession *> downSessions_;
+  vector<StratumSession *> downSessions_;
 
   // libevent2
   struct event_base *base_;
   struct event *signal_event_;
   struct evconnlistener *listener_;
-  struct sockaddr_in listenSocketAddr_;
+  struct sockaddr_in listenAddr_;
 
 public:
   SessionIDManager sessionIDManager_;
 
 public:
-  StratumServer();
+  StratumServer(const uint16_t listenPort, const string upPoolUserName);
   ~StratumServer();
 
-  void downAddConnection   (evutil_socket_t fd, StratumSession *connection);
-  void downRemoveConnection(evutil_socket_t fd);
+  UpStratumClient *createUpSession();
 
-  static void listenerCallback(struct evconnlistener* listener,
-                               evutil_socket_t socket,
+  void addUpPool(const char *host, const uint16_t port);
+
+  void addDownConnection(StratumSession *conn);
+  void delDownConnection(StratumSession *conn);
+
+  static void listenerCallback(struct evconnlistener *listener,
+                               evutil_socket_t fd,
                                struct sockaddr* saddr,
-                               int socklen, void* server);
-  static void downReadCallback (struct bufferevent *, void *connection);
-  static void downEventCallback(struct bufferevent *, short, void *connection);
+                               int socklen, void *ptr);
+  static void downReadCallback (struct bufferevent *, void *ptr);
+  static void downEventCallback(struct bufferevent *, short, void *ptr);
 
-  static void upReadCallback (struct bufferevent *, void *connection);
-  static void upEventCallback(struct bufferevent *, short, void *connection);
+  static void upReadCallback (struct bufferevent *, void *ptr);
+  static void upEventCallback(struct bufferevent *, short, void *ptr);
+
+  bool setup();
+  void run();
+  void stop();
 };
 
 
@@ -129,6 +141,7 @@ class UpStratumClient {
 
   //-----------------------
   State state_;
+  uint8_t idx_;
   struct bufferevent *bev_;
   uint32_t extraNonce1_;  // session ID
   uint64_t extraNonce2_;
@@ -190,8 +203,8 @@ public:
 
 
 public:
-  StratumSession(const uint8_t upSessionIdx, struct bufferevent *bev,
-                 StratumServer *server);
+  StratumSession(const uint8_t upSessionIdx, const uint16_t sessionId,
+                 struct bufferevent *bev, StratumServer *server);
   ~StratumSession();
 
   void recvData();

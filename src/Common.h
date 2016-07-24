@@ -27,9 +27,12 @@
 #include <cstdint>
 
 #include <string>
+#include <vector>
+#include <utility>
 
 #include <glog/logging.h>
 
 using  std::string;
+using  std::vector;
 
 #endif

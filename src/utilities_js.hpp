@@ -66,7 +66,7 @@ class Node{
     static bool parse(const char* begin, const char* end, Node &root) {
       //stop on [n]ull,[t]rue,[f]alse,["]string,number,array, or object
       static std::array<char,19> stop = {'n','"','0','1','2','3','4','5','6','7','8','9','-','t','f','[',']','{','}'};
-      Node* parent = nullptr;
+      Node* parent = NULL;
       Node node;
 
       const char* i = begin;
@@ -74,11 +74,11 @@ class Node{
        
 
         if ( *i == '}' || *i == ']' ) {
-          if( parent == nullptr || ( parent->type_ != ( (*i == '}') ? JS::type::Obj : JS::type::Array ) )) {
+          if( parent == NULL || ( parent->type_ != ( (*i == '}') ? JS::type::Obj : JS::type::Array ) )) {
             root.reset_soft();
             return false;
           } else {
-            if(parent->parent_ == nullptr) {
+            if(parent->parent_ == NULL) {
               return true;
             }
             parent = parent->parent_;
@@ -89,7 +89,7 @@ class Node{
 
         node.reset();
         
-        if (parent != nullptr && parent->type_ == JS::type::Obj) {
+        if (parent != NULL && parent->type_ == JS::type::Obj) {
           //parse the key and continue
           node.key_start_ = ++i;
           if( (i = Node::parse_string(i,end)) == end) {
@@ -152,7 +152,7 @@ class Node{
           }
         }
         
-        if( parent == nullptr) {
+        if( parent == NULL) {
           root.set_soft(node);
           if(node.type_ == JS::type::Obj || node.type_ ==JS::type::Array) {
             parent = &root;
@@ -227,7 +227,7 @@ class Node{
     }
 
     void detach() {
-      parent_ = nullptr;
+      parent_ = NULL;
     }
 
     void reset_soft() {
@@ -237,7 +237,7 @@ class Node{
    }
 
     void reset() {
-      parent_ = nullptr;
+      parent_ = NULL;
       children_.reset();
       type_ = JS::type::Undefined;
    }
@@ -252,7 +252,7 @@ class Node{
       children_ = node.children_;
     }
 
-    Node():type_(JS::type::Undefined),parent_(nullptr) {
+    Node():type_(JS::type::Undefined),parent_(NULL) {
     }
     
     JS::type type() const { return type_; }
@@ -317,19 +317,19 @@ class Node{
     }
 
 
-    bool has_key() const { return parent_ != nullptr && parent_->type_ == JS::type::Obj; }
+    bool has_key() const { return parent_ != NULL && parent_->type_ == JS::type::Obj; }
     bool sorted() const { return sorted_;}
     int8_t int8() const{ return *start_; }
     uint8_t uint8() const { return *start_; }
-    int16_t int16() const { return strtol(start_,nullptr,10); }
-    uint16_t uint16() const { return strtoul(start_,nullptr,10); }
-    int32_t int32() const { return strtol(start_,nullptr,10); }
-    uint32_t uint32() const { return strtoul(start_,nullptr,10); }
-    uint32_t uint32_hex() const { return strtoul(start_,nullptr,16); }
-    int64_t int64() const { return strtoll(start_,nullptr,10); }
-    uint64_t uint64() const { return strtoull(start_,nullptr,10); }
-    uint64_t uint64_hex() const { return strtoull(start_,nullptr,16); }
-    float real() const { return strtof(start_,nullptr); }
+    int16_t int16() const { return strtol(start_,NULL,10); }
+    uint16_t uint16() const { return strtoul(start_,NULL,10); }
+    int32_t int32() const { return strtol(start_,NULL,10); }
+    uint32_t uint32() const { return strtoul(start_,NULL,10); }
+    uint32_t uint32_hex() const { return strtoul(start_,NULL,16); }
+    int64_t int64() const { return strtoll(start_,NULL,10); }
+    uint64_t uint64() const { return strtoull(start_,NULL,10); }
+    uint64_t uint64_hex() const { return strtoull(start_,NULL,16); }
+    float real() const { return strtof(start_,NULL); }
     std::string str() const { return std::string(start_,end_); }
     bool boolean() const { return (*start_ == 't' ) ? true : false; }
 

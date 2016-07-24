@@ -18,6 +18,45 @@
  */
 #include "Server.h"
 
+#include <event2/event.h>
+#include <event2/buffer.h>
+#include <event2/bufferevent.h>
+#include <event2/listener.h>
+
+static
+bool resolve(const string &host, struct	in_addr *sin_addr) {
+  struct evutil_addrinfo *ai = NULL;
+  struct evutil_addrinfo hints_in;
+  memset(&hints_in, 0, sizeof(evutil_addrinfo));
+  // AF_INET, v4; AF_INT6, v6; AF_UNSPEC, both v4 & v6
+  hints_in.ai_family   = AF_UNSPEC;
+  hints_in.ai_socktype = SOCK_STREAM;
+  hints_in.ai_protocol = IPPROTO_TCP;
+  hints_in.ai_flags    = EVUTIL_AI_ADDRCONFIG;
+
+  int err = evutil_getaddrinfo(host.c_str(), nullptr, &hints_in, &ai);
+  if (err != 0) {
+    LOG(ERROR) << "evutil_getaddrinfo err: " << err << ", " << evutil_gai_strerror(err);
+    return false;
+  }
+  if (ai == NULL) {
+    LOG(ERROR) << "evutil_getaddrinfo res is null";
+    return false;
+  }
+
+  // only get the first record, ignore ai = ai->ai_next
+  if (ai->ai_family == AF_INET) {
+    struct sockaddr_in *sin = (struct sockaddr_in*)ai->ai_addr;
+    *sin_addr = sin->sin_addr;
+  } else if (ai->ai_family == AF_INET6) {
+    // not support yet
+    LOG(ERROR) << "not support ipv6 yet";
+    return false;
+  }
+  evutil_freeaddrinfo(ai);
+  return true;
+}
+
 static
 bool tryReadLine(string &line, struct bufferevent *bufev) {
   line.clear();
@@ -25,7 +64,7 @@ bool tryReadLine(string &line, struct bufferevent *bufev) {
 
   // find eol
   struct evbuffer_ptr loc;
-  loc = evbuffer_search_eol(inBuf, nullptr, nullptr, EVBUFFER_EOL_LF);
+  loc = evbuffer_search_eol(inBuf, NULL, NULL, EVBUFFER_EOL_LF);
   if (loc.pos == -1) {
     return false;  // not found
   }
@@ -90,10 +129,10 @@ UpStratumClient::UpStratumClient(struct event_base *base,
 : state_(INIT), server_(server)
 {
   bev_ = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
-  assert(bev_ != nullptr);
+  assert(bev_ != NULL);
 
   bufferevent_setcb(bev_,
-                    StratumServer::upReadCallback, nullptr,
+                    StratumServer::upReadCallback, NULL,
                     StratumServer::upEventCallback, this);
   bufferevent_enable(bev_, EV_READ|EV_WRITE);
 
@@ -214,19 +253,14 @@ void UpStratumClient::handleLine(const string &line) {
 
 ////////////////////////////////// StratumSession //////////////////////////////
 StratumSession::StratumSession(const uint8_t upSessionIdx,
-                               struct bufferevent *bev,
-                               StratumServer *server)
-: bev_(bev), state_(CONNECTED), minerAgent_(nullptr),
-upSessionIdx_(upSessionIdx), server_(server)
+                               const uint16_t sessionId,
+                               struct bufferevent *bev, StratumServer *server)
+: bev_(bev), state_(CONNECTED), minerAgent_(NULL),
+upSessionIdx_(upSessionIdx), sessionId_(sessionId), server_(server)
 {
-  sessionId_ = server_->sessionIDManager_.allocSessionId();
 }
 
 StratumSession::~StratumSession() {
-  server_->sessionIDManager_.freeSessionId(sessionId_);
-
-  // we don't need to close(fd_) because we set 'BEV_OPT_CLOSE_ON_FREE'
-  bufferevent_free(bev_);
 }
 
 void StratumSession::setReadTimeout(const int32_t timeout) {
@@ -375,7 +409,7 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
   // TODO: sent sessionId(extraNonce1), minerAgent_, workerName to server_
 
   free(minerAgent_);
-  minerAgent_ = nullptr;
+  minerAgent_ = NULL;
 
   // TODO: send latest stratum job
 //  sendMiningNotify(server_->jobRepository_->getLatestStratumJobEx());
@@ -409,4 +443,154 @@ void StratumSession::handleRequest_Submit(const string &idStr,
 
   responseTrue(idStr);  // we assume shares are valid
 }
+
+
+/////////////////////////////////// StratumServer //////////////////////////////
+StratumServer::StratumServer(const uint16_t listenPort, const string upPoolUserName)
+:running_ (true), upPoolUserName_(upPoolUserName), base_(NULL)
+{
+  memset(&listenAddr_, 0, sizeof(listenAddr_));
+  listenAddr_.sin_family = AF_INET;
+  listenAddr_.sin_port   = htons(listenPort);
+  listenAddr_.sin_addr.s_addr = htonl(INADDR_ANY);
+
+  upSessions_.resize(kUpSessionCount_);
+  downSessions_.resize(16);
+}
+
+void StratumServer::addUpPool(const char *host, const uint16_t port) {
+  upPoolHost_.push_back(string(host));
+  upPoolPort_.push_back(port);
+}
+
+UpStratumClient *StratumServer::createUpSession() {
+  for (size_t i = 0; i < upPoolHost_.size(); i++) {
+    struct sockaddr_in sin;
+    memset(&sin, 0, sizeof(sin));
+    sin.sin_family = AF_INET;
+    sin.sin_port   = htons(upPoolPort_[i]);
+    if (!resolve(upPoolHost_[i], &sin.sin_addr)) {
+      continue;
+    }
+
+    UpStratumClient *up = new UpStratumClient(base_, upPoolUserName_, this);
+    if (!up->connect(sin)) {
+      delete up;
+      continue;
+    }
+    return up;  // connect success
+  }
+
+  return NULL;
+}
+
+bool StratumServer::setup() {
+  if (upPoolHost_.size() == 0 || upPoolHost_.size() != upPoolPort_.size())
+    return false;
+
+  base_ = event_base_new();
+  if(!base_) {
+    LOG(ERROR) << "server: cannot create event base";
+    return false;
+  }
+
+  // create up sessions
+  for (uint8_t i = 0; i < kUpSessionCount_; i++) {
+    upSessions_[i] = createUpSession();
+    if (upSessions_[i] == NULL)
+      return false;
+  }
+
+  listener_ = evconnlistener_new_bind(base_,
+                                      StratumServer::listenerCallback,
+                                      (void*)this,
+                                      LEV_OPT_REUSEABLE|LEV_OPT_CLOSE_ON_FREE,
+                                      // backlog, Set to -1 for a reasonable default
+                                      -1,
+                                      (struct sockaddr*)&listenAddr_,
+                                      sizeof(listenAddr_));
+  if(!listener_) {
+    LOG(ERROR) << "cannot create listener";
+    return false;
+  }
+  return true;
+}
+
+void StratumServer::listenerCallback(struct evconnlistener *listener,
+                                     evutil_socket_t fd,
+                                     struct sockaddr *saddr,
+                                     int socklen, void *ptr) {
+  StratumServer *server = static_cast<StratumServer *>(ptr);
+  struct event_base  *base = (struct event_base*)server->base_;
+  struct bufferevent *bev;
+
+  if (server->sessionIDManager_.ifFull()) {
+    close(fd);
+    return;
+  }
+
+  bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
+  if(bev == nullptr) {
+    LOG(ERROR) << "bufferevent_socket_new fail";
+    server->stop();
+    return;
+  }
+
+  const uint8_t upSessionIdx = 0;  // TODO
+  const uint16_t sessionId = server->sessionIDManager_.allocSessionId();
+
+  StratumSession *conn = new StratumSession(upSessionIdx, sessionId, bev, server);
+  bufferevent_setcb(bev,
+                    StratumServer::downReadCallback, nullptr,
+                    StratumServer::downEventCallback, (void*)conn);
+
+  // By default, a newly created bufferevent has writing enabled.
+  bufferevent_enable(bev, EV_READ|EV_WRITE);
+
+  server->addDownConnection(conn);
+}
+
+void StratumServer::downReadCallback(struct bufferevent *, void *ptr) {
+  static_cast<StratumSession *>(ptr)->recvData();
+}
+
+void StratumServer::downEventCallback(struct bufferevent *bev,
+                                      short events, void *ptr) {
+  StratumSession *conn  = static_cast<StratumSession *>(ptr);
+  StratumServer *server = conn->server_;
+
+  // should not be 'BEV_EVENT_CONNECTED'
+  assert((events & BEV_EVENT_CONNECTED) != BEV_EVENT_CONNECTED);
+
+  if (events & BEV_EVENT_EOF) {
+    LOG(INFO) << "downsocket closed";
+  }
+  else if (events & BEV_EVENT_ERROR) {
+    LOG(ERROR) << "got an error on the downsocket: "
+    << evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR());
+  }
+  else if (events & BEV_EVENT_TIMEOUT) {
+    LOG(INFO) << "downsocket read/write timeout, events: " << events;
+  }
+  else {
+    LOG(ERROR) << "unhandled downsocket events: " << events;
+  }
+  server->delDownConnection(conn);
+}
+
+void StratumServer::addDownConnection(StratumSession *conn) {
+  while (downSessions_.size() < conn->sessionId_ + 1) {
+    downSessions_.resize(downSessions_.size() * 2);
+  }
+  assert(downSessions_[conn->sessionId_] == nullptr);
+  downSessions_[conn->sessionId_] = conn;
+}
+
+void StratumServer::delDownConnection(StratumSession *conn) {
+  bufferevent_free(conn->bev_);
+  sessionIDManager_.freeSessionId(conn->sessionId_);
+  downSessions_[conn->sessionId_] = nullptr;
+  delete conn;
+}
+
 
