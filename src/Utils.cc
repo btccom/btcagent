@@ -19,6 +19,8 @@
 #include "Utils.h"
 #include "Common.h"
 
+#include <stdarg.h>
+
 string Strings::Format(const char * fmt, ...) {
   char tmp[512];
   string dest;

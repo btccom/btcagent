@@ -132,15 +132,6 @@ public:
 
 ///////////////////////////////// UpStratumClient //////////////////////////////
 class UpStratumClient {
-  enum State {
-    INIT          = 0,
-    CONNECTED     = 1,
-    SUBSCRIBED    = 2,
-    AUTHENTICATED = 3
-  };
-
-  //-----------------------
-  State state_;
   uint8_t idx_;
   struct bufferevent *bev_;
   uint32_t extraNonce1_;  // session ID
@@ -149,6 +140,15 @@ class UpStratumClient {
   StratumServer *server_;
 
   void handleLine(const string &line);
+
+public:
+  enum State {
+    INIT          = 0,
+    CONNECTED     = 1,
+    SUBSCRIBED    = 2,
+    AUTHENTICATED = 3
+  };
+  State state_;
 
 public:
   UpStratumClient(struct event_base *base, const string &userName,

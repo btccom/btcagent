@@ -34,7 +34,7 @@ bool resolve(const string &host, struct	in_addr *sin_addr) {
   hints_in.ai_protocol = IPPROTO_TCP;
   hints_in.ai_flags    = EVUTIL_AI_ADDRCONFIG;
 
-  int err = evutil_getaddrinfo(host.c_str(), nullptr, &hints_in, &ai);
+  int err = evutil_getaddrinfo(host.c_str(), NULL, &hints_in, &ai);
   if (err != 0) {
     LOG(ERROR) << "evutil_getaddrinfo err: " << err << ", " << evutil_gai_strerror(err);
     return false;
@@ -87,13 +87,51 @@ string getWorkerName(const string &fullName) {
 }
 
 
+//////////////////////////////// StratumError ////////////////////////////////
+const char * StratumError::toString(int err) {
+  switch (err) {
+    case NO_ERROR:
+      return "no error";
+
+    case JOB_NOT_FOUND:
+      return "Job not found (=stale)";
+    case DUPLICATE_SHARE:
+      return "Duplicate share";
+    case LOW_DIFFICULTY:
+      return "Low difficulty";
+    case UNAUTHORIZED:
+      return "Unauthorized worker";
+    case NOT_SUBSCRIBED:
+      return "Not subscribed";
+
+    case ILLEGAL_METHOD:
+      return "Illegal method";
+    case ILLEGAL_PARARMS:
+      return "Illegal params";
+    case IP_BANNED:
+      return "Ip banned";
+    case INVALID_USERNAME:
+      return "Invliad username";
+    case INTERNAL_ERROR:
+      return "Internal error";
+    case TIME_TOO_OLD:
+      return "Time too old";
+    case TIME_TOO_NEW:
+      return "Time too new";
+
+    case UNKNOWN: default:
+      return "Unknown";
+  }
+}
+
+
 //////////////////////////////// SessionIDManager //////////////////////////////
 SessionIDManager::SessionIDManager(): count_(0) {
   sessionIds_.reset();
 }
 
 bool SessionIDManager::ifFull() {
-  if (count_ >= MAX_SESSION_ID + 1) {
+  if (count_ >= (int32_t)(MAX_SESSION_ID + 1)) {
     return false;
   }
   return true;
@@ -255,8 +293,8 @@ void UpStratumClient::handleLine(const string &line) {
 StratumSession::StratumSession(const uint8_t upSessionIdx,
                                const uint16_t sessionId,
                                struct bufferevent *bev, StratumServer *server)
-: bev_(bev), state_(CONNECTED), minerAgent_(NULL),
-upSessionIdx_(upSessionIdx), sessionId_(sessionId), server_(server)
+: state_(CONNECTED), minerAgent_(NULL), upSessionIdx_(upSessionIdx),
+sessionId_(sessionId), bev_(bev), server_(server)
 {
 }
 
@@ -434,10 +472,10 @@ void StratumSession::handleRequest_Submit(const string &idStr,
     responseError(idStr, StratumError::ILLEGAL_PARARMS);
     return;
   }
-  const uint8_t jobId     = jparams.children()->at(1).uint8();
-  const uint32_t exNonce2 = jparams.children()->at(2).uint32_hex();
-  const uint32_t nTime    = jparams.children()->at(3).uint32_hex();
-  const uint32_t nonce    = jparams.children()->at(4).uint32_hex();
+//  const uint8_t jobId     = jparams.children()->at(1).uint8();
+//  const uint32_t exNonce2 = jparams.children()->at(2).uint32_hex();
+//  const uint32_t nTime    = jparams.children()->at(3).uint32_hex();
+//  const uint32_t nonce    = jparams.children()->at(4).uint32_hex();
 
   // TODO: submit to server_
 
@@ -456,6 +494,19 @@ StratumServer::StratumServer(const uint16_t listenPort, const string upPoolUserN
 
   upSessions_.resize(kUpSessionCount_);
   downSessions_.resize(16);
+}
+
+StratumServer::~StratumServer() {
+  // TODO
+}
+
+void StratumServer::stop() {
+  if (!running_)
+    return;
+
+  LOG(INFO) << "stop tcp server event loop";
+  running_ = false;
+  event_base_loopexit(base_, NULL);
 }
 
 void StratumServer::addUpPool(const char *host, const uint16_t port) {
@@ -530,7 +581,7 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
   }
 
   bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
-  if(bev == nullptr) {
+  if(bev == NULL) {
     LOG(ERROR) << "bufferevent_socket_new fail";
     server->stop();
     return;
@@ -541,7 +592,7 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
 
   StratumSession *conn = new StratumSession(upSessionIdx, sessionId, bev, server);
   bufferevent_setcb(bev,
-                    StratumServer::downReadCallback, nullptr,
+                    StratumServer::downReadCallback, NULL,
                     StratumServer::downEventCallback, (void*)conn);
 
   // By default, a newly created bufferevent has writing enabled.
@@ -579,18 +630,45 @@ void StratumServer::downEventCallback(struct bufferevent *bev,
 }
 
 void StratumServer::addDownConnection(StratumSession *conn) {
-  while (downSessions_.size() < conn->sessionId_ + 1) {
+  while (downSessions_.size() < (size_t)(conn->sessionId_ + 1)) {
     downSessions_.resize(downSessions_.size() * 2);
   }
-  assert(downSessions_[conn->sessionId_] == nullptr);
+  assert(downSessions_[conn->sessionId_] == NULL);
   downSessions_[conn->sessionId_] = conn;
 }
 
 void StratumServer::delDownConnection(StratumSession *conn) {
   bufferevent_free(conn->bev_);
   sessionIDManager_.freeSessionId(conn->sessionId_);
-  downSessions_[conn->sessionId_] = nullptr;
+  downSessions_[conn->sessionId_] = NULL;
   delete conn;
 }
 
+void StratumServer::run() {
+  assert(base_ != NULL);
+  event_base_dispatch(base_);
+}
 
+void StratumServer::upReadCallback(struct bufferevent *, void *ptr) {
+  static_cast<UpStratumClient *>(ptr)->recvData();
+}
+
+void StratumServer::upEventCallback(struct bufferevent *bev,
+                                    short events, void *ptr) {
+  UpStratumClient *up = static_cast<UpStratumClient *>(ptr);
+
+  if (events & BEV_EVENT_CONNECTED) {
+    up->state_ = UpStratumClient::State::CONNECTED;
+
+    // do subscribe
+    string s = Strings::Format("{\"id\":1,\"method\":\"mining.subscribe\""
+                               ",\"params\":[\"%s\"]}\n", BTCCOM_MINER_AGENT);
+    up->sendData(s);
+  }
+  else if (events & BEV_EVENT_ERROR) {
+    /* An error occured while connecting. */
+    // TODO
+    LOG(ERROR) << "upsession event error: "
+    << evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR());
+  }
+}

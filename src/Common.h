@@ -35,4 +35,6 @@
 using  std::string;
 using  std::vector;
 
+#define BTCCOM_MINER_AGENT   "btccom-agent/0.1"
+
 #endif
