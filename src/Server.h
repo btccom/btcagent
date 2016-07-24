@@ -25,11 +25,17 @@
 #include <event2/event.h>
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
+#include <event2/listener.h>
 
 #include <bitset>
+#include <map>
+#include <set>
 
 #include "utilities_js.hpp"
 
+class StratumSession;
+class StratumServer;
+class UpStratumClient;
 
 
 //////////////////////////////// StratumError ////////////////////////////////
@@ -57,15 +63,12 @@ public:
 };
 
 
-
-
 //////////////////////////////// SessionIDManager //////////////////////////////
 #define MAX_SESSION_ID   0xFFFFu   // 65535 = 2^16 - 1
 
 class SessionIDManager {
   std::bitset<MAX_SESSION_ID + 1> sessionIds_;
-  uint16_t allocIdx_;
-  int32_t  count_;
+  int32_t count_;
 
 public:
   SessionIDManager();
@@ -76,19 +79,80 @@ public:
 };
 
 
-
-
-////////////////////////////////// StratumSession //////////////////////////////
+////////////////////////////////// StratumServer //////////////////////////////
 class StratumServer {
+  // pool stratum server addr
+  struct sockaddr_in upPoolSocketAddr_;
+
+  // up stream connnects
+  std::vector<UpStratumClient *> upSessions_;
+
+  // down stream connections
+  std::vector<StratumSession *> downSessions_;
+
+  // libevent2
+  struct event_base *base_;
+  struct event *signal_event_;
+  struct evconnlistener *listener_;
+  struct sockaddr_in listenSocketAddr_;
+
 public:
   SessionIDManager sessionIDManager_;
 
 public:
   StratumServer();
   ~StratumServer();
+
+  void downAddConnection   (evutil_socket_t fd, StratumSession *connection);
+  void downRemoveConnection(evutil_socket_t fd);
+
+  static void listenerCallback(struct evconnlistener* listener,
+                               evutil_socket_t socket,
+                               struct sockaddr* saddr,
+                               int socklen, void* server);
+  static void downReadCallback (struct bufferevent *, void *connection);
+  static void downEventCallback(struct bufferevent *, short, void *connection);
+
+  static void upReadCallback (struct bufferevent *, void *connection);
+  static void upEventCallback(struct bufferevent *, short, void *connection);
 };
 
 
+///////////////////////////////// UpStratumClient //////////////////////////////
+class UpStratumClient {
+  enum State {
+    INIT          = 0,
+    CONNECTED     = 1,
+    SUBSCRIBED    = 2,
+    AUTHENTICATED = 3
+  };
+
+  //-----------------------
+  State state_;
+  struct bufferevent *bev_;
+  uint32_t extraNonce1_;  // session ID
+  uint64_t extraNonce2_;
+  string userName_;
+  StratumServer *server_;
+
+  void handleLine(const string &line);
+
+public:
+  UpStratumClient(struct event_base *base, const string &userName,
+                  StratumServer *server);
+  ~UpStratumClient();
+
+  bool connect(struct sockaddr_in &sin);
+
+  void recvData();
+  void sendData(const char *data, size_t len);
+  inline void sendData(const string &str) {
+    sendData(str.data(), str.size());
+  }
+
+  void submitShare();
+  void submitWorkerInfo();
+};
 
 
 ////////////////////////////////// StratumSession //////////////////////////////
@@ -103,41 +167,38 @@ class StratumSession {
   //----------------------
   static const int32_t kExtraNonce2Size_ = 4;
   State state_;
-  uint16_t sessionId_;
   char *minerAgent_;
 
   void setReadTimeout(const int32_t timeout);
 
-  bool tryReadLine(string &line);
   void handleLine(const string &line);
 
   void handleRequest(const string &idStr, const string &method,
                      const JsonNode &jparams);
-  void handleRequest_Subscribe  (const string &idStr, const JsonNode &jparams);
-  void handleRequest_Authorize  (const string &idStr, const JsonNode &jparams);
-  void handleRequest_Submit     (const string &idStr, const JsonNode &jparams);
+  void handleRequest_Subscribe(const string &idStr, const JsonNode &jparams);
+  void handleRequest_Authorize(const string &idStr, const JsonNode &jparams);
+  void handleRequest_Submit   (const string &idStr, const JsonNode &jparams);
 
   void responseError(const string &idStr, int code);
   void responseTrue(const string &idStr);
 
 public:
-  struct bufferevent* bev_;
-  evutil_socket_t fd_;
+  uint8_t  upSessionIdx_;
+  uint16_t sessionId_;
+  struct bufferevent *bev_;
   StratumServer *server_;
 
 
 public:
-  StratumSession(evutil_socket_t fd, struct bufferevent *bev,
+  StratumSession(const uint8_t upSessionIdx, struct bufferevent *bev,
                  StratumServer *server);
   ~StratumSession();
 
+  void recvData();
   void sendData(const char *data, size_t len);
   inline void sendData(const string &str) {
     sendData(str.data(), str.size());
   }
-
-  void recvData();
-
 };
 
 #endif

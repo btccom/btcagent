@@ -18,8 +18,28 @@
  */
 #include "Server.h"
 
+static
+bool tryReadLine(string &line, struct bufferevent *bufev) {
+  line.clear();
+  struct evbuffer *inBuf = bufferevent_get_input(bufev);
 
-static string getWorkerName(const string &fullName) {
+  // find eol
+  struct evbuffer_ptr loc;
+  loc = evbuffer_search_eol(inBuf, nullptr, nullptr, EVBUFFER_EOL_LF);
+  if (loc.pos == -1) {
+    return false;  // not found
+  }
+
+  // copies and removes the first datlen bytes from the front of buf
+  // into the memory at data
+  line.resize(loc.pos + 1);  // containing "\n"
+  evbuffer_remove(inBuf, (void *)line.data(), line.size());
+
+  return true;
+}
+
+static
+string getWorkerName(const string &fullName) {
   size_t pos = fullName.find(".");
   if (pos == fullName.npos) {
     return fullName;
@@ -29,7 +49,7 @@ static string getWorkerName(const string &fullName) {
 
 
 //////////////////////////////// SessionIDManager //////////////////////////////
-SessionIDManager::SessionIDManager(): allocIdx_(0), count_(0) {
+SessionIDManager::SessionIDManager(): count_(0) {
   sessionIds_.reset();
 }
 
@@ -41,19 +61,20 @@ bool SessionIDManager::ifFull() {
 }
 
 uint16_t SessionIDManager::allocSessionId() {
-  // find an empty bit
-  while (sessionIds_.test(allocIdx_) == true) {
-    allocIdx_++;
-    if (allocIdx_ > MAX_SESSION_ID) {
-      allocIdx_ = 0;
+  // find an empty bit, always find the smallest
+  uint16_t idx = 0;
+  while (sessionIds_.test(idx) == true) {
+    idx++;
+    if (idx > MAX_SESSION_ID) {
+      idx = 0;
     }
   }
 
   // set to true
-  sessionIds_.set(allocIdx_, true);
+  sessionIds_.set(idx, true);
   count_++;
 
-  return allocIdx_;
+  return idx;
 }
 
 void SessionIDManager::freeSessionId(const uint16_t sessionId) {
@@ -63,12 +84,141 @@ void SessionIDManager::freeSessionId(const uint16_t sessionId) {
 
 
 
+////////////////////////////////// StratumSession //////////////////////////////
+UpStratumClient::UpStratumClient(struct event_base *base,
+                                 const string &userName, StratumServer *server)
+: state_(INIT), server_(server)
+{
+  bev_ = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
+  assert(bev_ != nullptr);
+
+  bufferevent_setcb(bev_,
+                    StratumServer::upReadCallback, nullptr,
+                    StratumServer::upEventCallback, this);
+  bufferevent_enable(bev_, EV_READ|EV_WRITE);
+
+  extraNonce1_ = 0u;
+  extraNonce2_ = 0u;
+}
+
+UpStratumClient::~UpStratumClient() {
+  bufferevent_free(bev_);
+}
+
+bool UpStratumClient::connect(struct sockaddr_in &sin) {
+  // bufferevent_socket_connect(): This function returns 0 if the connect
+  // was successfully launched, and -1 if an error occurred.
+  int res = bufferevent_socket_connect(bev_, (struct sockaddr *)&sin, sizeof(sin));
+  if (res == 0) {
+    state_ = CONNECTED;
+    return true;
+  }
+  return false;
+}
+
+void UpStratumClient::recvData() {
+  string line;
+  while (tryReadLine(line, bev_)) {
+    handleLine(line);
+  }
+}
+
+void UpStratumClient::sendData(const char *data, size_t len) {
+  // add data to a bufferevent’s output buffer
+  bufferevent_write(bev_, data, len);
+  DLOG(INFO) << "UpStratumClient send(" << len << "): " << data;
+}
+
+void UpStratumClient::handleLine(const string &line) {
+  DLOG(INFO) << "UpStratumClient recv(" << line.size() << "): " << line;
+
+  JsonNode jnode;
+  if (!JsonNode::parse(line.data(), line.data() + line.size(), jnode)) {
+    LOG(ERROR) << "decode line fail, not a json string";
+    return;
+  }
+  JsonNode jresult  = jnode["result"];
+  JsonNode jerror   = jnode["error"];
+  JsonNode jmethod  = jnode["method"];
+
+  if (jmethod.type() == Utilities::JS::type::Str) {
+    JsonNode jparams  = jnode["params"];
+    std::vector<JsonNode> jparamsArr = jparams.array();
+
+    if (jmethod.str() == "mining.notify") {
+      // TODO
+    }
+    else if (jmethod.str() == "mining.set_difficulty") {
+      // TODO
+    }
+    else {
+      LOG(ERROR) << "unknown method: " << line;
+    }
+    return;
+  }
+
+  if (state_ == AUTHENTICATED) {
+    //
+    // {"error": null, "id": 2, "result": true}
+    //
+    if (jerror.type()  != Utilities::JS::type::Null ||
+        jresult.type() != Utilities::JS::type::Bool ||
+        jresult.boolean() != true) {
+      // TODO
+    }
+    return;
+  }
+
+  if (state_ == CONNECTED) {
+    //
+    // {"id":1,"result":[[["mining.set_difficulty","01000002"],
+    //                    ["mining.notify","01000002"]],"01000002",8],"error":null}
+    //
+    if (jerror.type() != Utilities::JS::type::Null) {
+      LOG(ERROR) << "json result is null, err: " << jerror.str();
+      return;
+    }
+    std::vector<JsonNode> resArr = jresult.array();
+    if (resArr.size() < 3) {
+      LOG(ERROR) << "result element's number is less than 3: " << line;
+      return;
+    }
+    extraNonce1_ = resArr[1].uint32_hex();
+    DLOG(INFO) << "extraNonce1 / SessionID: " << extraNonce1_;
+
+    // check extra nonce2's size, MUST be 8 bytes
+    if (resArr[2].uint32() != 8) {
+      LOG(FATAL) << "extra nonce2's size is NOT 8 bytes";
+      return;
+    }
+    // subscribe successful
+    state_ = SUBSCRIBED;
+
+    // do mining.authorize
+    string s = Strings::Format("{\"id\": 1, \"method\": \"mining.authorize\","
+                               "\"params\": [\"\%s\", \"\"]}\n",
+                               userName_.c_str());
+    sendData(s);
+    return;
+  }
+
+  if (state_ == SUBSCRIBED && jresult.boolean() == true) {
+    // authorize successful
+    state_ = AUTHENTICATED;
+    LOG(INFO) << "auth success, name: \"" << userName_
+    << "\", extraNonce1: " << extraNonce1_;
+    return;
+  }
+}
+
 
 ////////////////////////////////// StratumSession //////////////////////////////
-StratumSession::StratumSession(evutil_socket_t fd,
+StratumSession::StratumSession(const uint8_t upSessionIdx,
                                struct bufferevent *bev,
                                StratumServer *server)
-: bev_(bev), fd_(fd), state_(CONNECTED), minerAgent_(nullptr), server_(server) {
+: bev_(bev), state_(CONNECTED), minerAgent_(nullptr),
+upSessionIdx_(upSessionIdx), server_(server)
+{
   sessionId_ = server_->sessionIDManager_.allocSessionId();
 }
 
@@ -97,27 +247,9 @@ void StratumSession::sendData(const char *data, size_t len) {
 
 void StratumSession::recvData() {
   string line;
-  while (tryReadLine(line)) {
+  while (tryReadLine(line, bev_)) {
     handleLine(line);
   }
-}
-
-bool StratumSession::tryReadLine(string &line) {
-  struct evbuffer *inBuf = bufferevent_get_input(bev_);
-
-  // find eol
-  struct evbuffer_ptr loc;
-  loc = evbuffer_search_eol(inBuf, nullptr, nullptr, EVBUFFER_EOL_LF);
-  if (loc.pos == -1) {
-    return false;  // not found
-  }
-
-  // copies and removes the first datlen bytes from the front of buf
-  // into the memory at data
-  line.resize(loc.pos + 1);  // containing "\n"
-  evbuffer_remove(inBuf, (void *)line.data(), line.size());
-
-  return true;
 }
 
 void StratumSession::handleLine(const string &line) {
@@ -241,7 +373,7 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
   const string workerName = getWorkerName(jparams.children()->at(0).str());
 
   // TODO: sent sessionId(extraNonce1), minerAgent_, workerName to server_
-  
+
   free(minerAgent_);
   minerAgent_ = nullptr;
 
