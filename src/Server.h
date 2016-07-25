@@ -88,8 +88,9 @@ class StratumServer {
   vector<uint16_t> upPoolPort_;
   string upPoolUserName_;
 
-  // up stream connnects
+  // up stream connnections
   vector<UpStratumClient *> upSessions_;
+  struct event *upEvTimer_;
 
   // down stream connections
   vector<StratumSession *> downSessions_;
@@ -100,19 +101,23 @@ class StratumServer {
   struct evconnlistener *listener_;
   struct sockaddr_in listenAddr_;
 
+  void checkUpSessions();
+  void waitUtilAllUpSessionsAvailable();
+
 public:
   SessionIDManager sessionIDManager_;
+
 
 public:
   StratumServer(const uint16_t listenPort, const string upPoolUserName);
   ~StratumServer();
 
-  UpStratumClient *createUpSession();
+  UpStratumClient *createUpSession(const uint8_t idx);
 
   void addUpPool(const char *host, const uint16_t port);
 
-  void addDownConnection(StratumSession *conn);
-  void delDownConnection(StratumSession *conn);
+  void addDownConnection   (StratumSession *conn);
+  void removeDownConnection(StratumSession *conn);
 
   static void listenerCallback(struct evconnlistener *listener,
                                evutil_socket_t fd,
@@ -121,8 +126,14 @@ public:
   static void downReadCallback (struct bufferevent *, void *ptr);
   static void downEventCallback(struct bufferevent *, short, void *ptr);
 
+  void addUpConnection   (UpStratumClient *conn);
+  void removeUpConnection(UpStratumClient *conn);
+
   static void upReadCallback (struct bufferevent *, void *ptr);
   static void upEventCallback(struct bufferevent *, short, void *ptr);
+
+  static void upWatcherCallback(evutil_socket_t fd, short events, void *ptr);
+  static void upSesssionCheckCallback(evutil_socket_t fd, short events, void *ptr);
 
   bool setup();
   void run();
@@ -132,12 +143,10 @@ public:
 
 ///////////////////////////////// UpStratumClient //////////////////////////////
 class UpStratumClient {
-  uint8_t idx_;
   struct bufferevent *bev_;
   uint32_t extraNonce1_;  // session ID
   uint64_t extraNonce2_;
   string userName_;
-  StratumServer *server_;
 
   void handleLine(const string &line);
 
@@ -149,9 +158,12 @@ public:
     AUTHENTICATED = 3
   };
   State state_;
+  uint8_t idx_;
+  StratumServer *server_;
 
 public:
-  UpStratumClient(struct event_base *base, const string &userName,
+  UpStratumClient(const uint8_t idx,
+                  struct event_base *base, const string &userName,
                   StratumServer *server);
   ~UpStratumClient();
 
@@ -162,6 +174,9 @@ public:
   inline void sendData(const string &str) {
     sendData(str.data(), str.size());
   }
+
+  // means auth success and got at least stratum job
+  bool isAvailable();
 
   void submitShare();
   void submitWorkerInfo();
