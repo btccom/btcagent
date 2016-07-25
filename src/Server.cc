@@ -25,7 +25,7 @@
 
 static
 const char *splieNotify(const string &line) {
-  char *pch = strchr(line.c_str(), '"');
+  const char *pch = strchr(line.c_str(), '"');
   int i = 1;
   while (pch != NULL) {
     pch = strchr(pch + 1, '"');
@@ -180,7 +180,7 @@ void SessionIDManager::freeSessionId(const uint16_t sessionId) {
 
 
 ///////////////////////////////// UpStratumClient //////////////////////////////
-UpStratumClient::UpStratumClient(const uint8_t idx, struct event_base *base,
+UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
                                  const string &userName, StratumServer *server)
 : idx_(idx), state_(INIT), server_(server), poolDefaultDiff_(0)
 {
@@ -326,7 +326,7 @@ bool UpStratumClient::isAvailable() {
 
 
 ////////////////////////////////// StratumSession //////////////////////////////
-StratumSession::StratumSession(const uint8_t upSessionIdx,
+StratumSession::StratumSession(const int8_t upSessionIdx,
                                const uint16_t sessionId,
                                struct bufferevent *bev, StratumServer *server)
 : state_(CONNECTED), minerAgent_(NULL), upSessionIdx_(upSessionIdx),
@@ -408,7 +408,7 @@ void StratumSession::responseTrue(const string &idStr) {
 }
 
 void StratumSession::handleRequest(const string &idStr, const string &method,
-                                   const JsonNode &jparams) {
+                                   JsonNode &jparams) {
   if (method == "mining.submit") {  // most of requests are 'mining.submit'
     handleRequest_Submit(idStr, jparams);
   }
@@ -493,7 +493,7 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
 }
 
 void StratumSession::handleRequest_Submit(const string &idStr,
-                                          const JsonNode &jparams) {
+                                          JsonNode &jparams) {
   if (state_ != AUTHENTICATED) {
     responseError(idStr, StratumError::UNAUTHORIZED);
     // there must be something wrong, send reconnect command
@@ -516,7 +516,8 @@ void StratumSession::handleRequest_Submit(const string &idStr,
 //  const uint32_t nTime    = jparams.children()->at(3).uint32_hex();
 //  const uint32_t nonce    = jparams.children()->at(4).uint32_hex();
 
-  // TODO: submit to server_
+  // submit share
+  server_->submitShare(jparams, this);
 
   responseTrue(idStr);  // we assume shares are valid
 }
@@ -532,9 +533,12 @@ StratumServer::StratumServer(const uint16_t listenPort, const string upPoolUserN
   listenAddr_.sin_addr.s_addr = htonl(INADDR_ANY);
 
   upSessions_.resize(kUpSessionCount_);
+  upSessionCount_.resize(kUpSessionCount_);
   upEvTimer_ = NULL;
 
   downSessions_.resize(16);  // must pre alloc some elements here
+
+  assert(upSessions_.size() == upSessionCount_.size());
 }
 
 StratumServer::~StratumServer() {
@@ -557,7 +561,7 @@ void StratumServer::addUpPool(const char *host, const uint16_t port) {
   upPoolPort_.push_back(port);
 }
 
-UpStratumClient *StratumServer::createUpSession(const uint8_t idx) {
+UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
   for (size_t i = 0; i < upPoolHost_.size(); i++) {
     struct sockaddr_in sin;
     memset(&sin, 0, sizeof(sin));
@@ -589,7 +593,7 @@ bool StratumServer::setup() {
   }
 
   // create up sessions
-  for (uint8_t i = 0; i < kUpSessionCount_; i++) {
+  for (int8_t i = 0; i < kUpSessionCount_; i++) {
     UpStratumClient *up = createUpSession(i);
     if (up == NULL)
       return false;
@@ -637,7 +641,7 @@ void StratumServer::upSesssionCheckCallback(evutil_socket_t fd,
 }
 
 void StratumServer::waitUtilAllUpSessionsAvailable() {
-  for (uint8_t i = 0; i < kUpSessionCount_; i++) {
+  for (int8_t i = 0; i < kUpSessionCount_; i++) {
     assert(upSessions_[i] != NULL);
     if (upSessions_[i]->isAvailable() == false) {
       return;
@@ -655,7 +659,7 @@ void StratumServer::upWatcherCallback(evutil_socket_t fd,
 
 void StratumServer::checkUpSessions() {
   // check up sessions
-  for (uint8_t i = 0; i < kUpSessionCount_; i++) {
+  for (int8_t i = 0; i < kUpSessionCount_; i++) {
     if (upSessions_[i] != NULL)
       continue;
 
@@ -687,9 +691,14 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
     return;
   }
 
-  const uint8_t upSessionIdx = 0;  // TODO
-  const uint16_t sessionId = server->sessionIDManager_.allocSessionId();
+  const int8_t upSessionIdx = server->findUpSessionIdx();
+  if (upSessionIdx == -1) {
+    LOG(ERROR) << "no available up session";
+    close(fd);
+    return;
+  }
 
+  const uint16_t sessionId = server->sessionIDManager_.allocSessionId();
   StratumSession *conn = new StratumSession(upSessionIdx, sessionId, bev, server);
   bufferevent_setcb(bev,
                     StratumServer::downReadCallback, NULL,
@@ -735,12 +744,14 @@ void StratumServer::addDownConnection(StratumSession *conn) {
   }
   assert(downSessions_[conn->sessionId_] == NULL);
   downSessions_[conn->sessionId_] = conn;
+  upSessionCount_[conn->upSessionIdx_]++;
 }
 
 void StratumServer::removeDownConnection(StratumSession *conn) {
   bufferevent_free(conn->bev_);
   sessionIDManager_.freeSessionId(conn->sessionId_);
   downSessions_[conn->sessionId_] = NULL;
+  upSessionCount_[conn->upSessionIdx_]--;
   delete conn;
 }
 
@@ -772,6 +783,7 @@ void StratumServer::removeUpConnection(UpStratumClient *conn) {
   }
 
   upSessions_[conn->idx_] = NULL;
+  upSessionCount_[conn->idx_] = 0;
   delete conn;
 }
 
@@ -807,7 +819,7 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
   server->removeUpConnection(up);
 }
 
-void StratumServer::sendMiningNotifyToAll(const uint8_t idx,
+void StratumServer::sendMiningNotifyToAll(const int8_t idx,
                                           const char *p1, size_t p1Len,
                                           const char *p2) {
   for (size_t i = 0; i < downSessions_.size(); i++) {
@@ -842,5 +854,41 @@ void StratumServer::sendMiningDifficulty(StratumSession *downSession) {
                              ",\"params\":[%" PRIu32"]}\n",
                              up->poolDefaultDiff_);
   downSession->sendData(s);
+}
+
+int8_t StratumServer::findUpSessionIdx() {
+  int32_t count = -1;
+  int8_t idx = -1;
+
+  for (size_t i = 0; i < upSessions_.size(); i++) {
+    if (upSessions_[i] == NULL || !upSessions_[i]->isAvailable())
+      continue;
+
+    if (count == -1) {
+      idx = i;
+      count = upSessionCount_[i];
+    }
+    else if (upSessionCount_[i] < count) {
+      idx = i;
+      count = upSessionCount_[i];
+    }
+  }
+  return idx;
+}
+
+void StratumServer::submitShare(JsonNode &jparams,
+                                StratumSession *downSession) {
+  auto jparamsArr = jparams.array();
+  string s;
+  s = Strings::Format("{\"params\": [\"\",\"%s\",\"%08x%s\",\"%08x\",\"%08x\"]"
+                      ",\"id\":1,\"method\": \"mining.submit\"}\n",
+                      jparamsArr[1].str().c_str(),
+                      (uint32_t)downSession->sessionId_,
+                      jparamsArr[2].str().c_str(),
+                      jparamsArr[3].str().c_str() /* ntime */,
+                      jparamsArr[4].str().c_str() /* nonce */);
+
+  UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
+  up->sendData(s);
 }
 

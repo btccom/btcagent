@@ -81,7 +81,7 @@ public:
 
 /////////////////////////////////// StratumServer //////////////////////////////
 class StratumServer {
-  static const uint8_t kUpSessionCount_ = 5;
+  static const int8_t kUpSessionCount_ = 5;
   bool running_;
 
   vector<string>   upPoolHost_;
@@ -90,6 +90,7 @@ class StratumServer {
 
   // up stream connnections
   vector<UpStratumClient *> upSessions_;
+  vector<int32_t> upSessionCount_;
   struct event *upEvTimer_;
 
   // down stream connections
@@ -112,7 +113,7 @@ public:
   StratumServer(const uint16_t listenPort, const string upPoolUserName);
   ~StratumServer();
 
-  UpStratumClient *createUpSession(const uint8_t idx);
+  UpStratumClient *createUpSession(const int8_t idx);
 
   void addUpPool(const char *host, const uint16_t port);
 
@@ -135,10 +136,14 @@ public:
   static void upWatcherCallback(evutil_socket_t fd, short events, void *ptr);
   static void upSesssionCheckCallback(evutil_socket_t fd, short events, void *ptr);
 
-  void sendMiningNotifyToAll(const uint8_t idx, const char *p1,
+  void sendMiningNotifyToAll(const int8_t idx, const char *p1,
                              size_t p1Len, const char *p2);
   void sendMiningNotify(StratumSession *downSession);
   void sendMiningDifficulty(StratumSession *downSession);
+
+  void submitShare(JsonNode &jparams, StratumSession *downSession);
+
+  int8_t findUpSessionIdx();
 
   bool setup();
   void run();
@@ -149,7 +154,6 @@ public:
 ///////////////////////////////// UpStratumClient //////////////////////////////
 class UpStratumClient {
   struct bufferevent *bev_;
-  uint32_t extraNonce1_;  // session ID
   uint64_t extraNonce2_;
   string userName_;
 
@@ -163,13 +167,14 @@ public:
     AUTHENTICATED = 3
   };
   State state_;
-  uint8_t idx_;
+  int8_t idx_;
   StratumServer *server_;
   string latestMiningNotifyStr_;
   uint32_t poolDefaultDiff_;
+  uint32_t extraNonce1_;  // session ID
 
 public:
-  UpStratumClient(const uint8_t idx,
+  UpStratumClient(const int8_t idx,
                   struct event_base *base, const string &userName,
                   StratumServer *server);
   ~UpStratumClient();
@@ -211,23 +216,23 @@ class StratumSession {
   void handleLine(const string &line);
 
   void handleRequest(const string &idStr, const string &method,
-                     const JsonNode &jparams);
+                     JsonNode &jparams);
   void handleRequest_Subscribe(const string &idStr, const JsonNode &jparams);
   void handleRequest_Authorize(const string &idStr, const JsonNode &jparams);
-  void handleRequest_Submit   (const string &idStr, const JsonNode &jparams);
+  void handleRequest_Submit   (const string &idStr, JsonNode &jparams);
 
   void responseError(const string &idStr, int code);
   void responseTrue(const string &idStr);
 
 public:
-  uint8_t  upSessionIdx_;
+  int8_t  upSessionIdx_;
   uint16_t sessionId_;
   struct bufferevent *bev_;
   StratumServer *server_;
 
 
 public:
-  StratumSession(const uint8_t upSessionIdx, const uint16_t sessionId,
+  StratumSession(const int8_t upSessionIdx, const uint16_t sessionId,
                  struct bufferevent *bev, StratumServer *server);
   ~StratumSession();
 
