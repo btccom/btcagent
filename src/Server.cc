@@ -24,6 +24,24 @@
 #include <event2/listener.h>
 
 static
+const char *splieNotify(const string &line) {
+  char *pch = strchr(line.c_str(), '"');
+  int i = 1;
+  while (pch != NULL) {
+    pch = strchr(pch + 1, '"');
+    i++;
+    if (pch != NULL && i == 14) {
+      break;
+    }
+  }
+  if (pch == NULL) {
+    LOG(ERROR) << "invalid mining.notify: " << line;
+    return NULL;
+  }
+  return pch;
+}
+
+static
 bool resolve(const string &host, struct	in_addr *sin_addr) {
   struct evutil_addrinfo *ai = NULL;
   struct evutil_addrinfo hints_in;
@@ -164,7 +182,7 @@ void SessionIDManager::freeSessionId(const uint16_t sessionId) {
 ///////////////////////////////// UpStratumClient //////////////////////////////
 UpStratumClient::UpStratumClient(const uint8_t idx, struct event_base *base,
                                  const string &userName, StratumServer *server)
-: idx_(idx), state_(INIT), server_(server)
+: idx_(idx), state_(INIT), server_(server), poolDefaultDiff_(0)
 {
   bev_ = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
   assert(bev_ != NULL);
@@ -206,6 +224,14 @@ void UpStratumClient::sendData(const char *data, size_t len) {
   DLOG(INFO) << "UpStratumClient send(" << len << "): " << data;
 }
 
+void UpStratumClient::sendMiningNotify(const string &line) {
+  const char *pch = splieNotify(line);
+
+  // send to all down sessions
+  server_->sendMiningNotifyToAll(idx_, line.c_str(),
+                                 pch - line.c_str(), pch);
+}
+
 void UpStratumClient::handleLine(const string &line) {
   DLOG(INFO) << "UpStratumClient recv(" << line.size() << "): " << line;
 
@@ -214,19 +240,22 @@ void UpStratumClient::handleLine(const string &line) {
     LOG(ERROR) << "decode line fail, not a json string";
     return;
   }
-  JsonNode jresult  = jnode["result"];
-  JsonNode jerror   = jnode["error"];
-  JsonNode jmethod  = jnode["method"];
+  JsonNode jresult = jnode["result"];
+  JsonNode jerror  = jnode["error"];
+  JsonNode jmethod = jnode["method"];
 
   if (jmethod.type() == Utilities::JS::type::Str) {
     JsonNode jparams  = jnode["params"];
-    std::vector<JsonNode> jparamsArr = jparams.array();
+    auto jparamsArr = jparams.array();
 
     if (jmethod.str() == "mining.notify") {
-      // TODO
+      latestMiningNotifyStr_ = line;
+      sendMiningNotify(line);
     }
     else if (jmethod.str() == "mining.set_difficulty") {
-      // TODO
+      if (poolDefaultDiff_ == 0) {
+        poolDefaultDiff_ = jparamsArr[0].uint32();
+      }
     }
     else {
       LOG(ERROR) << "unknown method: " << line;
@@ -289,8 +318,10 @@ void UpStratumClient::handleLine(const string &line) {
 }
 
 bool UpStratumClient::isAvailable() {
-  // TODO
-  return true;
+  if (latestMiningNotifyStr_.empty() == false && poolDefaultDiff_ != 0) {
+    return true;
+  }
+  return false;
 }
 
 
@@ -454,8 +485,11 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
   free(minerAgent_);
   minerAgent_ = NULL;
 
-  // TODO: send latest stratum job
-//  sendMiningNotify(server_->jobRepository_->getLatestStratumJobEx());
+  // send mining.set_difficulty
+  server_->sendMiningNotify(this);
+
+  // send latest stratum job
+  server_->sendMiningNotify(this);
 }
 
 void StratumSession::handleRequest_Submit(const string &idStr,
@@ -720,16 +754,21 @@ void StratumServer::upReadCallback(struct bufferevent *, void *ptr) {
 }
 
 void StratumServer::addUpConnection(UpStratumClient *conn) {
+  LOG(INFO) << "add up connection, idx: " << conn->idx_;
   assert(upSessions_[conn->idx_] == NULL);
+
   upSessions_[conn->idx_] = conn;
 }
 
 void StratumServer::removeUpConnection(UpStratumClient *conn) {
+  LOG(INFO) << "remove up connection, idx: " << conn->idx_;
   assert(upSessions_[conn->idx_] != NULL);
 
   // remove down session which belong to this up connection
   for (size_t i = 0; i < downSessions_.size(); i++) {
-    removeDownConnection(downSessions_[i]);
+    StratumSession *s = downSessions_[i];
+    if (s->upSessionIdx_ == conn->idx_)
+      removeDownConnection(s);
   }
 
   upSessions_[conn->idx_] = NULL;
@@ -767,3 +806,41 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
 
   server->removeUpConnection(up);
 }
+
+void StratumServer::sendMiningNotifyToAll(const uint8_t idx,
+                                          const char *p1, size_t p1Len,
+                                          const char *p2) {
+  for (size_t i = 0; i < downSessions_.size(); i++) {
+    StratumSession *s = downSessions_[i];
+    if (s == NULL || s->upSessionIdx_ != idx)
+      continue;
+
+    s->sendData(p1, p1Len);
+    const string e1 = Strings::Format("%08x", (uint32_t)s->sessionId_);
+    s->sendData(e1.c_str(), 8);
+    s->sendData(p2, strlen(p2));
+  }
+}
+
+void StratumServer::sendMiningNotify(StratumSession *downSession) {
+  UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
+  assert(up != NULL);
+
+  const string &notify = up->latestMiningNotifyStr_;
+  const char *pch = splieNotify(notify);
+
+  downSession->sendData(notify.c_str(), pch - notify.c_str());
+  const string e1 = Strings::Format("%08x", (uint32_t)downSession->sessionId_);
+  downSession->sendData(e1.c_str(), 8);
+  downSession->sendData(pch, strlen(pch));
+}
+
+void StratumServer::sendMiningDifficulty(StratumSession *downSession) {
+  UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
+  assert(up != NULL);
+  const string s = Strings::Format("{\"id\":null,\"method\":\"mining.set_difficulty\""
+                             ",\"params\":[%" PRIu32"]}\n",
+                             up->poolDefaultDiff_);
+  downSession->sendData(s);
+}
+

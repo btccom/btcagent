@@ -135,6 +135,11 @@ public:
   static void upWatcherCallback(evutil_socket_t fd, short events, void *ptr);
   static void upSesssionCheckCallback(evutil_socket_t fd, short events, void *ptr);
 
+  void sendMiningNotifyToAll(const uint8_t idx, const char *p1,
+                             size_t p1Len, const char *p2);
+  void sendMiningNotify(StratumSession *downSession);
+  void sendMiningDifficulty(StratumSession *downSession);
+
   bool setup();
   void run();
   void stop();
@@ -160,6 +165,8 @@ public:
   State state_;
   uint8_t idx_;
   StratumServer *server_;
+  string latestMiningNotifyStr_;
+  uint32_t poolDefaultDiff_;
 
 public:
   UpStratumClient(const uint8_t idx,
@@ -174,6 +181,8 @@ public:
   inline void sendData(const string &str) {
     sendData(str.data(), str.size());
   }
+
+  void sendMiningNotify(const string &line);
 
   // means auth success and got at least stratum job
   bool isAvailable();
