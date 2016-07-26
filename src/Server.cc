@@ -24,7 +24,7 @@
 #include <event2/listener.h>
 
 static
-const char *splieNotify(const string &line) {
+const char *splitNotify(const string &line) {
   const char *pch = strchr(line.c_str(), '"');
   int i = 1;
   while (pch != NULL) {
@@ -298,7 +298,7 @@ void UpStratumClient::sendData(const char *data, size_t len) {
 }
 
 void UpStratumClient::sendMiningNotify(const string &line) {
-  const char *pch = splieNotify(line);
+  const char *pch = splitNotify(line);
 
   // send to all down sessions
   server_->sendMiningNotifyToAll(idx_, line.c_str(),
@@ -325,11 +325,12 @@ void UpStratumClient::handleStratumMessage(const string &line) {
       latestMiningNotifyStr_ = line;
       sendMiningNotify(line);
 
-      latestJobId_[0]   = latestJobId_[1];
-      latestJobTime_[0] = latestJobTime_[1];
+      latestJobId_[0]      = latestJobId_[1];
+      latestJobGbtTime_[0] = latestJobGbtTime_[1];
 
-      latestJobId_[1]   = jparamsArr[0].uint8();
-      latestJobTime_[1] = jparamsArr[7].uint32_hex();
+      // the jobId always between [0, 9]
+      latestJobId_[1]      = (uint8_t)jparamsArr[0].uint32();  /* job id     */
+      latestJobGbtTime_[1] = jparamsArr[7].uint32_hex();       /* block time */
     }
     else if (jmethod.str() == "mining.set_difficulty") {
       // just set the default pool diff, than ignore
@@ -594,7 +595,7 @@ void StratumSession::handleRequest_Submit(const string &idStr,
     responseError(idStr, StratumError::ILLEGAL_PARARMS);
     return;
   }
-//  const uint8_t jobId     = jparams.children()->at(1).uint8();
+//  const uint8_t jobId     = (uint8_t)jparams.children()->at(1).uint32();
 //  const uint32_t exNonce2 = jparams.children()->at(2).uint32_hex();
 //  const uint32_t nTime    = jparams.children()->at(3).uint32_hex();
 //  const uint32_t nonce    = jparams.children()->at(4).uint32_hex();
@@ -922,7 +923,7 @@ void StratumServer::sendMiningNotify(StratumSession *downSession) {
   assert(up != NULL);
 
   const string &notify = up->latestMiningNotifyStr_;
-  const char *pch = splieNotify(notify);
+  const char *pch = splitNotify(notify);
 
   downSession->sendData(notify.c_str(), pch - notify.c_str());
   const string e1 = Strings::Format("%08x", (uint32_t)downSession->sessionId_);
@@ -981,10 +982,10 @@ void StratumServer::submitShare(JsonNode &jparams,
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
 
   bool isTimeChanged = true;
-  const uint8_t  jobId = jparamsArr[1].uint8();
+  const uint8_t  jobId = (uint8_t)jparamsArr[1].uint32();
   const uint32_t nTime = jparamsArr[3].uint32_hex();
-  if ((jobId == up->latestJobId_[1] && nTime == up->latestJobTime_[1]) ||
-      (jobId == up->latestJobId_[0] && nTime == up->latestJobTime_[0])) {
+  if ((jobId == up->latestJobId_[1] && nTime == up->latestJobGbtTime_[1]) ||
+      (jobId == up->latestJobId_[0] && nTime == up->latestJobGbtTime_[0])) {
     isTimeChanged = false;
   }
 

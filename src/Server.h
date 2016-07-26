@@ -189,8 +189,9 @@ public:
   uint32_t extraNonce1_;  // session ID
 
   string   latestMiningNotifyStr_;
+  // latest two job Id & time, use to check if send nTime
   uint8_t  latestJobId_[2];
-  uint32_t latestJobTime_[2];
+  uint32_t latestJobGbtTime_[2];
 
 public:
   UpStratumClient(const int8_t idx,
