@@ -33,6 +33,14 @@
 
 #include "utilities_js.hpp"
 
+#define CMD_MAGIC_NUMBER      0x7Fu
+
+#define CMD_REGISTER_WORKER   0x00u             // send msg
+#define CMD_SUBMIT_SHARE      0x01u             // send msg
+#define CMD_SUBMIT_SHARE_WITH_TIME  0x02u       // send msg
+#define CMD_MINING_SET_DIFF   0x03u             // recv msg
+
+
 class StratumSession;
 class StratumServer;
 class UpStratumClient;
@@ -139,11 +147,16 @@ public:
   void sendMiningNotifyToAll(const int8_t idx, const char *p1,
                              size_t p1Len, const char *p2);
   void sendMiningNotify(StratumSession *downSession);
-  void sendMiningDifficulty(StratumSession *downSession);
+  void sendDefaultMiningDifficulty(StratumSession *downSession);
+  void sendMiningDifficulty(UpStratumClient *upconn,
+                            uint16_t sessionId, uint32_t diff);
 
   void submitShare(JsonNode &jparams, StratumSession *downSession);
 
   int8_t findUpSessionIdx();
+
+  void registerWorker(StratumSession *downSession, uint16_t sessionId,
+                      const char *minerAgent, const string &workerName);
 
   bool setup();
   void run();
@@ -157,7 +170,9 @@ class UpStratumClient {
   uint64_t extraNonce2_;
   string userName_;
 
-  void handleLine(const string &line);
+  bool handleMessage();
+  void handleStratumMessage(const string &line);
+  bool handleExMessage(struct evbuffer *inBuf);
 
 public:
   enum State {
@@ -169,9 +184,13 @@ public:
   State state_;
   int8_t idx_;
   StratumServer *server_;
-  string latestMiningNotifyStr_;
+
   uint32_t poolDefaultDiff_;
   uint32_t extraNonce1_;  // session ID
+
+  string   latestMiningNotifyStr_;
+  uint8_t  latestJobId_[2];
+  uint32_t latestJobTime_[2];
 
 public:
   UpStratumClient(const int8_t idx,
@@ -213,7 +232,7 @@ class StratumSession {
 
   void setReadTimeout(const int32_t timeout);
 
-  void handleLine(const string &line);
+  void handleStratumMessage(const string &line);
 
   void handleRequest(const string &idStr, const string &method,
                      JsonNode &jparams);

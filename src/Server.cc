@@ -99,7 +99,7 @@ static
 string getWorkerName(const string &fullName) {
   size_t pos = fullName.find(".");
   if (pos == fullName.npos) {
-    return fullName;
+    return "";
   }
   return fullName.substr(pos + 1);  // not include '.'
 }
@@ -212,10 +212,83 @@ bool UpStratumClient::connect(struct sockaddr_in &sin) {
 }
 
 void UpStratumClient::recvData() {
-  string line;
-  while (tryReadLine(line, bev_)) {
-    handleLine(line);
+  while (handleMessage()) {
   }
+}
+
+bool UpStratumClient::handleMessage() {
+  struct evbuffer *inBuf = bufferevent_get_input(bev_);
+  bool isExMsg = false;
+
+  // check if ex type
+  if (evbuffer_get_length(inBuf) >= 2) {
+    uint8_t buf[2];
+    evbuffer_copyout(inBuf, buf, 2);
+    if (buf[0] == CMD_MAGIC_NUMBER && buf[1] == CMD_MINING_SET_DIFF) {
+      isExMsg = true;
+    }
+  }
+
+  if (isExMsg) {
+    // extension message
+    handleExMessage(inBuf);
+  }
+  else {
+    // stratum message
+    string line;
+    if (tryReadLine(line, bev_)) {
+    	handleStratumMessage(line);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool UpStratumClient::handleExMessage(struct evbuffer *inBuf) {
+  //
+  // only one type msg: CMD_MINING_SET_DIFF
+  //
+  //
+  // CMD_MINING_SET_DIFF
+  // | magic_number(1) | cmd(1) | count(1) | diff(uint32_t) |  session_id (2) ... |
+  //
+  size_t evbuflen = evbuffer_get_length(inBuf);
+  if (evbuflen < 9) {  // CMD_MINING_SET_DIFF as least 9 bytes
+    return false;
+  }
+
+  // copy the first 3 bytes
+  uint8_t buf[3];
+  evbuffer_copyout(inBuf, buf, sizeof(buf));
+  uint8_t sessionCount = buf[2];
+
+  // calc message length
+  size_t msgLen = 7 + sessionCount * sizeof(uint16_t);
+  if (evbuflen < msgLen) {
+    return false;
+  }
+
+  string data;
+  data.resize(msgLen);
+
+  // copies and removes the first datlen bytes from the front of buf
+  // into the memory at data
+  evbuffer_remove(inBuf, (void *)data.data(), data.size());
+
+  const uint32_t diff = *(uint32_t *)(data.data() + 2);
+  if (diff == 0) {
+    LOG(FATAL) << "invalid diff";
+    return false;
+  }
+
+  uint16_t *sessionIdPtr = (uint16_t *)(data.data() + 5);
+  for (uint8_t i ; i < sessionCount; i++) {
+    uint16_t sessionId = *sessionIdPtr++;
+    server_->sendMiningDifficulty(this, sessionId, diff);
+  }
+
+  return true;
 }
 
 void UpStratumClient::sendData(const char *data, size_t len) {
@@ -232,7 +305,7 @@ void UpStratumClient::sendMiningNotify(const string &line) {
                                  pch - line.c_str(), pch);
 }
 
-void UpStratumClient::handleLine(const string &line) {
+void UpStratumClient::handleStratumMessage(const string &line) {
   DLOG(INFO) << "UpStratumClient recv(" << line.size() << "): " << line;
 
   JsonNode jnode;
@@ -251,8 +324,15 @@ void UpStratumClient::handleLine(const string &line) {
     if (jmethod.str() == "mining.notify") {
       latestMiningNotifyStr_ = line;
       sendMiningNotify(line);
+
+      latestJobId_[0]   = latestJobId_[1];
+      latestJobTime_[0] = latestJobTime_[1];
+
+      latestJobId_[1]   = jparamsArr[0].uint8();
+      latestJobTime_[1] = jparamsArr[7].uint32_hex();
     }
     else if (jmethod.str() == "mining.set_difficulty") {
+      // just set the default pool diff, than ignore
       if (poolDefaultDiff_ == 0) {
         poolDefaultDiff_ = jparamsArr[0].uint32();
       }
@@ -356,11 +436,11 @@ void StratumSession::sendData(const char *data, size_t len) {
 void StratumSession::recvData() {
   string line;
   while (tryReadLine(line, bev_)) {
-    handleLine(line);
+    handleStratumMessage(line);
   }
 }
 
-void StratumSession::handleLine(const string &line) {
+void StratumSession::handleStratumMessage(const string &line) {
   DLOG(INFO) << "recv(" << line.size() << "): " << line;
 
   JsonNode jnode;
@@ -478,15 +558,18 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
   responseTrue(idStr);
   state_ = AUTHENTICATED;
 
-  const string workerName = getWorkerName(jparams.children()->at(0).str());
+  string workerName = getWorkerName(jparams.children()->at(0).str());
+  if (workerName.empty()) {
+    workerName = "default";
+  }
 
-  // TODO: sent sessionId(extraNonce1), minerAgent_, workerName to server_
-
+  // sent sessionId, minerAgent_, workerName to server_
+  server_->registerWorker(this, sessionId_, minerAgent_, workerName);
   free(minerAgent_);
   minerAgent_ = NULL;
 
   // send mining.set_difficulty
-  server_->sendMiningNotify(this);
+  server_->sendDefaultMiningDifficulty(this);
 
   // send latest stratum job
   server_->sendMiningNotify(this);
@@ -847,12 +930,23 @@ void StratumServer::sendMiningNotify(StratumSession *downSession) {
   downSession->sendData(pch, strlen(pch));
 }
 
-void StratumServer::sendMiningDifficulty(StratumSession *downSession) {
+void StratumServer::sendDefaultMiningDifficulty(StratumSession *downSession) {
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
   assert(up != NULL);
   const string s = Strings::Format("{\"id\":null,\"method\":\"mining.set_difficulty\""
                              ",\"params\":[%" PRIu32"]}\n",
                              up->poolDefaultDiff_);
+  downSession->sendData(s);
+}
+
+void StratumServer::sendMiningDifficulty(UpStratumClient *upconn,
+                                         uint16_t sessionId, uint32_t diff) {
+  StratumSession *downSession = downSessions_[sessionId];
+  if (downSession == NULL)
+    return;
+
+  const string s = Strings::Format("{\"id\":null,\"method\":\"mining.set_difficulty\""
+                                   ",\"params\":[%" PRIu32"]}\n", diff);
   downSession->sendData(s);
 }
 
@@ -879,16 +973,96 @@ int8_t StratumServer::findUpSessionIdx() {
 void StratumServer::submitShare(JsonNode &jparams,
                                 StratumSession *downSession) {
   auto jparamsArr = jparams.array();
-  string s;
-  s = Strings::Format("{\"params\": [\"\",\"%s\",\"%08x%s\",\"%08x\",\"%08x\"]"
-                      ",\"id\":1,\"method\": \"mining.submit\"}\n",
-                      jparamsArr[1].str().c_str(),
-                      (uint32_t)downSession->sessionId_,
-                      jparamsArr[2].str().c_str(),
-                      jparamsArr[3].str().c_str() /* ntime */,
-                      jparamsArr[4].str().c_str() /* nonce */);
+  if (jparamsArr.size() < 5) {
+    LOG(ERROR) << "invalid share, params num is less than 5";
+    return;
+  }
 
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
-  up->sendData(s);
+
+  bool isTimeChanged = true;
+  const uint8_t  jobId = jparamsArr[1].uint8();
+  const uint32_t nTime = jparamsArr[3].uint32_hex();
+  if ((jobId == up->latestJobId_[1] && nTime == up->latestJobTime_[1]) ||
+      (jobId == up->latestJobId_[0] && nTime == up->latestJobTime_[0])) {
+    isTimeChanged = false;
+  }
+
+  //
+  // | magic_number(1) | cmd(1) | jobId (uint8_t) | session_id (uint16_t) |
+  // | extra_nonce2 (uint32_t) | nNonce (uint32_t) | [nTime (uint32_t) |]
+  //
+  string buf;
+  buf.resize(isTimeChanged ? 17 : 13);  // fixed 17 or 13 bytes
+  uint8_t *p = (uint8_t *)buf.data();
+
+  // cmd
+  *p++ = CMD_MAGIC_NUMBER;
+  *p++ = isTimeChanged ? CMD_SUBMIT_SHARE_WITH_TIME : CMD_SUBMIT_SHARE;
+  // jobId
+  *p++ = *jparamsArr[1].str().c_str();
+  // session Id
+  *(uint16_t *)p = downSession->sessionId_;
+  p += 2;
+  // extra_nonce2
+  *(uint32_t *)p = jparamsArr[2].uint32_hex();
+  p += 4;
+  // nonce
+  *(uint32_t *)p = jparamsArr[4].uint32_hex();
+  p += 4;
+  // ntime
+  if (isTimeChanged) {
+    *(uint32_t *)p = nTime;
+    p += 4;
+  }
+  assert(p - (uint8_t *)buf.data() == buf.size());
+
+  // send buf
+  up->sendData(buf);
+}
+
+void StratumServer::registerWorker(StratumSession *downSession,
+                                   uint16_t sessionId,
+                                   const char *minerAgent,
+                                   const string &workerName) {
+  //
+  // | magic_number(1) | cmd(1) | len (1) | session_id | clientAgent | worker_name |
+  //
+  size_t len;
+  len += 5; // magic_num, cmd, len, session_id
+  // client agent
+  len += (minerAgent != NULL) ? strlen(minerAgent) : 0;
+  len += 1; // '\0'
+  len += workerName.length() + 1;  // worker name and '\0'
+
+  string buf;
+  buf.resize(len);
+  uint8_t *p = (uint8_t *)buf.data();
+
+  // cmd
+  *p++ = CMD_MAGIC_NUMBER;
+  *p++ = CMD_REGISTER_WORKER;
+  // len
+  *p++ = (uint8_t)buf.size();  // 1 bytes (255) is large enough for length
+  // session Id
+  *(uint16_t *)p = downSession->sessionId_;
+  p += 2;
+
+  // miner agent
+  if (minerAgent != NULL) {
+    // strcpy: including the terminating null byte
+    strcpy((char *)p, minerAgent);
+    p += strlen(minerAgent) + 1;
+  } else {
+    *p++ = '\0';
+  }
+
+  // worker name
+  strcpy((char *)p, workerName.c_str());
+  p += workerName.length() + 1;
+  assert(p - (uint8_t *)buf.data() == buf.size());
+
+  UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
+  up->sendData(buf);
 }
 
