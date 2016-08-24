@@ -33,12 +33,17 @@
 
 #include "utilities_js.hpp"
 
-#define CMD_MAGIC_NUMBER      0x7Fu
 
-#define CMD_REGISTER_WORKER   0x00u             // send msg
-#define CMD_SUBMIT_SHARE      0x01u             // send msg
-#define CMD_SUBMIT_SHARE_WITH_TIME  0x02u       // send msg
-#define CMD_MINING_SET_DIFF   0x03u             // recv msg
+#define CMD_MAGIC_NUMBER      0x7Fu
+// types
+#define CMD_REGISTER_WORKER   0x01u             // Agent -> Pool
+#define CMD_SUBMIT_SHARE      0x02u             // Agent -> Pool, without block time
+#define CMD_SUBMIT_SHARE_WITH_TIME  0x03u       // Agent -> Pool
+#define CMD_UNREGISTER_WORKER 0x04u             // Agent -> Pool
+#define CMD_MINING_SET_DIFF   0x05u             // Pool  -> Agent
+
+// agent
+#define AGENT_MAX_SESSION_ID   0xFFFEu  // 0xFFFEu = 65534
 
 
 class StratumSession;
@@ -72,17 +77,15 @@ public:
 
 
 //////////////////////////////// SessionIDManager //////////////////////////////
-#define MAX_SESSION_ID   0xFFFFu   // 65535 = 2^16 - 1
-
 class SessionIDManager {
-  std::bitset<MAX_SESSION_ID + 1> sessionIds_;
+  std::bitset<AGENT_MAX_SESSION_ID> sessionIds_;
   int32_t count_;
 
 public:
   SessionIDManager();
 
   bool ifFull();
-  uint16_t allocSessionId();
+  uint16_t allocSessionId(); // range: [0, 65534]
   void freeSessionId(const uint16_t sessionId);
 };
 
@@ -151,12 +154,12 @@ public:
   void sendMiningDifficulty(UpStratumClient *upconn,
                             uint16_t sessionId, uint32_t diff);
 
-  void submitShare(JsonNode &jparams, StratumSession *downSession);
-
   int8_t findUpSessionIdx();
 
+  void submitShare(JsonNode &jparams, StratumSession *downSession);
   void registerWorker(StratumSession *downSession, uint16_t sessionId,
                       const char *minerAgent, const string &workerName);
+  void unRegisterWorker(StratumSession *downSession, uint16_t sessionId);
 
   bool setup();
   void run();
@@ -170,9 +173,11 @@ class UpStratumClient {
   uint64_t extraNonce2_;
   string userName_;
 
+  struct evbuffer *inBuf_;
+
   bool handleMessage();
   void handleStratumMessage(const string &line);
-  bool handleExMessage(struct evbuffer *inBuf);
+  void handleExMessage_MiningSetDiff(const string *exMessage);
 
 public:
   enum State {
@@ -189,9 +194,9 @@ public:
   uint32_t extraNonce1_;  // session ID
 
   string   latestMiningNotifyStr_;
-  // latest two job Id & time, use to check if send nTime
-  uint8_t  latestJobId_[2];
-  uint32_t latestJobGbtTime_[2];
+  // latest there job Id & time, use to check if send nTime
+  uint8_t  latestJobId_[3];
+  uint32_t latestJobGbtTime_[3];
 
 public:
   UpStratumClient(const int8_t idx,
@@ -201,7 +206,7 @@ public:
 
   bool connect(struct sockaddr_in &sin);
 
-  void recvData();
+  void recvData(struct evbuffer *buf);
   void sendData(const char *data, size_t len);
   inline void sendData(const string &str) {
     sendData(str.data(), str.size());
@@ -227,6 +232,7 @@ class StratumSession {
   };
 
   //----------------------
+  struct evbuffer *inBuf_;
   static const int32_t kExtraNonce2Size_ = 4;
   State state_;
   char *minerAgent_;
@@ -256,7 +262,7 @@ public:
                  struct bufferevent *bev, StratumServer *server);
   ~StratumSession();
 
-  void recvData();
+  void recvData(struct evbuffer *buf);
   void sendData(const char *data, size_t len);
   inline void sendData(const string &str) {
     sendData(str.data(), str.size());

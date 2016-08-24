@@ -76,9 +76,8 @@ bool resolve(const string &host, struct	in_addr *sin_addr) {
 }
 
 static
-bool tryReadLine(string &line, struct bufferevent *bufev) {
+bool tryReadLine(string &line, struct evbuffer *inBuf) {
   line.clear();
-  struct evbuffer *inBuf = bufferevent_get_input(bufev);
 
   // find eol
   struct evbuffer_ptr loc;
@@ -149,10 +148,10 @@ SessionIDManager::SessionIDManager(): count_(0) {
 }
 
 bool SessionIDManager::ifFull() {
-  if (count_ >= (int32_t)(MAX_SESSION_ID + 1)) {
-    return false;
+  if (count_ >= (int32_t)(AGENT_MAX_SESSION_ID + 1)) {
+    return true;
   }
-  return true;
+  return false;
 }
 
 uint16_t SessionIDManager::allocSessionId() {
@@ -160,7 +159,7 @@ uint16_t SessionIDManager::allocSessionId() {
   uint16_t idx = 0;
   while (sessionIds_.test(idx) == true) {
     idx++;
-    if (idx > MAX_SESSION_ID) {
+    if (idx > AGENT_MAX_SESSION_ID) {
       idx = 0;
     }
   }
@@ -182,7 +181,7 @@ void SessionIDManager::freeSessionId(const uint16_t sessionId) {
 ///////////////////////////////// UpStratumClient //////////////////////////////
 UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
                                  const string &userName, StratumServer *server)
-: idx_(idx), state_(INIT), server_(server), poolDefaultDiff_(0)
+: state_(INIT), idx_(idx), server_(server), poolDefaultDiff_(0)
 {
   bev_ = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
   assert(bev_ != NULL);
@@ -194,6 +193,11 @@ UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
 
   extraNonce1_ = 0u;
   extraNonce2_ = 0u;
+
+  inBuf_ = evbuffer_new();
+
+  latestJobId_[0] = latestJobId_[1] = latestJobId_[2] = 0;
+  latestJobGbtTime_[0] = latestJobGbtTime_[1] = latestJobGbtTime_[2] = 0;
 }
 
 UpStratumClient::~UpStratumClient() {
@@ -211,84 +215,74 @@ bool UpStratumClient::connect(struct sockaddr_in &sin) {
   return false;
 }
 
-void UpStratumClient::recvData() {
+void UpStratumClient::recvData(struct evbuffer *buf) {
+  // moves all data from src to the end of dst
+  evbuffer_add_buffer(inBuf_, buf);
+
   while (handleMessage()) {
   }
 }
 
 bool UpStratumClient::handleMessage() {
-  struct evbuffer *inBuf = bufferevent_get_input(bev_);
-  bool isExMsg = false;
+  const size_t evBufLen = evbuffer_get_length(inBuf_);
 
-  // check if ex type
-  if (evbuffer_get_length(inBuf) >= 2) {
-    uint8_t buf[2];
-    evbuffer_copyout(inBuf, buf, 2);
-    if (buf[0] == CMD_MAGIC_NUMBER && buf[1] == CMD_MINING_SET_DIFF) {
-      isExMsg = true;
+  // no matter what kind of messages, length should at least 4 bytes
+  if (evBufLen < 4)
+    return false;
+
+  uint8_t buf[4];
+  evbuffer_copyout(inBuf_, buf, 4);
+
+  // handle ex-message
+  if (buf[0] == CMD_MAGIC_NUMBER) {
+    const uint16_t exMessageLen = *(uint16_t *)(buf + 2);
+
+    if (evBufLen < exMessageLen)  // didn't received the whole message yet
+      return false;
+
+    // copies and removes the first datlen bytes from the front of buf
+    // into the memory at data
+    string exMessage;
+    exMessage.resize(exMessageLen);
+    evbuffer_remove(inBuf_, (uint8_t *)exMessage.data(), exMessage.size());
+
+    switch (buf[1]) {
+      case CMD_MINING_SET_DIFF:
+        handleExMessage_MiningSetDiff(&exMessage);
+        break;
+
+      default:
+        LOG(ERROR) << "received unknown ex-message, type: " << buf[1]
+        << ", len: " << exMessageLen;
+        break;
     }
+    return true;  // read message success, return true
   }
 
-  if (isExMsg) {
-    // extension message
-    handleExMessage(inBuf);
-  }
-  else {
-    // stratum message
-    string line;
-    if (tryReadLine(line, bev_)) {
-    	handleStratumMessage(line);
-      return true;
-    }
+  // stratum message
+  string line;
+  if (tryReadLine(line, inBuf_)) {
+    handleStratumMessage(line);
+    return true;
   }
 
-  return false;
+  return false;  // read mesasge failure
 }
 
-bool UpStratumClient::handleExMessage(struct evbuffer *inBuf) {
-  //
-  // only one type msg: CMD_MINING_SET_DIFF
-  //
+void UpStratumClient::handleExMessage_MiningSetDiff(const string *exMessage) {
   //
   // CMD_MINING_SET_DIFF
-  // | magic_number(1) | cmd(1) | count(1) | diff(uint32_t) |  session_id (2) ... |
+  // | magic_number(1) | cmd(1) | len (2) | diff (4) | count(2) | session_id (2) ... |
   //
-  size_t evbuflen = evbuffer_get_length(inBuf);
-  if (evbuflen < 9) {  // CMD_MINING_SET_DIFF as least 9 bytes
-    return false;
-  }
+  const uint8_t *p = (uint8_t *)exMessage->data();
+  const uint32_t diff  = *(uint32_t *)(p + 4);
+  const uint16_t count = *(uint16_t *)(p + 8);
 
-  // copy the first 3 bytes
-  uint8_t buf[3];
-  evbuffer_copyout(inBuf, buf, sizeof(buf));
-  uint8_t sessionCount = buf[2];
-
-  // calc message length
-  size_t msgLen = 7 + sessionCount * sizeof(uint16_t);
-  if (evbuflen < msgLen) {
-    return false;
-  }
-
-  string data;
-  data.resize(msgLen);
-
-  // copies and removes the first datlen bytes from the front of buf
-  // into the memory at data
-  evbuffer_remove(inBuf, (void *)data.data(), data.size());
-
-  const uint32_t diff = *(uint32_t *)(data.data() + 2);
-  if (diff == 0) {
-    LOG(FATAL) << "invalid diff";
-    return false;
-  }
-
-  uint16_t *sessionIdPtr = (uint16_t *)(data.data() + 5);
-  for (uint8_t i ; i < sessionCount; i++) {
+  uint16_t *sessionIdPtr = (uint16_t *)(p + 10);
+  for (uint8_t i = 0; i < count; i++) {
     uint16_t sessionId = *sessionIdPtr++;
     server_->sendMiningDifficulty(this, sessionId, diff);
   }
-
-  return true;
 }
 
 void UpStratumClient::sendData(const char *data, size_t len) {
@@ -325,12 +319,14 @@ void UpStratumClient::handleStratumMessage(const string &line) {
       latestMiningNotifyStr_ = line;
       sendMiningNotify(line);
 
+      latestJobId_[1]      = latestJobId_[2];
+      latestJobGbtTime_[1] = latestJobGbtTime_[2];
       latestJobId_[0]      = latestJobId_[1];
       latestJobGbtTime_[0] = latestJobGbtTime_[1];
 
       // the jobId always between [0, 9]
-      latestJobId_[1]      = (uint8_t)jparamsArr[0].uint32();  /* job id     */
-      latestJobGbtTime_[1] = jparamsArr[7].uint32_hex();       /* block time */
+      latestJobId_[2]      = (uint8_t)jparamsArr[0].uint32();  /* job id     */
+      latestJobGbtTime_[2] = jparamsArr[7].uint32_hex();       /* block time */
     }
     else if (jmethod.str() == "mining.set_difficulty") {
       // just set the default pool diff, than ignore
@@ -383,7 +379,7 @@ void UpStratumClient::handleStratumMessage(const string &line) {
 
     // do mining.authorize
     string s = Strings::Format("{\"id\": 1, \"method\": \"mining.authorize\","
-                               "\"params\": [\"\%s\", \"\"]}\n",
+                               "\"params\": [\"%s\", \"\"]}\n",
                                userName_.c_str());
     sendData(s);
     return;
@@ -413,6 +409,7 @@ StratumSession::StratumSession(const int8_t upSessionIdx,
 : state_(CONNECTED), minerAgent_(NULL), upSessionIdx_(upSessionIdx),
 sessionId_(sessionId), bev_(bev), server_(server)
 {
+  inBuf_ = evbuffer_new();
 }
 
 StratumSession::~StratumSession() {
@@ -434,9 +431,12 @@ void StratumSession::sendData(const char *data, size_t len) {
   DLOG(INFO) << "send(" << len << "): " << data;
 }
 
-void StratumSession::recvData() {
+void StratumSession::recvData(struct evbuffer *buf) {
+  // moves all data from src to the end of dst
+  evbuffer_add_buffer(inBuf_, buf);
+
   string line;
-  while (tryReadLine(line, bev_)) {
+  while (tryReadLine(line, inBuf_)) {
     handleStratumMessage(line);
   }
 }
@@ -595,16 +595,13 @@ void StratumSession::handleRequest_Submit(const string &idStr,
     responseError(idStr, StratumError::ILLEGAL_PARARMS);
     return;
   }
-//  const uint8_t jobId     = (uint8_t)jparams.children()->at(1).uint32();
-//  const uint32_t exNonce2 = jparams.children()->at(2).uint32_hex();
-//  const uint32_t nTime    = jparams.children()->at(3).uint32_hex();
-//  const uint32_t nonce    = jparams.children()->at(4).uint32_hex();
 
   // submit share
   server_->submitShare(jparams, this);
 
   responseTrue(idStr);  // we assume shares are valid
 }
+
 
 
 /////////////////////////////////// StratumServer //////////////////////////////
@@ -629,6 +626,8 @@ StratumServer::~StratumServer() {
   // TODO
   if (upEvTimer_)
     event_del(upEvTimer_);
+
+  event_base_free(base_);
 }
 
 void StratumServer::stop() {
@@ -794,8 +793,8 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
   server->addDownConnection(conn);
 }
 
-void StratumServer::downReadCallback(struct bufferevent *, void *ptr) {
-  static_cast<StratumSession *>(ptr)->recvData();
+void StratumServer::downReadCallback(struct bufferevent *bev, void *ptr) {
+  static_cast<StratumSession *>(ptr)->recvData(bufferevent_get_input(bev));
 }
 
 void StratumServer::downEventCallback(struct bufferevent *bev,
@@ -832,6 +831,10 @@ void StratumServer::addDownConnection(StratumSession *conn) {
 }
 
 void StratumServer::removeDownConnection(StratumSession *conn) {
+  // unregister worker
+  unRegisterWorker(conn, conn->sessionId_);
+
+  // clear resources
   bufferevent_free(conn->bev_);
   sessionIDManager_.freeSessionId(conn->sessionId_);
   downSessions_[conn->sessionId_] = NULL;
@@ -844,8 +847,8 @@ void StratumServer::run() {
   event_base_dispatch(base_);
 }
 
-void StratumServer::upReadCallback(struct bufferevent *, void *ptr) {
-  static_cast<UpStratumClient *>(ptr)->recvData();
+void StratumServer::upReadCallback(struct bufferevent *bev, void *ptr) {
+  static_cast<UpStratumClient *>(ptr)->recvData(bufferevent_get_input(bev));
 }
 
 void StratumServer::addUpConnection(UpStratumClient *conn) {
@@ -984,39 +987,51 @@ void StratumServer::submitShare(JsonNode &jparams,
   bool isTimeChanged = true;
   const uint8_t  jobId = (uint8_t)jparamsArr[1].uint32();
   const uint32_t nTime = jparamsArr[3].uint32_hex();
-  if ((jobId == up->latestJobId_[1] && nTime == up->latestJobGbtTime_[1]) ||
+
+  if ((jobId == up->latestJobId_[2] && nTime == up->latestJobGbtTime_[2]) ||
+      (jobId == up->latestJobId_[1] && nTime == up->latestJobGbtTime_[1]) ||
       (jobId == up->latestJobId_[0] && nTime == up->latestJobGbtTime_[0])) {
     isTimeChanged = false;
   }
 
   //
-  // | magic_number(1) | cmd(1) | jobId (uint8_t) | session_id (uint16_t) |
+  // | magic_number(1) | cmd(1) | len (2) | jobId (uint8_t) | session_id (uint16_t) |
   // | extra_nonce2 (uint32_t) | nNonce (uint32_t) | [nTime (uint32_t) |]
   //
   string buf;
-  buf.resize(isTimeChanged ? 17 : 13);  // fixed 17 or 13 bytes
+  const uint16_t len = isTimeChanged ? 19 : 15;  // fixed 19 or 15 bytes
+  buf.resize(len, 0);
   uint8_t *p = (uint8_t *)buf.data();
 
   // cmd
   *p++ = CMD_MAGIC_NUMBER;
   *p++ = isTimeChanged ? CMD_SUBMIT_SHARE_WITH_TIME : CMD_SUBMIT_SHARE;
+
+  // len
+  *(uint16_t *)p = len;
+  p += 2;
+
   // jobId
   *p++ = *jparamsArr[1].str().c_str();
+
   // session Id
   *(uint16_t *)p = downSession->sessionId_;
   p += 2;
+
   // extra_nonce2
   *(uint32_t *)p = jparamsArr[2].uint32_hex();
   p += 4;
+
   // nonce
   *(uint32_t *)p = jparamsArr[4].uint32_hex();
   p += 4;
+
   // ntime
   if (isTimeChanged) {
     *(uint32_t *)p = nTime;
     p += 4;
   }
-  assert(p - (uint8_t *)buf.data() == buf.size());
+  assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
 
   // send buf
   up->sendData(buf);
@@ -1027,24 +1042,27 @@ void StratumServer::registerWorker(StratumSession *downSession,
                                    const char *minerAgent,
                                    const string &workerName) {
   //
-  // | magic_number(1) | cmd(1) | len (1) | session_id | clientAgent | worker_name |
+  // | magic_number(1) | cmd(1) | len (2) | session_id(2) | clientAgent | worker_name |
   //
-  size_t len;
-  len += 5; // magic_num, cmd, len, session_id
+  uint16_t len = 0;
+  len += (1+1+2+2); // magic_num, cmd, len, session_id
   // client agent
   len += (minerAgent != NULL) ? strlen(minerAgent) : 0;
   len += 1; // '\0'
   len += workerName.length() + 1;  // worker name and '\0'
 
   string buf;
-  buf.resize(len);
+  buf.resize(len, 0);
   uint8_t *p = (uint8_t *)buf.data();
 
   // cmd
   *p++ = CMD_MAGIC_NUMBER;
   *p++ = CMD_REGISTER_WORKER;
+
   // len
-  *p++ = (uint8_t)buf.size();  // 1 bytes (255) is large enough for length
+  *(uint16_t *)p = len;
+  p += 2;
+
   // session Id
   *(uint16_t *)p = downSession->sessionId_;
   p += 2;
@@ -1061,9 +1079,36 @@ void StratumServer::registerWorker(StratumSession *downSession,
   // worker name
   strcpy((char *)p, workerName.c_str());
   p += workerName.length() + 1;
-  assert(p - (uint8_t *)buf.data() == buf.size());
+  assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
 
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
   up->sendData(buf);
 }
 
+void StratumServer::unRegisterWorker(StratumSession *downSession,
+                                     uint16_t sessionId) {
+  //
+  // CMD_UNREGISTER_WORKER:
+  // | magic_number(1) | cmd(1) | len (2) | session_id(2) |
+  //
+  const uint16_t len = 6;
+  string buf;
+  buf.resize(len, 0);
+  uint8_t *p = (uint8_t *)buf.data();
+
+  // cmd
+  *p++ = CMD_MAGIC_NUMBER;
+  *p++ = CMD_UNREGISTER_WORKER;
+
+  // len
+  *(uint16_t *)p = len;
+  p += 2;
+
+  // session Id
+  *(uint16_t *)p = sessionId;
+  p += 2;
+  assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
+
+  UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
+  up->sendData(buf);
+}
