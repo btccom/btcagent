@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
     }
 
     if (!gStratumServer->setup()) {
-      LOG(FATAL) << "setup failure";
+      LOG(ERROR) << "setup failure";
     } else {
       gStratumServer->run();
     }
