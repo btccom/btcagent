@@ -18,28 +18,12 @@
  */
 #include "Server.h"
 
+#include <arpa/inet.h>
+
 #include <event2/event.h>
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
-
-static
-const char *splitNotify(const string &line) {
-  const char *pch = strchr(line.c_str(), '"');
-  int i = 1;
-  while (pch != NULL) {
-    pch = strchr(pch + 1, '"');
-    i++;
-    if (pch != NULL && i == 14) {
-      break;
-    }
-  }
-  if (pch == NULL) {
-    LOG(ERROR) << "invalid mining.notify: " << line;
-    return NULL;
-  }
-  return pch;
-}
 
 static
 bool resolve(const string &host, struct	in_addr *sin_addr) {
@@ -66,6 +50,10 @@ bool resolve(const string &host, struct	in_addr *sin_addr) {
   if (ai->ai_family == AF_INET) {
     struct sockaddr_in *sin = (struct sockaddr_in*)ai->ai_addr;
     *sin_addr = sin->sin_addr;
+
+    char ipStr[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(sin->sin_addr), ipStr, INET_ADDRSTRLEN);
+    LOG(INFO) << "resolve host: " << host << ", ip: " << ipStr;
   } else if (ai->ai_family == AF_INET6) {
     // not support yet
     LOG(ERROR) << "not support ipv6 yet";

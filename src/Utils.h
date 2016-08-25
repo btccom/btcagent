@@ -28,4 +28,7 @@ public:
 };
 
 
+// slite stratum 'mining.notify'
+const char *splitNotify(const string &line);
+
 #endif

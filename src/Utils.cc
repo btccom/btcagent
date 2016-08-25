@@ -58,3 +58,20 @@ void Strings::Append(string & dest, const char * fmt, ...) {
     dest.append(tmp, len);
   }
 }
+
+const char *splitNotify(const string &line) {
+  const char *pch = strchr(line.c_str(), '"');
+  int i = 1;
+  while (pch != NULL) {
+    pch = strchr(pch + 1, '"');
+    i++;
+    if (pch != NULL && i == 14) {
+      break;
+    }
+  }
+  if (pch == NULL) {
+    LOG(ERROR) << "invalid mining.notify: " << line;
+    return NULL;
+  }
+  return pch;
+}
