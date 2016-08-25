@@ -35,7 +35,7 @@ if(NOT LibEvent_FOUND)
 endif(NOT LibEvent_FOUND)
 
 include_directories(src test ${GLOG_INCLUDE_DIRS} ${LIBEVENT_INCLUDE_DIR})
-set(THRID_LIBRARIES "-lpthread" ${GLOG_LIBRARIES} ${LIBEVENT_LIB})
+set(THRID_LIBRARIES "-lpthread" ${GLOG_LIBRARIES} ${LIBEVENT_LIB} ${LIBEVENT_PTHREADS_LIB})
 
 file(GLOB LIB_SOURCES src/*.cc)
 add_library(btccomagent STATIC ${LIB_SOURCES})
