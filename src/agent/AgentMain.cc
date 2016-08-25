@@ -23,6 +23,10 @@
 #include <errno.h>
 #include <unistd.h>
 
+#include <fstream>
+#include <streambuf>
+
+#include <event2/thread.h>
 #include <glog/logging.h>
 
 #include "Server.h"
@@ -36,7 +40,7 @@ void handler(int sig) {
 }
 
 void usage() {
-  fprintf(stderr, "Usage:\n\tagent -c \"agent.json\" -l \"log_dir\"\n");
+  fprintf(stderr, "Usage:\n\tagent -c \"agent_conf.json\" -l \"log_dir\"\n");
 }
 
 int main(int argc, char **argv) {
@@ -72,10 +76,33 @@ int main(int argc, char **argv) {
   signal(SIGTERM, handler);
   signal(SIGINT,  handler);
 
+  evthread_use_pthreads();
+
   try {
-    uint16_t listenPort = 3333;
-    string upPoolUserName = "btccom";
-    gStratumServer = new StratumServer(listenPort, upPoolUserName);
+    JsonNode j;  // conf json
+    // parse xxxx.json
+    std::ifstream agentConf(optConf);
+    string agentJsonStr((std::istreambuf_iterator<char>(agentConf)),
+                        std::istreambuf_iterator<char>());
+    if (!JsonNode::parse(agentJsonStr.c_str(),
+                         agentJsonStr.c_str() + agentJsonStr.length(), j)) {
+      LOG(ERROR) << "json decode failure";
+      exit(EXIT_FAILURE);
+    }
+
+    gStratumServer = new StratumServer(j["agent_listen_ip"].str(),
+                                       j["agent_listen_port"].uint16());
+
+    // add pools
+    {
+      auto pools = j["pools"].array();
+      for (size_t i = 0; i < pools.size(); i++) {
+        auto poolParams = pools[i].array();
+        gStratumServer->addUpPool(poolParams[0].str(),
+                                  poolParams[1].uint16(),
+                                  poolParams[2].str());
+    	}
+    }
 
     if (!gStratumServer->setup()) {
       LOG(FATAL) << "setup failure";
