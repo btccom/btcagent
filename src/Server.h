@@ -86,7 +86,7 @@ public:
   SessionIDManager();
 
   bool ifFull();
-  bool allocSessionId(uint16_t *id); // range: [0, 65534]
+  bool allocSessionId(uint16_t *sessionId);  // range: [0, AGENT_MAX_SESSION_ID]
   void freeSessionId(const uint16_t sessionId);
 };
 
@@ -96,9 +96,12 @@ class StratumServer {
   static const int8_t kUpSessionCount_ = 5;
   bool running_;
 
+  string   listenIP_;
+  uint16_t listenPort_;
+
   vector<string>   upPoolHost_;
   vector<uint16_t> upPoolPort_;
-  string upPoolUserName_;
+  vector<string>   upPoolUserName_;
 
   // up stream connnections
   vector<UpStratumClient *> upSessions_;
@@ -112,7 +115,6 @@ class StratumServer {
   struct event_base *base_;
   struct event *signal_event_;
   struct evconnlistener *listener_;
-  struct sockaddr_in listenAddr_;
 
   void checkUpSessions();
   void waitUtilAllUpSessionsAvailable();
@@ -122,12 +124,13 @@ public:
 
 
 public:
-  StratumServer(const uint16_t listenPort, const string upPoolUserName);
+  StratumServer(const string &listenIP, const uint16_t listenPort);
   ~StratumServer();
 
   UpStratumClient *createUpSession(const int8_t idx);
 
-  void addUpPool(const char *host, const uint16_t port);
+  void addUpPool(const string &host, const uint16_t port,
+                 const string &upPoolUserName);
 
   void addDownConnection   (StratumSession *conn);
   void removeDownConnection(StratumSession *conn);
@@ -158,9 +161,9 @@ public:
   int8_t findUpSessionIdx();
 
   void submitShare(JsonNode &jparams, StratumSession *downSession);
-  void registerWorker(StratumSession *downSession, uint16_t sessionId,
-                      const char *minerAgent, const string &workerName);
-  void unRegisterWorker(StratumSession *downSession, uint16_t sessionId);
+  void registerWorker  (StratumSession *downSession, const char *minerAgent,
+                        const string &workerName);
+  void unRegisterWorker(StratumSession *downSession);
 
   bool setup();
   void run();
@@ -171,10 +174,9 @@ public:
 ///////////////////////////////// UpStratumClient //////////////////////////////
 class UpStratumClient {
   struct bufferevent *bev_;
+  struct evbuffer *inBuf_;
   uint64_t extraNonce2_;
   string userName_;
-
-  struct evbuffer *inBuf_;
 
   bool handleMessage();
   void handleStratumMessage(const string &line);

@@ -36,6 +36,7 @@ bool resolve(const string &host, struct	in_addr *sin_addr) {
   hints_in.ai_protocol = IPPROTO_TCP;
   hints_in.ai_flags    = EVUTIL_AI_ADDRCONFIG;
 
+  // TODO: use non-blocking to resolve hostname
   int err = evutil_getaddrinfo(host.c_str(), NULL, &hints_in, &ai);
   if (err != 0) {
     LOG(ERROR) << "evutil_getaddrinfo err: " << err << ", " << evutil_gai_strerror(err);
@@ -183,7 +184,10 @@ UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
 : state_(INIT), idx_(idx), server_(server), poolDefaultDiff_(0)
 {
   bev_ = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
-  assert(bev_ != NULL);
+  assert(bev_ != nullptr);
+
+  inBuf_ = evbuffer_new();
+  assert(inBuf_ != nullptr);
 
   bufferevent_setcb(bev_,
                     StratumServer::upReadCallback, NULL,
@@ -192,14 +196,16 @@ UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
 
   extraNonce1_ = 0u;
   extraNonce2_ = 0u;
-
-  inBuf_ = evbuffer_new();
+  userName_ = userName;
 
   latestJobId_[0] = latestJobId_[1] = latestJobId_[2] = 0;
   latestJobGbtTime_[0] = latestJobGbtTime_[1] = latestJobGbtTime_[2] = 0;
+
+  LOG(INFO) << "idx_: " << (int32_t)idx_;
 }
 
 UpStratumClient::~UpStratumClient() {
+  evbuffer_free(inBuf_);
   bufferevent_free(bev_);
 }
 
@@ -409,9 +415,12 @@ StratumSession::StratumSession(const int8_t upSessionIdx,
 sessionId_(sessionId), bev_(bev), server_(server)
 {
   inBuf_ = evbuffer_new();
+  assert(inBuf_ != nullptr);
 }
 
 StratumSession::~StratumSession() {
+  evbuffer_free(inBuf_);
+  bufferevent_free(bev_);
 }
 
 void StratumSession::setReadTimeout(const int32_t timeout) {
@@ -519,8 +528,9 @@ void StratumSession::handleRequest_Subscribe(const string &idStr,
   //  {"id": 1, "method": "mining.subscribe", "params": ["bfgminer/4.4.0-32-gac4e9b3", "01ad557d"]}
   //
 
+  // minerAgent_ could be nullptr
   if (jparams.children()->size() >= 1) {
-    // 30 is max length for miner agent
+    // 30 is max length for miner agent.
     minerAgent_ = strdup(jparams.children()->at(0).str().substr(0, 30).c_str());
   }
 
@@ -564,9 +574,11 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
   }
 
   // sent sessionId, minerAgent_, workerName to server_
-  server_->registerWorker(this, sessionId_, minerAgent_, workerName);
-  free(minerAgent_);
-  minerAgent_ = NULL;
+  server_->registerWorker(this, minerAgent_, workerName);
+  if (minerAgent_) {
+    free(minerAgent_);
+    minerAgent_ = nullptr;
+  }
 
   // send mining.set_difficulty
   server_->sendDefaultMiningDifficulty(this);
@@ -604,29 +616,39 @@ void StratumSession::handleRequest_Submit(const string &idStr,
 
 
 /////////////////////////////////// StratumServer //////////////////////////////
-StratumServer::StratumServer(const uint16_t listenPort, const string upPoolUserName)
-:running_ (true), upPoolUserName_(upPoolUserName), base_(NULL)
+StratumServer::StratumServer(const string &listenIP, const uint16_t listenPort)
+:running_ (true), listenIP_(listenIP), listenPort_(listenPort), base_(NULL)
 {
-  memset(&listenAddr_, 0, sizeof(listenAddr_));
-  listenAddr_.sin_family = AF_INET;
-  listenAddr_.sin_port   = htons(listenPort);
-  listenAddr_.sin_addr.s_addr = htonl(INADDR_ANY);
+  upSessions_    .resize(kUpSessionCount_, nullptr);
+  upSessionCount_.resize(kUpSessionCount_, 0);
 
-  upSessions_.resize(kUpSessionCount_);
-  upSessionCount_.resize(kUpSessionCount_);
   upEvTimer_ = NULL;
 
-  downSessions_.resize(16);  // must pre alloc some elements here
-
-  assert(upSessions_.size() == upSessionCount_.size());
+  downSessions_.resize(16, nullptr);  // must pre alloc some elements here
 }
 
 StratumServer::~StratumServer() {
-  // TODO
+  // remove upsessions
+  for (auto upsession : upSessions_) {
+    if (upsession == nullptr)
+      continue;
+
+    // remove this upsession and down sessions which belong to this
+    // up connection will be remove too.
+    removeUpConnection(upsession);
+  }
+
+  if (signal_event_)
+    event_free(signal_event_);
+
   if (upEvTimer_)
     event_del(upEvTimer_);
 
-  event_base_free(base_);
+  if (listener_)
+    evconnlistener_free(listener_);
+
+  if (base_)
+  	event_base_free(base_);
 }
 
 void StratumServer::stop() {
@@ -638,9 +660,13 @@ void StratumServer::stop() {
   event_base_loopexit(base_, NULL);
 }
 
-void StratumServer::addUpPool(const char *host, const uint16_t port) {
-  upPoolHost_.push_back(string(host));
-  upPoolPort_.push_back(port);
+void StratumServer::addUpPool(const string &host, const uint16_t port,
+                              const string &upPoolUserName) {
+  upPoolHost_    .push_back(host);
+  upPoolPort_    .push_back(port);
+  upPoolUserName_.push_back(upPoolUserName);
+
+  LOG(INFO) << "add pool: " << host << ":" << port << ", username: " << upPoolUserName;
 }
 
 UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
@@ -653,11 +679,14 @@ UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
       continue;
     }
 
-    UpStratumClient *up = new UpStratumClient(idx, base_, upPoolUserName_, this);
+    UpStratumClient *up = new UpStratumClient(idx, base_, upPoolUserName_[i], this);
     if (!up->connect(sin)) {
       delete up;
       continue;
     }
+    LOG(INFO) << "success connect[" << (int32_t)up->idx_ << "]: " << upPoolHost_[i] << ":"
+    << upPoolPort_[i] << ", username: " << upPoolUserName_[i];
+
     return up;  // connect success
   }
 
@@ -665,7 +694,7 @@ UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
 }
 
 bool StratumServer::setup() {
-  if (upPoolHost_.size() == 0 || upPoolHost_.size() != upPoolPort_.size())
+  if (upPoolHost_.size() == 0)
     return false;
 
   base_ = event_base_new();
@@ -677,40 +706,55 @@ bool StratumServer::setup() {
   // create up sessions
   for (int8_t i = 0; i < kUpSessionCount_; i++) {
     UpStratumClient *up = createUpSession(i);
-    if (up == NULL)
+    if (up == nullptr)
       return false;
-    upSessions_[i] = up;
-    addUpConnection(upSessions_[i]);
+
+    assert(up->idx_ == i);
+    addUpConnection(up);
   }
 
   // wait util all up session available
-  struct event *checkTimer;
-  checkTimer = event_new(base_, -1, EV_PERSIST,
-                         StratumServer::upSesssionCheckCallback, this);
-  struct timeval oneSec = {1, 0};
-  event_add(checkTimer, &oneSec);
+  {
+    struct event *checkTimer;
+    checkTimer = event_new(base_, -1, EV_PERSIST,
+                           StratumServer::upSesssionCheckCallback, this);
+    struct timeval oneSec = {1, 0};
+    event_add(checkTimer, &oneSec);
 
-  // run event dispatch, it will break util all up sessions are available
-  event_base_dispatch(base_);
-  event_del(checkTimer);
+    // run event dispatch, it will break util all up sessions are available
+    event_base_dispatch(base_);
+
+    // get here means: all up sessions are available
+    event_del(checkTimer);
+  }
 
   // setup up sessions watcher
   upEvTimer_ = event_new(base_, -1, EV_PERSIST,
                          StratumServer::upWatcherCallback, this);
+  // every 10 seconds to check if up session's available
   struct timeval tenSec = {10, 0};
   event_add(upEvTimer_, &tenSec);
 
   // set up ev listener
+  struct sockaddr_in sin;
+  memset(&sin, 0, sizeof(sin));
+  sin.sin_family = AF_INET;
+  sin.sin_port   = htons(listenPort_);
+  sin.sin_addr.s_addr = htonl(INADDR_ANY);
+  if (inet_pton(AF_INET, listenIP_.c_str(), &sin.sin_addr) == 0) {
+    LOG(ERROR) << "invalid ip: " << listenIP_;
+    return false;
+  }
+
   listener_ = evconnlistener_new_bind(base_,
                                       StratumServer::listenerCallback,
                                       (void*)this,
                                       LEV_OPT_REUSEABLE|LEV_OPT_CLOSE_ON_FREE,
                                       // backlog, Set to -1 for a reasonable default
                                       -1,
-                                      (struct sockaddr*)&listenAddr_,
-                                      sizeof(listenAddr_));
+                                      (struct sockaddr*)&sin, sizeof(sin));
   if(!listener_) {
-    LOG(ERROR) << "cannot create listener";
+    LOG(ERROR) << "cannot create listener: " << listenIP_ << ":" << listenPort_;
     return false;
   }
   return true;
@@ -742,6 +786,7 @@ void StratumServer::upWatcherCallback(evutil_socket_t fd,
 void StratumServer::checkUpSessions() {
   // check up sessions
   for (int8_t i = 0; i < kUpSessionCount_; i++) {
+    // if upsession's socket error, it'll be removed and set to nullptr
     if (upSessions_[i] != NULL)
       continue;
 
@@ -761,6 +806,7 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
   struct event_base  *base = (struct event_base*)server->base_;
   struct bufferevent *bev;
 
+  // can't alloc session Id
   if (server->sessionIDManager_.ifFull()) {
     close(fd);
     return;
@@ -780,8 +826,7 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
     return;
   }
 
-  uint16_t sessionId;
-  // TODO: alloc session Id failure
+  uint16_t sessionId = 0u;
   server->sessionIDManager_.allocSessionId(&sessionId);
 
   StratumSession *conn = new StratumSession(upSessionIdx, sessionId, bev, server);
@@ -834,10 +879,9 @@ void StratumServer::addDownConnection(StratumSession *conn) {
 
 void StratumServer::removeDownConnection(StratumSession *conn) {
   // unregister worker
-  unRegisterWorker(conn, conn->sessionId_);
+  unRegisterWorker(conn);
 
   // clear resources
-  bufferevent_free(conn->bev_);
   sessionIDManager_.freeSessionId(conn->sessionId_);
   downSessions_[conn->sessionId_] = NULL;
   upSessionCount_[conn->upSessionIdx_]--;
@@ -854,14 +898,14 @@ void StratumServer::upReadCallback(struct bufferevent *bev, void *ptr) {
 }
 
 void StratumServer::addUpConnection(UpStratumClient *conn) {
-  LOG(INFO) << "add up connection, idx: " << conn->idx_;
+  DLOG(INFO) << "add up connection, idx: " << (int32_t)(conn->idx_);
   assert(upSessions_[conn->idx_] == NULL);
 
   upSessions_[conn->idx_] = conn;
 }
 
 void StratumServer::removeUpConnection(UpStratumClient *conn) {
-  LOG(INFO) << "remove up connection, idx: " << conn->idx_;
+  DLOG(INFO) << "remove up connection, idx: " << (int32_t)(conn->idx_);
   assert(upSessions_[conn->idx_] != NULL);
 
   // remove down session which belong to this up connection
@@ -871,7 +915,7 @@ void StratumServer::removeUpConnection(UpStratumClient *conn) {
       removeDownConnection(s);
   }
 
-  upSessions_[conn->idx_] = NULL;
+  upSessions_    [conn->idx_] = NULL;
   upSessionCount_[conn->idx_] = 0;
   delete conn;
 }
@@ -1040,7 +1084,6 @@ void StratumServer::submitShare(JsonNode &jparams,
 }
 
 void StratumServer::registerWorker(StratumSession *downSession,
-                                   uint16_t sessionId,
                                    const char *minerAgent,
                                    const string &workerName) {
   //
@@ -1087,8 +1130,7 @@ void StratumServer::registerWorker(StratumSession *downSession,
   up->sendData(buf);
 }
 
-void StratumServer::unRegisterWorker(StratumSession *downSession,
-                                     uint16_t sessionId) {
+void StratumServer::unRegisterWorker(StratumSession *downSession) {
   //
   // CMD_UNREGISTER_WORKER:
   // | magic_number(1) | cmd(1) | len (2) | session_id(2) |
@@ -1107,7 +1149,7 @@ void StratumServer::unRegisterWorker(StratumSession *downSession,
   p += 2;
 
   // session Id
-  *(uint16_t *)p = sessionId;
+  *(uint16_t *)p = downSession->sessionId_;
   p += 2;
   assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
 
