@@ -35,6 +35,10 @@
 using  std::string;
 using  std::vector;
 
+//
+// WARNING: DO NOT CHANGE THE NAME.
+// the version could be changed like: "btccom-agent/xx.xx"
+//
 #define BTCCOM_MINER_AGENT   "btccom-agent/0.1"
 
 #endif
