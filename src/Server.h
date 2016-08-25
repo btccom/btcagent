@@ -42,7 +42,7 @@
 #define CMD_UNREGISTER_WORKER 0x04u             // Agent -> Pool
 #define CMD_MINING_SET_DIFF   0x05u             // Pool  -> Agent
 
-// agent
+// agent, DO NOT CHANGE
 #define AGENT_MAX_SESSION_ID   0xFFFEu  // 0xFFFEu = 65534
 
 
@@ -78,14 +78,15 @@ public:
 
 //////////////////////////////// SessionIDManager //////////////////////////////
 class SessionIDManager {
-  std::bitset<AGENT_MAX_SESSION_ID> sessionIds_;
+  std::bitset<AGENT_MAX_SESSION_ID + 1> sessionIds_;
   int32_t count_;
+  uint32_t allocIdx_;
 
 public:
   SessionIDManager();
 
   bool ifFull();
-  uint16_t allocSessionId(); // range: [0, 65534]
+  bool allocSessionId(uint16_t *id); // range: [0, 65534]
   void freeSessionId(const uint16_t sessionId);
 };
 

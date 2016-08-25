@@ -131,7 +131,7 @@ const char * StratumError::toString(int err) {
 
 
 //////////////////////////////// SessionIDManager //////////////////////////////
-SessionIDManager::SessionIDManager(): count_(0) {
+SessionIDManager::SessionIDManager(): count_(0), allocIdx_(0) {
   sessionIds_.reset();
 }
 
@@ -142,21 +142,32 @@ bool SessionIDManager::ifFull() {
   return false;
 }
 
-uint16_t SessionIDManager::allocSessionId() {
-  // find an empty bit, always find the smallest
-  uint16_t idx = 0;
-  while (sessionIds_.test(idx) == true) {
-    idx++;
-    if (idx > AGENT_MAX_SESSION_ID) {
-      idx = 0;
+bool SessionIDManager::allocSessionId(uint16_t *id) {
+  assert(AGENT_MAX_SESSION_ID < UINT16_MAX);
+
+  if (ifFull())
+    return false;
+
+  const uint32_t beginIdx = allocIdx_;
+  while (sessionIds_.test(allocIdx_) == true) {
+    allocIdx_++;
+    if (allocIdx_ > AGENT_MAX_SESSION_ID) {
+      allocIdx_ = 0;
+    }
+
+    // should not be here, just in case dead loop
+    if (allocIdx_ == beginIdx) {
+      return false;
     }
   }
 
   // set to true
-  sessionIds_.set(idx, true);
+  sessionIds_.set(allocIdx_, true);
   count_++;
 
-  return idx;
+  assert(allocIdx_ <= UINT16_MAX);
+  *id = (uint16_t)allocIdx_;
+  return true;
 }
 
 void SessionIDManager::freeSessionId(const uint16_t sessionId) {
@@ -769,7 +780,10 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
     return;
   }
 
-  const uint16_t sessionId = server->sessionIDManager_.allocSessionId();
+  uint16_t sessionId;
+  // TODO: alloc session Id failure
+  server->sessionIDManager_.allocSessionId(&sessionId);
+
   StratumSession *conn = new StratumSession(upSessionIdx, sessionId, bev, server);
   bufferevent_setcb(bev,
                     StratumServer::downReadCallback, NULL,
