@@ -35,14 +35,14 @@ if(NOT LibEvent_FOUND)
 endif(NOT LibEvent_FOUND)
 
 include_directories(src test ${GLOG_INCLUDE_DIRS} ${LIBEVENT_INCLUDE_DIR})
-set(THRID_LIBRARIES ${GLOG_LIBRARIES} ${LIBEVENT_LIB})
+set(THRID_LIBRARIES "-lpthread" ${GLOG_LIBRARIES} ${LIBEVENT_LIB})
 
 file(GLOB LIB_SOURCES src/*.cc)
 add_library(btccomagent STATIC ${LIB_SOURCES})
 
-#file(GLOB_RECURSE TEST_SOURCES test/*.cc)
-#add_executable(unittest ${TEST_SOURCES})
-#target_link_libraries(unittest btccomagent ${THRID_LIBRARIES})
+file(GLOB_RECURSE TEST_SOURCES test/*.cc)
+add_executable(unittest ${TEST_SOURCES})
+target_link_libraries(unittest btccomagent ${THRID_LIBRARIES})
 
 file(GLOB_RECURSE AGENT_SOURCES src/agent/*.cc)
 add_executable(agent ${AGENT_SOURCES})
