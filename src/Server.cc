@@ -284,7 +284,7 @@ void UpStratumClient::handleExMessage_MiningSetDiff(const string *exMessage) {
   const uint16_t count = *(uint16_t *)(p + 8);
 
   uint16_t *sessionIdPtr = (uint16_t *)(p + 10);
-  for (uint8_t i = 0; i < count; i++) {
+  for (size_t i = 0; i < count; i++) {
     uint16_t sessionId = *sessionIdPtr++;
     server_->sendMiningDifficulty(this, sessionId, diff);
   }
@@ -624,7 +624,7 @@ StratumServer::StratumServer(const string &listenIP, const uint16_t listenPort)
   upSessionCount_.resize(kUpSessionCount_, 0);
 
   upEvTimer_ = NULL;
-  downSessions_.reserve(256);
+  downSessions_.resize(AGENT_MAX_SESSION_ID + 1, nullptr);
 }
 
 StratumServer::~StratumServer() {
@@ -880,9 +880,7 @@ void StratumServer::downEventCallback(struct bufferevent *bev,
 }
 
 void StratumServer::addDownConnection(StratumSession *conn) {
-  if (downSessions_.size() < (size_t)(conn->sessionId_ + 1)) {
-    downSessions_.resize((size_t)(conn->sessionId_ + 1));
-  }
+  assert(downSessions_.size() >= (size_t)(conn->sessionId_ + 1));
 
   assert(downSessions_[conn->sessionId_] == NULL);
   downSessions_  [conn->sessionId_] = conn;
@@ -972,7 +970,7 @@ void StratumServer::sendMiningNotifyToAll(const int8_t idx,
                                           const char *p2) {
   for (size_t i = 0; i < downSessions_.size(); i++) {
     StratumSession *s = downSessions_[i];
-    if (s == NULL || s->upSessionIdx_ != idx)
+    if (s == nullptr || s->upSessionIdx_ != idx)
       continue;
 
     s->sendData(p1, p1Len);
@@ -984,7 +982,8 @@ void StratumServer::sendMiningNotifyToAll(const int8_t idx,
 
 void StratumServer::sendMiningNotify(StratumSession *downSession) {
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
-  assert(up != NULL);
+  if (up == nullptr)
+    return;
 
   const string &notify = up->latestMiningNotifyStr_;
   const char *pch = splitNotify(notify);
@@ -997,7 +996,9 @@ void StratumServer::sendMiningNotify(StratumSession *downSession) {
 
 void StratumServer::sendDefaultMiningDifficulty(StratumSession *downSession) {
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
-  assert(up != NULL);
+  if (up == nullptr)
+    return;
+
   const string s = Strings::Format("{\"id\":null,\"method\":\"mining.set_difficulty\""
                              ",\"params\":[%" PRIu32"]}\n",
                              up->poolDefaultDiff_);
