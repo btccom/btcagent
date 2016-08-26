@@ -277,17 +277,22 @@ bool UpStratumClient::handleMessage() {
 void UpStratumClient::handleExMessage_MiningSetDiff(const string *exMessage) {
   //
   // CMD_MINING_SET_DIFF
-  // | magic_number(1) | cmd(1) | len (2) | diff (4) | count(2) | session_id (2) ... |
+  // | magic_number(1) | cmd(1) | len (2) | diff_2_exp(1) | count(2) | session_id (2) ... |
   //
   const uint8_t *p = (uint8_t *)exMessage->data();
-  const uint32_t diff  = *(uint32_t *)(p + 4);
-  const uint16_t count = *(uint16_t *)(p + 8);
+  const uint8_t diff_2exp = *(p + 4);
+  const uint64_t diff = (uint64_t)exp2(diff_2exp);
 
-  uint16_t *sessionIdPtr = (uint16_t *)(p + 10);
+  const uint16_t count   = *(uint16_t *)(p + 5);
+  uint16_t *sessionIdPtr =  (uint16_t *)(p + 7);
+
   for (size_t i = 0; i < count; i++) {
     uint16_t sessionId = *sessionIdPtr++;
     server_->sendMiningDifficulty(this, sessionId, diff);
   }
+
+  LOG(INFO) << "up[" << (int32_t)idx_ << "] CMD_MINING_SET_DIFF, diff: "
+  << diff << ", sessions count: " << count;
 }
 
 void UpStratumClient::sendData(const char *data, size_t len) {
@@ -332,6 +337,12 @@ void UpStratumClient::handleStratumMessage(const string &line) {
       // the jobId always between [0, 9]
       latestJobId_[2]      = (uint8_t)jparamsArr[0].uint32();  /* job id     */
       latestJobGbtTime_[2] = jparamsArr[7].uint32_hex();       /* block time */
+
+      DLOG(INFO) << "up[" << (int32_t)idx_ << "] stratum job"
+      << ", jobId: "    << jparamsArr[0].uint32()
+      << ", prevhash: " << jparamsArr[1].str()
+      << ", version: "  << jparamsArr[5].str()
+      << ", clean: "    << (jparamsArr[8].boolean() ? "true" : "false");
     }
     else if (jmethod.str() == "mining.set_difficulty") {
       // just set the default pool diff, than ignore
@@ -864,17 +875,19 @@ void StratumServer::downEventCallback(struct bufferevent *bev,
   assert((events & BEV_EVENT_CONNECTED) != BEV_EVENT_CONNECTED);
 
   if (events & BEV_EVENT_EOF) {
-    LOG(INFO) << "downsocket closed";
+    LOG(INFO) << "downsocket closed, sessionId:" << conn->sessionId_;
   }
   else if (events & BEV_EVENT_ERROR) {
-    LOG(ERROR) << "got an error on the downsocket: "
-    << evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR());
+    LOG(INFO) << "got an error on the downsocket, sessionId: " << conn->sessionId_
+    << ", err: " << evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR());
   }
   else if (events & BEV_EVENT_TIMEOUT) {
-    LOG(INFO) << "downsocket read/write timeout, events: " << events;
+    LOG(INFO) << "downsocket read/write timeout, events: " << events
+    << ", sessionId:" << conn->sessionId_;
   }
   else {
-    LOG(ERROR) << "unhandled downsocket events: " << events;
+    LOG(ERROR) << "unhandled downsocket events: " << events
+    << ", sessionId:" << conn->sessionId_;
   }
   server->removeDownConnection(conn);
 }
@@ -952,7 +965,7 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
     LOG(INFO) << "upsession closed";
   }
   else if (events & BEV_EVENT_ERROR) {
-    LOG(ERROR) << "got an error on the upsession: "
+    LOG(INFO) << "got an error on the upsession: "
     << evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR());
   }
   else if (events & BEV_EVENT_TIMEOUT) {
@@ -1006,13 +1019,13 @@ void StratumServer::sendDefaultMiningDifficulty(StratumSession *downSession) {
 }
 
 void StratumServer::sendMiningDifficulty(UpStratumClient *upconn,
-                                         uint16_t sessionId, uint32_t diff) {
+                                         uint16_t sessionId, uint64_t diff) {
   StratumSession *downSession = downSessions_[sessionId];
   if (downSession == NULL)
     return;
 
   const string s = Strings::Format("{\"id\":null,\"method\":\"mining.set_difficulty\""
-                                   ",\"params\":[%" PRIu32"]}\n", diff);
+                                   ",\"params\":[%" PRIu64"]}\n", diff);
   downSession->sendData(s);
 }
 

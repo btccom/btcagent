@@ -156,7 +156,7 @@ public:
   void sendMiningNotify(StratumSession *downSession);
   void sendDefaultMiningDifficulty(StratumSession *downSession);
   void sendMiningDifficulty(UpStratumClient *upconn,
-                            uint16_t sessionId, uint32_t diff);
+                            uint16_t sessionId, uint64_t diff);
 
   int8_t findUpSessionIdx();
 
