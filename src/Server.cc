@@ -183,7 +183,7 @@ UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
                                  const string &userName, StratumServer *server)
 : state_(INIT), idx_(idx), server_(server), poolDefaultDiff_(0)
 {
-  bev_ = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
+  bev_ = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
   assert(bev_ != nullptr);
 
   inBuf_ = evbuffer_new();
@@ -201,7 +201,7 @@ UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
   latestJobId_[0] = latestJobId_[1] = latestJobId_[2] = 0;
   latestJobGbtTime_[0] = latestJobGbtTime_[1] = latestJobGbtTime_[2] = 0;
 
-  LOG(INFO) << "idx_: " << (int32_t)idx_;
+  DLOG(INFO) << "idx_: " << (int32_t)idx_;
 }
 
 UpStratumClient::~UpStratumClient() {
@@ -823,7 +823,7 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
     return;
   }
 
-  bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
+  bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
   if(bev == NULL) {
     LOG(ERROR) << "bufferevent_socket_new fail";
     server->stop();

@@ -26,7 +26,6 @@
 #include <fstream>
 #include <streambuf>
 
-#include <event2/thread.h>
 #include <glog/logging.h>
 
 #include "Server.h"
@@ -69,14 +68,12 @@ int main(int argc, char **argv) {
   // Initialize Google's logging library.
   google::InitGoogleLogging(argv[0]);
   FLAGS_log_dir = string(optLogDir);
-  FLAGS_max_log_size = 1;  // max log file size 1 MB
+  FLAGS_max_log_size = 100;  // max log file size 1 MB
   FLAGS_logbuflevel = -1;
   FLAGS_stop_logging_if_full_disk = true;
 
   signal(SIGTERM, handler);
   signal(SIGINT,  handler);
-
-  evthread_use_pthreads();
 
   try {
     JsonNode j;  // conf json
