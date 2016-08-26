@@ -302,11 +302,17 @@ void UpStratumClient::sendData(const char *data, size_t len) {
 }
 
 void UpStratumClient::sendMiningNotify(const string &line) {
-  const char *pch = splitNotify(line);
-
   // send to all down sessions
-  server_->sendMiningNotifyToAll(idx_, line.c_str(),
-                                 pch - line.c_str(), pch);
+  server_->sendMiningNotifyToAll(idx_, latestMiningNotifyStr_);
+}
+
+void UpStratumClient::convertMiningNotifyStr(const string &line) {
+  const char *pch = splitNotify(line);
+  latestMiningNotifyStr_.clear();
+
+  latestMiningNotifyStr_.append(line.c_str(), pch - line.c_str());
+  latestMiningNotifyStr_.append(Strings::Format("%08x", extraNonce1_));
+  latestMiningNotifyStr_.append(pch);
 }
 
 void UpStratumClient::handleStratumMessage(const string &line) {
@@ -326,8 +332,9 @@ void UpStratumClient::handleStratumMessage(const string &line) {
     auto jparamsArr = jparams.array();
 
     if (jmethod.str() == "mining.notify") {
-      latestMiningNotifyStr_ = line;
-      sendMiningNotify(line);
+      convertMiningNotifyStr(line);  // convert mining.notify string
+
+      sendMiningNotify(line);    // send to all
 
       latestJobId_[1]      = latestJobId_[2];
       latestJobGbtTime_[1] = latestJobGbtTime_[2];
@@ -875,7 +882,7 @@ void StratumServer::downEventCallback(struct bufferevent *bev,
   assert((events & BEV_EVENT_CONNECTED) != BEV_EVENT_CONNECTED);
 
   if (events & BEV_EVENT_EOF) {
-    LOG(INFO) << "downsocket closed, sessionId:" << conn->sessionId_;
+    LOG(INFO) << "downsocket closed, sessionId: " << conn->sessionId_;
   }
   else if (events & BEV_EVENT_ERROR) {
     LOG(INFO) << "got an error on the downsocket, sessionId: " << conn->sessionId_
@@ -978,33 +985,22 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
   server->removeUpConnection(up);
 }
 
-void StratumServer::sendMiningNotifyToAll(const int8_t idx,
-                                          const char *p1, size_t p1Len,
-                                          const char *p2) {
+void StratumServer::sendMiningNotifyToAll(const int8_t idx, const string &notify) {
   for (size_t i = 0; i < downSessions_.size(); i++) {
     StratumSession *s = downSessions_[i];
     if (s == nullptr || s->upSessionIdx_ != idx)
       continue;
 
-    s->sendData(p1, p1Len);
-    const string e1 = Strings::Format("%08x", (uint32_t)s->sessionId_);
-    s->sendData(e1.c_str(), 8);
-    s->sendData(p2, strlen(p2));
+    s->sendData(notify);
   }
 }
 
 void StratumServer::sendMiningNotify(StratumSession *downSession) {
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
-  if (up == nullptr)
+  if (up == nullptr || up->latestMiningNotifyStr_.length() == 0)
     return;
 
-  const string &notify = up->latestMiningNotifyStr_;
-  const char *pch = splitNotify(notify);
-
-  downSession->sendData(notify.c_str(), pch - notify.c_str());
-  const string e1 = Strings::Format("%08x", (uint32_t)downSession->sessionId_);
-  downSession->sendData(e1.c_str(), 8);
-  downSession->sendData(pch, strlen(pch));
+  downSession->sendData(up->latestMiningNotifyStr_);
 }
 
 void StratumServer::sendDefaultMiningDifficulty(StratumSession *downSession) {

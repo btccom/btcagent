@@ -151,8 +151,7 @@ public:
   static void upWatcherCallback(evutil_socket_t fd, short events, void *ptr);
   static void upSesssionCheckCallback(evutil_socket_t fd, short events, void *ptr);
 
-  void sendMiningNotifyToAll(const int8_t idx, const char *p1,
-                             size_t p1Len, const char *p2);
+  void sendMiningNotifyToAll(const int8_t idx, const string &notify);
   void sendMiningNotify(StratumSession *downSession);
   void sendDefaultMiningDifficulty(StratumSession *downSession);
   void sendMiningDifficulty(UpStratumClient *upconn,
@@ -181,6 +180,8 @@ class UpStratumClient {
   bool handleMessage();
   void handleStratumMessage(const string &line);
   void handleExMessage_MiningSetDiff(const string *exMessage);
+
+  void convertMiningNotifyStr(const string &line);
 
 public:
   enum State {
