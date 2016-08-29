@@ -93,7 +93,14 @@ public:
 
 /////////////////////////////////// StratumServer //////////////////////////////
 class StratumServer {
-  static const int8_t kUpSessionCount_ = 5;
+  //
+  // if you use tcp socket for a long time, over than 24 hours at WAN network,
+  // you will find it's always get error and disconnect sometime. so we use
+  // multi-tcp connections to connect to the pool. if one of them got
+  // disconnect, just some miners which belong to this connection(UpStratumClient)
+  // will reconnect instead of all miners reconnect to the Agent.
+  //
+  static const int8_t kUpSessionCount_ = 5;  // MAX is 127
   bool running_;
 
   string   listenIP_;
@@ -201,6 +208,9 @@ public:
   // latest there job Id & time, use to check if send nTime
   uint8_t  latestJobId_[3];
   uint32_t latestJobGbtTime_[3];
+
+  // last stratum job received from pool
+  uint32_t lastJobReceivedTime_;
 
 public:
   UpStratumClient(const int8_t idx,

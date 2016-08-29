@@ -201,6 +201,8 @@ UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
   latestJobId_[0] = latestJobId_[1] = latestJobId_[2] = 0;
   latestJobGbtTime_[0] = latestJobGbtTime_[1] = latestJobGbtTime_[2] = 0;
 
+  lastJobReceivedTime_ = 0u;
+
   DLOG(INFO) << "idx_: " << (int32_t)idx_;
 }
 
@@ -345,6 +347,9 @@ void UpStratumClient::handleStratumMessage(const string &line) {
       latestJobId_[2]      = (uint8_t)jparamsArr[0].uint32();  /* job id     */
       latestJobGbtTime_[2] = jparamsArr[7].uint32_hex();       /* block time */
 
+      // set last job received time
+      lastJobReceivedTime_ = time(nullptr);
+
       DLOG(INFO) << "up[" << (int32_t)idx_ << "] stratum job"
       << ", jobId: "    << jparamsArr[0].uint32()
       << ", prevhash: " << jparamsArr[1].str()
@@ -418,8 +423,12 @@ void UpStratumClient::handleStratumMessage(const string &line) {
 }
 
 bool UpStratumClient::isAvailable() {
+  const uint32_t kJobExpiredTime = 60 * 5;  // seconds
+
   if (state_ == AUTHENTICATED &&
-      latestMiningNotifyStr_.empty() == false && poolDefaultDiff_ != 0) {
+      latestMiningNotifyStr_.empty() == false &&
+      poolDefaultDiff_ != 0 &&
+      lastJobReceivedTime_ + kJobExpiredTime > (uint32_t)time(nullptr)) {
     return true;
   }
   return false;
@@ -754,8 +763,8 @@ bool StratumServer::setup() {
   // setup up sessions watcher
   upEvTimer_ = event_new(base_, -1, EV_PERSIST,
                          StratumServer::upWatcherCallback, this);
-  // every 10 seconds to check if up session's available
-  struct timeval tenSec = {10, 0};
+  // every 15 seconds to check if up session's available
+  struct timeval tenSec = {15, 0};
   event_add(upEvTimer_, &tenSec);
 
   // set up ev listener
@@ -815,15 +824,19 @@ void StratumServer::upWatcherCallback(evutil_socket_t fd,
 
 void StratumServer::checkUpSessions() {
   // check up sessions
-  for (int8_t i = 0; i < kUpSessionCount_; i++) {
+  for (int8_t i = 0; i < kUpSessionCount_; i++)
+  {
     // if upsession's socket error, it'll be removed and set to nullptr
-    if (upSessions_[i] != NULL)
-      continue;
+    if (upSessions_[i] != NULL) {
+      if (upSessions_[i]->isAvailable() == true)
+      	continue;
+      else
+        removeUpConnection(upSessions_[i]);
+    }
 
     UpStratumClient *up = createUpSession(i);
-    if (up == NULL)
-      continue;
-    addUpConnection(up);
+    if (up != NULL)
+      addUpConnection(up);
   }
 }
 
