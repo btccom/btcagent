@@ -45,6 +45,8 @@
 // agent, DO NOT CHANGE
 #define AGENT_MAX_SESSION_ID   0xFFFEu  // 0xFFFEu = 65534
 
+// default worker name
+#define DEFAULT_WORKER_NAME    "__default__"
 
 class StratumSession;
 class StratumServer;

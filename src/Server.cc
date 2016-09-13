@@ -598,7 +598,7 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
 
   string workerName = getWorkerName(jparams.children()->at(0).str());
   if (workerName.empty()) {
-    workerName = "default";
+    workerName = DEFAULT_WORKER_NAME;
   }
 
   // sent sessionId, minerAgent_, workerName to server_
@@ -753,6 +753,7 @@ bool StratumServer::setup() {
 
     // get here means: all up sessions are available
     event_del(checkTimer);
+    event_free(checkTimer);
   }
 
   // if one of upsessions init failure, it'll stop the server.
