@@ -100,6 +100,8 @@ supervisor> reread
 agent: available
 supervisor> update
 agent: added process group
+supervisor> status
+agent                            RUNNING    pid 21296, uptime 0:00:09
 supervisor> exit
 ```
 
