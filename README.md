@@ -1,5 +1,7 @@
 # BtcAgent
 
+[Chinese Version/中文版本](https://github.com/btccom/btcagent/blob/master/README-zh_CN.md)
+
 BtcAgent is a kind of stratum proxy which use [customize protocol](https://github.com/btccom/btcpool/blob/master/docs/AGENT.md) to communicate with the pool. It's very efficient and designed for huge mining farm. And you still can find each miner at the pool.
 
 * With 10,000 miners:
@@ -64,8 +66,8 @@ mkdir -p /work/btcagent/build/log_btcagent
     "agent_listen_ip": "0.0.0.0",
     "agent_listen_port": 1800,
     "pools": [
-        ["cn.pool.btc.com", 443, "kevin"],
-        ["cn.pool.btc.com", 443, "kevin"]
+        ["us.ss.btc.com", 3333, "kevin"],
+        ["us.ss.btc.com", 3333, "kevin"]
     ]
 }
 ```
@@ -105,3 +107,87 @@ agent                            RUNNING    pid 21296, uptime 0:00:09
 supervisor> exit
 ```
 
+**listen on multi port**
+
+One agent only could listen to one port, if need to listen more than one port you need setup multi agent.
+
+```
+cd /work/btcagent/build
+
+# mkdir log dir
+mkdir log_btcagent_1801
+
+# copy conf json for another port: 1801
+cp agent_conf.json agent_conf_1801.json
+```
+
+`agent_conf_1801.json` looks like:
+
+```
+{
+    "agent_listen_ip": "0.0.0.0",
+    "agent_listen_port": 1801,
+    "pools": [
+        ["us.ss.btc.com", 3333, "kevin1801"]
+    ]
+}
+```
+
+```
+# start
+cd /work/btcagent/build
+./agent -c agent_conf_1801.json -l log_btcagent_1801
+```
+
+if you use `supervisor`, you need another conf:
+
+`vim /etc/supervisor/conf.d/agent1801.conf`
+
+```
+[program:agent1801]
+directory=/work/btcagent/build
+command=/work/btcagent/build/agent -c /work/btcagent/build/agent_conf_1801.json -l /work/btcagent/build/log_btcagent_1801
+autostart=true
+autorestart=true
+startsecs=6
+startretries=100
+
+redirect_stderr=true
+stdout_logfile_backups=5
+stdout_logfile=/work/btcagent/build/log_btcagent_1801/agent_stdout.log
+```
+
+than update supervisor:
+
+```
+$ supervisorctl
+supervisor> reread
+...
+supervisor> update
+...
+supervisor> status
+...
+supervisor> exit
+```
+
+---
+
+If you get `Too many open files` error, it means you need to increase the system file limits. Usually the default value is 1024 so you can't connect more than 1024 miners at one agent.
+
+if you are using Ubuntu, `vim /etc/security/limits.conf`, add these lines:
+
+```
+root soft nofile 65535
+root hard nofile 65535
+* soft nofile 65535
+* hard nofile 65535
+```
+
+You need to logout shell than login again. Check the value, should as below:
+
+```
+$ ulimit -Sn
+65535
+$ ulimit -Hn
+65535
+```
