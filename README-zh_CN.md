@@ -18,6 +18,10 @@ BtcAgent是定制的高效的专用矿池代理系统。其采用了自定义[�
 * 其协议目前依然未定型，依然可能会改变
 * 当前仅能与`btcpool`协同工作
 
+## 架构
+
+![架构图](docs/architecture.png)
+
 ## 安装
 
 * 操作系统: `Ubuntu 14.04 LTS, 64 Bits`

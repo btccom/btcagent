@@ -17,6 +17,10 @@ Note:
 * This is still a testbed and work in progress, all things could be changed.
 * Now it's could only work with `btcpool`.
 
+## Architecture
+
+![Architecture](docs/architecture.png)
+
 ## Install
 
 * OS: `Ubuntu 14.04 LTS, 64 Bits`
