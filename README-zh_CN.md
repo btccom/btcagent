@@ -73,10 +73,10 @@ mkdir -p /work/btcagent/build/log_btcagent
 ```
 {
     "agent_listen_ip": "0.0.0.0",
-    "agent_listen_port": 1800,
+    "agent_listen_port": 3333,
     "pools": [
-        ["cn.ss.btc.com", 3333, "kevin"],
-        ["cn.ss.btc.com", 3333, "kevin"]
+        ["cn.ss.btc.com", 1800, "kevin"],
+        ["cn.ss.btc.com", 1800, "kevin"]
     ]
 }
 ```
