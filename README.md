@@ -60,7 +60,7 @@ mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 cp ../src/agent/agent_conf.json .
-mkdir -p /work/btcagent/build/log_btcagent
+mkdir -p log_btcagent
 ```
 
 **config json file example**
@@ -119,20 +119,20 @@ One agent only could listen to one port, if need to listen more than one port yo
 cd /work/btcagent/build
 
 # mkdir log dir
-mkdir log_btcagent_1801
+mkdir log_btcagent_3334
 
-# copy conf json for another port: 1801
-cp agent_conf.json agent_conf_1801.json
+# copy conf json for another port: 3334
+cp agent_conf.json agent_conf_3334.json
 ```
 
-`agent_conf_1801.json` looks like:
+`agent_conf_3334.json` looks like:
 
 ```
 {
     "agent_listen_ip": "0.0.0.0",
-    "agent_listen_port": 1801,
+    "agent_listen_port": 3334,
     "pools": [
-        ["us.ss.btc.com", 3333, "kevin1801"]
+        ["us.ss.btc.com", 1800, "kevin3334"]
     ]
 }
 ```
@@ -140,25 +140,25 @@ cp agent_conf.json agent_conf_1801.json
 ```
 # start
 cd /work/btcagent/build
-./agent -c agent_conf_1801.json -l log_btcagent_1801
+./agent -c agent_conf_3334.json -l log_btcagent_3334
 ```
 
 if you use `supervisor`, you need another conf:
 
-`vim /etc/supervisor/conf.d/agent1801.conf`
+`vim /etc/supervisor/conf.d/agent3334.conf`
 
 ```
-[program:agent1801]
+[program:agent3334]
 directory=/work/btcagent/build
-command=/work/btcagent/build/agent -c /work/btcagent/build/agent_conf_1801.json -l /work/btcagent/build/log_btcagent_1801
+command=/work/btcagent/build/agent -c /work/btcagent/build/agent_conf_3334.json -l /work/btcagent/build/log_btcagent_3334
 autostart=true
 autorestart=true
-startsecs=6
+startsecs=3
 startretries=100
 
 redirect_stderr=true
 stdout_logfile_backups=5
-stdout_logfile=/work/btcagent/build/log_btcagent_1801/agent_stdout.log
+stdout_logfile=/work/btcagent/build/log_btcagent_3334/agent_stdout.log
 ```
 
 than update supervisor:

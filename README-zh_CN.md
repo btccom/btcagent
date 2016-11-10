@@ -65,7 +65,7 @@ make
 cp ../src/agent/agent_conf.json .
 
 # 创建日志目录
-mkdir -p /work/btcagent/build/log_btcagent
+mkdir -p log_btcagent
 ```
 
 **配置JSON文件示例**
@@ -149,20 +149,20 @@ supervisor> start/stop/restart <service_name>
 cd /work/btcagent/build
 
 # 创建日志目录
-mkdir log_btcagent_1801
+mkdir log_btcagent_3334
 
 # 拷贝一份配置文件，并修改之
-cp agent_conf.json agent_conf_1801.json
+cp agent_conf.json agent_conf_3334.json
 ```
 
-修改配置 `agent_conf_1801.json` 为：
+修改配置 `agent_conf_3334.json` 为：
 
 ```
 {
     "agent_listen_ip": "0.0.0.0",
-    "agent_listen_port": 1801,
+    "agent_listen_port": 3334,
     "pools": [
-        ["cn.ss.btc.com", 3333, "kevin1801"]
+        ["cn.ss.btc.com", 1800, "kevin3334"]
     ]
 }
 ```
@@ -170,25 +170,25 @@ cp agent_conf.json agent_conf_1801.json
 ```
 # 启动
 cd /work/btcagent/build
-./agent -c agent_conf_1801.json -l log_btcagent_1801
+./agent -c agent_conf_3334.json -l log_btcagent_3334
 ```
 
 如果使用 `supervisor`，则也需要复制一份配置文件：
 
-`vim /etc/supervisor/conf.d/agent1801.conf`
+`vim /etc/supervisor/conf.d/agent3334.conf`
 
 ```
-[program:agent1801]
+[program:agent3334]
 directory=/work/btcagent/build
-command=/work/btcagent/build/agent -c /work/btcagent/build/agent_conf_1801.json -l /work/btcagent/build/log_btcagent_1801
+command=/work/btcagent/build/agent -c /work/btcagent/build/agent_conf_3334.json -l /work/btcagent/build/log_btcagent_3334
 autostart=true
 autorestart=true
-startsecs=6
+startsecs=3
 startretries=100
 
 redirect_stderr=true
 stdout_logfile_backups=5
-stdout_logfile=/work/btcagent/build/log_btcagent_1801/agent_stdout.log
+stdout_logfile=/work/btcagent/build/log_btcagent_3334/agent_stdout.log
 ```
 
 更新supervisor:
