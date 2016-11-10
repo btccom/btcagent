@@ -21,6 +21,7 @@
 
 #include "Common.h"
 #include "Utils.h"
+#include "jsmn.h"
 
 #include <event2/event.h>
 #include <event2/buffer.h>
@@ -30,8 +31,6 @@
 #include <bitset>
 #include <map>
 #include <set>
-
-#include "utilities_js.hpp"
 
 
 #define CMD_MAGIC_NUMBER      0x7Fu
@@ -90,6 +89,70 @@ public:
   bool ifFull();
   bool allocSessionId(uint16_t *sessionId);  // range: [0, AGENT_MAX_SESSION_ID]
   void freeSessionId(const uint16_t sessionId);
+};
+
+
+//////////////////////////////////// Share /////////////////////////////////////
+class Share {
+public:
+  uint32_t jobId_;
+  uint32_t time_;
+  uint32_t extraNonce2_;
+  uint32_t nonce_;
+
+  Share(): jobId_(0), time_(0), extraNonce2_(0), nonce_(0) {}
+};
+
+
+//////////////////////////////////// Share /////////////////////////////////////
+class StratumJob {
+public:
+  uint32_t jobId_;
+  string prevHash_;
+  int32_t  version_;
+  uint32_t time_;      // block time or stratum job time
+  int32_t  isClean_;
+
+  StratumJob(): jobId_(0), time_(0), version_(0), isClean_(0) {}
+};
+
+
+///////////////////////////////// StratumMessage ///////////////////////////////
+class StratumMessage {
+  string content_;
+  string method_;
+
+  // json
+  jsmntok_t t_[32]; // we expect no more than 32 tokens
+  int r_;
+
+  Share      share_;    // mining.submit
+  StratumJob sjob_;     // mining.notify
+  string minerAgent_;   // mining.subscribe
+  string workerName_;   // mining.authorize
+  string password_;
+  uint32_t diff_;       // mining.set_difficulty
+
+  string getJsonStr(jsmntok_t *t) const;
+  int jsoneq(jsmntok_t *tok, const char *s) const;
+
+  string findMethod() const;
+  void parse();
+
+  void _parseMiningSubmit();
+  void _parseMiningNotify();
+
+public:
+  StratumMessage(const string &content);
+  ~StratumMessage();
+
+  string getMethod() const;
+
+  bool parseMiningSubmit(Share &share) const;
+  bool parseMiningSubscribe(string &minerAgent) const;
+  bool parseMiningAuthorize(string &workerName, string &password) const;
+  bool parseMiningNotify(StratumJob &sjob) const;
+  uint32_t parseMiningSetDifficulty() const;
 };
 
 
@@ -168,7 +231,8 @@ public:
 
   int8_t findUpSessionIdx();
 
-  void submitShare(JsonNode &jparams, StratumSession *downSession);
+//  void submitShare(JsonNode &jparams, StratumSession *downSession);
+  void submitShare(const Share &share, StratumSession *downSession);
   void registerWorker  (StratumSession *downSession, const char *minerAgent,
                         const string &workerName);
   void unRegisterWorker(StratumSession *downSession);

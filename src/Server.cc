@@ -177,6 +177,169 @@ void SessionIDManager::freeSessionId(const uint16_t sessionId) {
 }
 
 
+///////////////////////////////// StratumMessage //////////////////////////////
+//class StratumMessage {
+//  string content_;
+//  string method_;
+//
+//  Share      share_;    // mining.submit
+//  StratumJob sjob_;     // mining.notify
+//  string minerAgent_;   // mining.subscribe
+//  string workerName_;   // mining.authorize
+//  string password_;
+//  uint32_t diff_;       // mining.set_difficulty
+//
+//  void parse();
+//
+//public:
+//  StratumMessage(const string &content);
+//  ~StratumMessage();
+//
+//  string getMethod() const;
+//
+//  bool parseMiningSubmit(Share &share) const;
+//  bool parseMiningSubscribe(string &minerAgent) const;
+//  bool parseMiningAuthorize(string &workerName, string &password) const;
+//  bool parseMiningNotify(StratumJob &sjob) const;
+//  uint32_t parseMiningSetDifficulty() const;
+//};
+
+StratumMessage::StratumMessage(const string &content): content_(content) {
+  parse();
+}
+
+string StratumMessage::getJsonStr(jsmntok_t *t) const {
+  if (t == NULL || t->end <= t->start)
+    return "";
+
+  return string(content_.c_str() + t->start,  // ptr
+                t->end - t->start);           // size
+}
+
+int StratumMessage::jsoneq(jsmntok_t *tok, const char *s) const {
+  const char *json = content_.c_str();
+  if (tok->type == JSMN_STRING &&
+      (int)strlen(s) == tok->end - tok->start &&
+      strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
+    return 0;
+  }
+  return -1;
+}
+
+string StratumMessage::findMethod() const {
+  for (int i = 1; i < r_; i++) {
+    if (jsoneq(&t_[i], "method") == 0) {
+      return getJsonStr(&t_[i+1]);
+    }
+  }
+  return "";
+}
+
+void StratumMessage::_parseMiningSubmit() {
+  for (int i = 1; i < r_; i++) {
+    //
+    // {"params": ["slush.miner1", "bf", "00000001", "504e86ed", "b2957c02"],
+    //  "id": 4, "method": "mining.submit"}
+    //
+    // [Worker Name, Job ID, ExtraNonce2(hex), nTime(hex), nonce(hex)]
+    //
+    if (jsoneq(&t_[i], "params") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 5) {
+      i++;  // ptr move to the frist element: Worker Name
+
+      // Job ID
+      share_.jobId_       = (uint8_t) strtoul(getJsonStr(t_[i+1]).c_str(), NULL, 10);
+      // ExtraNonce2(hex)
+      share_.extraNonce2_ = (uint32_t)strtoul(getJsonStr(t_[i+2]).c_str(), NULL, 16);
+      // nTime(hex)
+      share_.time_        = (uint32_t)strtoul(getJsonStr(t_[i+3]).c_str(), NULL, 16);
+      // nonce(hex)
+      share_.nonce_       = (uint32_t)strtoul(getJsonStr(t_[i+4]).c_str(), NULL, 16);
+
+      // set the method_
+      method_ = "mining.submit";
+      break;
+    }
+  }
+}
+
+void StratumMessage::_parseMiningNotify() {
+  for (int i = 1; i < r_; i++) {
+    //
+    // 9 elements in parmas
+    // "params": [
+    // "",           // Job ID
+    // "",           // Hash of previous block
+    // "",           // coinbase1
+    // "",           // coinbase2
+    // [],           // list of merkle branches
+    // "00000002",   // block version, hex
+    // "1c2ac4af",   // bits, hex
+    // "504e86b9",   // time, hex
+    // false]        // is_clean
+    //
+    if (jsoneq(&t_[i], "params") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 9) {
+      i++;  // ptr move to the frist element: Job ID
+      sjob_.jobId_    = (uint8_t)strtoul(getJsonStr(t_[i]).c_str(), NULL, 10);
+      sjob_.prevHash_ = getJsonStr(t_[i+1]);
+
+      // list of merkle branches
+      i += t_[i+4].size + 1;
+
+      sjob_.version_  = (int32_t) strtoul(getJsonStr(t_[i]).c_str(),   NULL, 16);
+      sjob_.time_     = (uint32_t)strtoul(getJsonStr(t_[i+2]).c_str(), NULL, 16);
+      sjob_.isClean_  = (getJsonStr(t_[i+3]) == "true" || getJsonStr(t_[i+3]) == "True") ? 1 : 0;
+
+      // set the method_
+      method_ = "mining.notify";
+      break;
+    }
+  }
+}
+
+void StratumMessage::parse() {
+  jsmn_parser p;
+  jsmn_init(&p);
+
+  r_ = jsmn_parse(&p, content_.c_str(), content_.length(), t_, sizeof(t_)/sizeof(t_[0]));
+  if (r_ < 0) {
+    LOG(ERROR) << "failed to parse JSON: " << r_;
+    return;
+  }
+
+  // assume the top-level element is an object
+  if (r_ < 1 || t_[0].type != JSMN_OBJECT)
+    return;
+
+  // find method name
+  const string method = findMethod();
+  if (method == "")
+    return;
+
+  if (method == "mining.submit") {
+    _parseMiningSubmit();
+    return;
+  }
+
+  if (method == "mining.notify") {
+    _parseMiningNotify();
+    // TODO
+  }
+
+  if (method == "mining.set_difficulty") {
+    return;
+  }
+
+  if (method == "mining.subscribe") {
+
+    return;
+  }
+
+  if (method == "mining.authorize") {
+    return;
+  }
+
+}
+
 
 ///////////////////////////////// UpStratumClient //////////////////////////////
 UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
@@ -1059,23 +1222,14 @@ int8_t StratumServer::findUpSessionIdx() {
   return idx;
 }
 
-void StratumServer::submitShare(JsonNode &jparams,
+void StratumServer::submitShare(const Share &share,
                                 StratumSession *downSession) {
-  auto jparamsArr = jparams.array();
-  if (jparamsArr.size() < 5) {
-    LOG(ERROR) << "invalid share, params num is less than 5";
-    return;
-  }
-
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
 
   bool isTimeChanged = true;
-  const uint8_t  jobId = (uint8_t)jparamsArr[1].uint32();
-  const uint32_t nTime = jparamsArr[3].uint32_hex();
-
-  if ((jobId == up->latestJobId_[2] && nTime == up->latestJobGbtTime_[2]) ||
-      (jobId == up->latestJobId_[1] && nTime == up->latestJobGbtTime_[1]) ||
-      (jobId == up->latestJobId_[0] && nTime == up->latestJobGbtTime_[0])) {
+  if ((jobId == up->latestJobId_[2] && share.time_ == up->latestJobGbtTime_[2]) ||
+      (jobId == up->latestJobId_[1] && share.time_ == up->latestJobGbtTime_[1]) ||
+      (jobId == up->latestJobId_[0] && share.time_ == up->latestJobGbtTime_[0])) {
     isTimeChanged = false;
   }
 
@@ -1097,23 +1251,23 @@ void StratumServer::submitShare(JsonNode &jparams,
   p += 2;
 
   // jobId
-  *p++ = jobId;
+  *p++ = (uint8_t)share.jobId_;
 
   // session Id
   *(uint16_t *)p = downSession->sessionId_;
   p += 2;
 
   // extra_nonce2
-  *(uint32_t *)p = jparamsArr[2].uint32_hex();
+  *(uint32_t *)p = share.extraNonce2_;
   p += 4;
 
   // nonce
-  *(uint32_t *)p = jparamsArr[4].uint32_hex();
+  *(uint32_t *)p = share.nonce_;
   p += 4;
 
   // ntime
   if (isTimeChanged) {
-    *(uint32_t *)p = nTime;
+    *(uint32_t *)p = share.time_;
     p += 4;
   }
   assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
