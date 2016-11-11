@@ -100,6 +100,12 @@ public:
   uint32_t nonce_;
 
   Share(): jobId_(0), time_(0), extraNonce2_(0), nonce_(0) {}
+  Share(const Share &r) {
+    jobId_       = r.jobId_;
+    time_        = r.time_;
+    extraNonce2_ = r.extraNonce2_;
+    nonce_       = r.nonce_;
+  }
 };
 
 
@@ -110,16 +116,26 @@ public:
   string prevHash_;
   int32_t  version_;
   uint32_t time_;      // block time or stratum job time
-  int32_t  isClean_;
+  bool  isClean_;
 
-  StratumJob(): jobId_(0), time_(0), version_(0), isClean_(0) {}
+  StratumJob(): jobId_(0), version_(0), time_(0), isClean_(false) {}
+  StratumJob(const StratumJob &r) {
+    jobId_    = r.jobId_;
+    prevHash_ = r.prevHash_;
+    version_  = r.version_;
+    time_     = r.time_;
+    isClean_  = r.isClean_;
+  }
 };
 
 
 ///////////////////////////////// StratumMessage ///////////////////////////////
 class StratumMessage {
   string content_;
-  string method_;
+
+  string method_;      // if it's invalid json string, you can't get the method
+  string id_;          // "id"
+  bool   isStringId_;  // "id" is string or not
 
   // json
   jsmntok_t t_[32]; // we expect no more than 32 tokens
@@ -132,26 +148,36 @@ class StratumMessage {
   string password_;
   uint32_t diff_;       // mining.set_difficulty
 
-  string getJsonStr(jsmntok_t *t) const;
-  int jsoneq(jsmntok_t *tok, const char *s) const;
+  string getJsonStr(const jsmntok_t *t) const;
+  int jsoneq(const jsmntok_t *tok, const char *s) const;
 
   string findMethod() const;
+  string parseId();
   void parse();
 
   void _parseMiningSubmit();
   void _parseMiningNotify();
+  void _parseMiningSetDifficulty();
+  void _parseMiningSubscribe();
+  void _parseMiningAuthorize();
 
 public:
   StratumMessage(const string &content);
   ~StratumMessage();
 
+  bool isValid() const;
   string getMethod() const;
+  bool getResultBoolean() const;
+  string getId() const;
+  bool isStringId() const;
 
   bool parseMiningSubmit(Share &share) const;
   bool parseMiningSubscribe(string &minerAgent) const;
-  bool parseMiningAuthorize(string &workerName, string &password) const;
+  bool parseMiningAuthorize(string &workerName) const;
   bool parseMiningNotify(StratumJob &sjob) const;
-  uint32_t parseMiningSetDifficulty() const;
+  bool parseMiningSetDifficulty(uint32_t *diff) const;
+
+  bool getExtraNonce1AndExtraNonce2Size(uint32_t *nonce1, int32_t *n2size) const;
 };
 
 
@@ -230,7 +256,6 @@ public:
 
   int8_t findUpSessionIdx();
 
-//  void submitShare(JsonNode &jparams, StratumSession *downSession);
   void submitShare(const Share &share, StratumSession *downSession);
   void registerWorker  (StratumSession *downSession, const char *minerAgent,
                         const string &workerName);
@@ -243,6 +268,13 @@ public:
 
 
 ///////////////////////////////// UpStratumClient //////////////////////////////
+enum UpStratumClientState {
+  UP_INIT          = 0,
+  UP_CONNECTED     = 1,
+  UP_SUBSCRIBED    = 2,
+  UP_AUTHENTICATED = 3
+};
+
 class UpStratumClient {
   struct bufferevent *bev_;
   struct evbuffer *inBuf_;
@@ -256,13 +288,7 @@ class UpStratumClient {
   void convertMiningNotifyStr(const string &line);
 
 public:
-  enum State {
-    INIT          = 0,
-    CONNECTED     = 1,
-    SUBSCRIBED    = 2,
-    AUTHENTICATED = 3
-  };
-  State state_;
+  UpStratumClientState state_;
   int8_t idx_;
   StratumServer *server_;
 
@@ -302,29 +328,27 @@ public:
 
 
 ////////////////////////////////// StratumSession //////////////////////////////
-class StratumSession {
-  // mining state
-  enum State {
-    CONNECTED     = 0,
-    SUBSCRIBED    = 1,
-    AUTHENTICATED = 2
-  };
+enum StratumSessionState {
+  DOWN_CONNECTED     = 0,
+  DOWN_SUBSCRIBED    = 1,
+  DOWN_AUTHENTICATED = 2
+};
 
+class StratumSession {
   //----------------------
   struct evbuffer *inBuf_;
   static const int32_t kExtraNonce2Size_ = 4;
-  State state_;
+  StratumSessionState state_;
   char *minerAgent_;
 
   void setReadTimeout(const int32_t timeout);
 
   void handleStratumMessage(const string &line);
 
-  void handleRequest(const string &idStr, const string &method,
-                     JsonNode &jparams);
-  void handleRequest_Subscribe(const string &idStr, const JsonNode &jparams);
-  void handleRequest_Authorize(const string &idStr, const JsonNode &jparams);
-  void handleRequest_Submit   (const string &idStr, JsonNode &jparams);
+  void handleRequest(const string &idStr, const StratumMessage &smsg);
+  void handleRequest_Subscribe(const string &idStr, const StratumMessage &smsg);
+  void handleRequest_Authorize(const string &idStr, const StratumMessage &smsg);
+  void handleRequest_Submit   (const string &idStr, const StratumMessage &smsg);
 
   void responseError(const string &idStr, int code);
   void responseTrue(const string &idStr);

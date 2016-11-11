@@ -178,45 +178,18 @@ void SessionIDManager::freeSessionId(const uint16_t sessionId) {
 
 
 ///////////////////////////////// StratumMessage //////////////////////////////
-//class StratumMessage {
-//  string content_;
-//  string method_;
-//
-//  Share      share_;    // mining.submit
-//  StratumJob sjob_;     // mining.notify
-//  string minerAgent_;   // mining.subscribe
-//  string workerName_;   // mining.authorize
-//  string password_;
-//  uint32_t diff_;       // mining.set_difficulty
-//
-//  void parse();
-//
-//public:
-//  StratumMessage(const string &content);
-//  ~StratumMessage();
-//
-//  string getMethod() const;
-//
-//  bool parseMiningSubmit(Share &share) const;
-//  bool parseMiningSubscribe(string &minerAgent) const;
-//  bool parseMiningAuthorize(string &workerName, string &password) const;
-//  bool parseMiningNotify(StratumJob &sjob) const;
-//  uint32_t parseMiningSetDifficulty() const;
-//};
-
-StratumMessage::StratumMessage(const string &content): content_(content) {
+StratumMessage::StratumMessage(const string &content):
+content_(content), isStringId_(false), r_(0), diff_(0) {
   parse();
 }
-
-string StratumMessage::getJsonStr(jsmntok_t *t) const {
-  if (t == NULL || t->end <= t->start)
-    return "";
-
-  return string(content_.c_str() + t->start,  // ptr
-                t->end - t->start);           // size
+StratumMessage::~StratumMessage() {
 }
 
-int StratumMessage::jsoneq(jsmntok_t *tok, const char *s) const {
+string StratumMessage::getJsonStr(const jsmntok_t *t) const {
+  return ::getJsonStr(content_.c_str(), t);
+}
+
+int StratumMessage::jsoneq(const jsmntok_t *tok, const char *s) const {
   const char *json = content_.c_str();
   if (tok->type == JSMN_STRING &&
       (int)strlen(s) == tok->end - tok->start &&
@@ -235,6 +208,18 @@ string StratumMessage::findMethod() const {
   return "";
 }
 
+string StratumMessage::parseId() {
+  for (int i = 1; i < r_; i++) {
+    if (jsoneq(&t_[i], "id") == 0) {
+      i++;
+
+      isStringId_ = (t_[i].type == JSMN_STRING) ? true : false;
+      id_ = getJsonStr(&t_[i]);
+    }
+  }
+  return "";
+}
+
 void StratumMessage::_parseMiningSubmit() {
   for (int i = 1; i < r_; i++) {
     //
@@ -247,13 +232,13 @@ void StratumMessage::_parseMiningSubmit() {
       i++;  // ptr move to the frist element: Worker Name
 
       // Job ID
-      share_.jobId_       = (uint8_t) strtoul(getJsonStr(t_[i+1]).c_str(), NULL, 10);
+      share_.jobId_       = (uint8_t) strtoul(getJsonStr(&t_[i+1]).c_str(), NULL, 10);
       // ExtraNonce2(hex)
-      share_.extraNonce2_ = (uint32_t)strtoul(getJsonStr(t_[i+2]).c_str(), NULL, 16);
+      share_.extraNonce2_ = (uint32_t)strtoul(getJsonStr(&t_[i+2]).c_str(), NULL, 16);
       // nTime(hex)
-      share_.time_        = (uint32_t)strtoul(getJsonStr(t_[i+3]).c_str(), NULL, 16);
+      share_.time_        = (uint32_t)strtoul(getJsonStr(&t_[i+3]).c_str(), NULL, 16);
       // nonce(hex)
-      share_.nonce_       = (uint32_t)strtoul(getJsonStr(t_[i+4]).c_str(), NULL, 16);
+      share_.nonce_       = (uint32_t)strtoul(getJsonStr(&t_[i+4]).c_str(), NULL, 16);
 
       // set the method_
       method_ = "mining.submit";
@@ -279,18 +264,71 @@ void StratumMessage::_parseMiningNotify() {
     //
     if (jsoneq(&t_[i], "params") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 9) {
       i++;  // ptr move to the frist element: Job ID
-      sjob_.jobId_    = (uint8_t)strtoul(getJsonStr(t_[i]).c_str(), NULL, 10);
-      sjob_.prevHash_ = getJsonStr(t_[i+1]);
+      sjob_.jobId_    = (uint8_t)strtoul(getJsonStr(&t_[i]).c_str(), NULL, 10);
+      sjob_.prevHash_ = getJsonStr(&t_[i+1]);
 
       // list of merkle branches
       i += t_[i+4].size + 1;
 
-      sjob_.version_  = (int32_t) strtoul(getJsonStr(t_[i]).c_str(),   NULL, 16);
-      sjob_.time_     = (uint32_t)strtoul(getJsonStr(t_[i+2]).c_str(), NULL, 16);
-      sjob_.isClean_  = (getJsonStr(t_[i+3]) == "true" || getJsonStr(t_[i+3]) == "True") ? 1 : 0;
+      sjob_.version_  = (int32_t) strtoul(getJsonStr(&t_[i]).c_str(),   NULL, 16);
+      sjob_.time_     = (uint32_t)strtoul(getJsonStr(&t_[i+2]).c_str(), NULL, 16);
+
+      const string isClean = str2lower(getJsonStr(&t_[i+3]));
+      sjob_.isClean_  = (isClean == "true") ? true : false;
 
       // set the method_
       method_ = "mining.notify";
+      break;
+    }
+  }
+}
+
+void StratumMessage::_parseMiningSetDifficulty() {
+  for (int i = 1; i < r_; i++) {
+    //
+    // { "id": null, "method": "mining.set_difficulty", "params": [2]}
+    //
+    if (jsoneq(&t_[i], "params") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 1) {
+      i++;  // ptr move to the frist element
+      const uint32_t diff = (uint32_t)strtoul(getJsonStr(&t_[i]).c_str(), NULL, 10);
+
+      if (diff > 0) {
+        diff_ = diff;
+        // set the method_
+        method_ = "mining.set_difficulty";
+      }
+      break;
+    }
+  }
+}
+
+void StratumMessage::_parseMiningSubscribe() {
+  for (int i = 1; i < r_; i++) {
+    //
+    //  {"id": 1, "method": "mining.subscribe", "params": ["bfgminer/4.4.0-32-gac4e9b3", "01ad557d"]}
+    //
+    if (jsoneq(&t_[i], "params") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 2) {
+      i++;  // ptr move to the frist element
+      minerAgent_ = getJsonStr(&t_[i]);
+
+      // set the method_
+      method_ = "mining.subscribe";
+      break;
+    }
+  }
+}
+
+void StratumMessage::_parseMiningAuthorize() {
+  for (int i = 1; i < r_; i++) {
+    //
+    // {"params": ["slush.miner1", "password"], "id": 2, "method": "mining.authorize"}
+    //
+    if (jsoneq(&t_[i], "params") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 2) {
+      i++;  // ptr move to the frist element
+      workerName_ = getJsonStr(&t_[i]);
+
+      // set the method_
+      method_ = "mining.authorize";
       break;
     }
   }
@@ -310,6 +348,8 @@ void StratumMessage::parse() {
   if (r_ < 1 || t_[0].type != JSMN_OBJECT)
     return;
 
+  parseId();
+
   // find method name
   const string method = findMethod();
   if (method == "")
@@ -322,35 +362,128 @@ void StratumMessage::parse() {
 
   if (method == "mining.notify") {
     _parseMiningNotify();
-    // TODO
+    return;
   }
 
   if (method == "mining.set_difficulty") {
+    _parseMiningSetDifficulty();
     return;
   }
 
   if (method == "mining.subscribe") {
-
+    _parseMiningSubscribe();
     return;
   }
 
   if (method == "mining.authorize") {
+    _parseMiningAuthorize();
     return;
   }
+}
 
+string StratumMessage::getMethod() const {
+  return method_;
+}
+
+string StratumMessage::getId() const {
+  return id_;
+}
+bool StratumMessage::isStringId() const {
+  return isStringId_;
+}
+
+bool StratumMessage::getResultBoolean() const {
+  for (int i = 1; i < r_; i++) {
+    if (jsoneq(&t_[i], "result") == 0 && t_[0].type == JSMN_STRING) {
+      const string s = getJsonStr(&t_[i+1]);
+      return str2lower(s) == "true" ? true : false;
+    }
+  }
+  return false;
+}
+
+bool StratumMessage::isValid() const {
+  // assume the top-level element is an object
+  return (r_ < 1 || t_[0].type != JSMN_OBJECT) ? false : true;
+}
+
+bool StratumMessage::parseMiningSubmit(Share &share) const {
+  if (method_ != "mining.submit")
+    return false;
+  share = share_;
+  return true;
+}
+
+bool StratumMessage::parseMiningSubscribe(string &minerAgent) const {
+  if (method_ != "mining.subscribe")
+    return false;
+  minerAgent = minerAgent_;
+  return true;
+}
+
+bool StratumMessage::parseMiningAuthorize(string &workerName) const {
+  if (method_ != "mining.authorize")
+    return false;
+  workerName = workerName_;
+  return true;
+
+}
+bool StratumMessage::parseMiningNotify(StratumJob &sjob) const {
+  if (method_ != "mining.notify")
+    return false;
+  sjob = sjob_;
+  return true;
+}
+bool StratumMessage::parseMiningSetDifficulty(uint32_t *diff) const {
+  if (method_ != "mining.set_difficulty")
+    return false;
+  *diff = diff_;
+  return true;
+}
+
+bool StratumMessage::getExtraNonce1AndExtraNonce2Size(uint32_t *nonce1,
+                                                      int32_t *n2size) const {
+  bool r = false;
+  for (int i = 1; i < r_; i++) {
+    //
+    // 1. Subscriptions details
+    // 2. Extranonce1 - Hex-encoded
+    // 3. Extranonce2_size
+    //
+    // {"id":1,"result":[[["mining.set_difficulty","01000002"],
+    //                    ["mining.notify","01000002"]],"01000002",8],"error":null}
+    //
+    if (jsoneq(&t_[i], "result") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 3) {
+      i++;  // ptr move to the frist element
+
+      // 1. subscriptions details: 2-tuple
+      i += t_[i].size + 1;   // ["mining.set_difficulty","01000002"]
+      i += t_[i].size + 1;   // ["mining.notify","01000002"]
+
+      // extranonce1, hex
+      *nonce1 = (uint32_t)strtoul(getJsonStr(&t_[i]).c_str(), NULL, 16);
+      i++;
+      // Extranonce2_size
+      *n2size = (int32_t)strtol(getJsonStr(&t_[i]).c_str(), NULL, 10);
+
+      r = true;
+      break;
+    }
+  }
+  return r;
 }
 
 
 ///////////////////////////////// UpStratumClient //////////////////////////////
 UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
                                  const string &userName, StratumServer *server)
-: state_(INIT), idx_(idx), server_(server), poolDefaultDiff_(0)
+: state_(UP_INIT), idx_(idx), server_(server), poolDefaultDiff_(0)
 {
   bev_ = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
-  assert(bev_ != nullptr);
+  assert(bev_ != NULL);
 
   inBuf_ = evbuffer_new();
-  assert(inBuf_ != nullptr);
+  assert(inBuf_ != NULL);
 
   bufferevent_setcb(bev_,
                     StratumServer::upReadCallback, NULL,
@@ -379,7 +512,7 @@ bool UpStratumClient::connect(struct sockaddr_in &sin) {
   // was successfully launched, and -1 if an error occurred.
   int res = bufferevent_socket_connect(bev_, (struct sockaddr *)&sin, sizeof(sin));
   if (res == 0) {
-    state_ = CONNECTED;
+    state_ = UP_CONNECTED;
     return true;
   }
   return false;
@@ -483,23 +616,23 @@ void UpStratumClient::convertMiningNotifyStr(const string &line) {
 void UpStratumClient::handleStratumMessage(const string &line) {
   DLOG(INFO) << "UpStratumClient recv(" << line.size() << "): " << line;
 
-  JsonNode jnode;
-  if (!JsonNode::parse(line.data(), line.data() + line.size(), jnode)) {
+  StratumMessage smsg(line);
+  if (!smsg.isValid()) {
     LOG(ERROR) << "decode line fail, not a json string";
     return;
   }
-  JsonNode jresult = jnode["result"];
-  JsonNode jerror  = jnode["error"];
-  JsonNode jmethod = jnode["method"];
 
-  if (jmethod.type() == Utilities::JS::type::Str) {
-    JsonNode jparams  = jnode["params"];
-    auto jparamsArr = jparams.array();
+  const string method = smsg.getMethod();
+  StratumJob sjob;
+  uint32_t difficulty = 0u;
 
-    if (jmethod.str() == "mining.notify") {
+  if (state_ == UP_AUTHENTICATED) {
+    if (smsg.parseMiningNotify(sjob)) {
+      //
+      // mining.notify
+      //
       convertMiningNotifyStr(line);  // convert mining.notify string
-
-      sendMiningNotify(line);    // send to all
+      sendMiningNotify(line);        // send stratum job to all miners
 
       latestJobId_[1]      = latestJobId_[2];
       latestJobGbtTime_[1] = latestJobGbtTime_[2];
@@ -507,66 +640,51 @@ void UpStratumClient::handleStratumMessage(const string &line) {
       latestJobGbtTime_[0] = latestJobGbtTime_[1];
 
       // the jobId always between [0, 9]
-      latestJobId_[2]      = (uint8_t)jparamsArr[0].uint32();  /* job id     */
-      latestJobGbtTime_[2] = jparamsArr[7].uint32_hex();       /* block time */
+      latestJobId_[2]      = (uint8_t)sjob.jobId_;
+      latestJobGbtTime_[2] = sjob.time_;
 
       // set last job received time
-      lastJobReceivedTime_ = time(nullptr);
+      lastJobReceivedTime_ = (uint32_t)time(NULL);
 
       DLOG(INFO) << "up[" << (int32_t)idx_ << "] stratum job"
-      << ", jobId: "    << jparamsArr[0].uint32()
-      << ", prevhash: " << jparamsArr[1].str()
-      << ", version: "  << jparamsArr[5].str()
-      << ", clean: "    << (jparamsArr[8].boolean() ? "true" : "false");
+      << ", jobId: "    << sjob.jobId_
+      << ", prevhash: " << sjob.prevHash_
+      << ", version: "  << sjob.version_
+      << ", clean: "    << (sjob.isClean_ ? "true" : "false");
     }
-    else if (jmethod.str() == "mining.set_difficulty") {
+    else if (smsg.parseMiningSetDifficulty(&difficulty)) {
+      //
+      // mining.set_difficulty
+      //
       // just set the default pool diff, than ignore
       if (poolDefaultDiff_ == 0) {
-        poolDefaultDiff_ = jparamsArr[0].uint32();
+        poolDefaultDiff_ = difficulty;
       }
     }
-    else {
-      LOG(ERROR) << "unknown method: " << line;
-    }
-    return;
   }
 
-  if (state_ == AUTHENTICATED) {
-    //
-    // {"error": null, "id": 2, "result": true}
-    //
-    if (jerror.type()  != Utilities::JS::type::Null ||
-        jresult.type() != Utilities::JS::type::Bool ||
-        jresult.boolean() != true) {
-      // ingore
-    }
-    return;
-  }
-
-  if (state_ == CONNECTED) {
+  if (state_ == UP_CONNECTED) {
     //
     // {"id":1,"result":[[["mining.set_difficulty","01000002"],
     //                    ["mining.notify","01000002"]],"01000002",8],"error":null}
     //
-    if (jerror.type() != Utilities::JS::type::Null) {
-      LOG(ERROR) << "json result is null, err: " << jerror.str();
+    uint32_t nonce1 = 0u;
+    int32_t n2size = 0;
+    if (!smsg.getExtraNonce1AndExtraNonce2Size(&nonce1, &n2size)) {
+      LOG(FATAL) << "get extra nonce1 and extra nonce2 failure";
       return;
     }
-    std::vector<JsonNode> resArr = jresult.array();
-    if (resArr.size() < 3) {
-      LOG(ERROR) << "result element's number is less than 3: " << line;
-      return;
-    }
-    extraNonce1_ = resArr[1].uint32_hex();
+    extraNonce1_ = nonce1;
     DLOG(INFO) << "extraNonce1 / SessionID: " << extraNonce1_;
 
     // check extra nonce2's size, MUST be 8 bytes
-    if (resArr[2].uint32() != 8) {
+    if (n2size != 8) {
       LOG(FATAL) << "extra nonce2's size is NOT 8 bytes";
       return;
     }
+
     // subscribe successful
-    state_ = SUBSCRIBED;
+    state_ = UP_SUBSCRIBED;
 
     // do mining.authorize
     string s = Strings::Format("{\"id\": 1, \"method\": \"mining.authorize\","
@@ -576,9 +694,12 @@ void UpStratumClient::handleStratumMessage(const string &line) {
     return;
   }
 
-  if (state_ == SUBSCRIBED && jresult.boolean() == true) {
-    // authorize successful
-    state_ = AUTHENTICATED;
+  if (state_ == UP_SUBSCRIBED && smsg.getResultBoolean() == true) {
+    //
+    // check authenticated result
+    // {"error": null, "id": 2, "result": true}
+    //
+    state_ = UP_AUTHENTICATED;  // authorize successful
     LOG(INFO) << "auth success, name: \"" << userName_
     << "\", extraNonce1: " << extraNonce1_;
     return;
@@ -588,10 +709,10 @@ void UpStratumClient::handleStratumMessage(const string &line) {
 bool UpStratumClient::isAvailable() {
   const uint32_t kJobExpiredTime = 60 * 5;  // seconds
 
-  if (state_ == AUTHENTICATED &&
+  if (state_ == UP_AUTHENTICATED &&
       latestMiningNotifyStr_.empty() == false &&
       poolDefaultDiff_ != 0 &&
-      lastJobReceivedTime_ + kJobExpiredTime > (uint32_t)time(nullptr)) {
+      lastJobReceivedTime_ + kJobExpiredTime > (uint32_t)time(NULL)) {
     return true;
   }
   return false;
@@ -602,11 +723,11 @@ bool UpStratumClient::isAvailable() {
 StratumSession::StratumSession(const int8_t upSessionIdx,
                                const uint16_t sessionId,
                                struct bufferevent *bev, StratumServer *server)
-: state_(CONNECTED), minerAgent_(NULL), upSessionIdx_(upSessionIdx),
+: state_(DOWN_CONNECTED), minerAgent_(NULL), upSessionIdx_(upSessionIdx),
 sessionId_(sessionId), bev_(bev), server_(server)
 {
   inBuf_ = evbuffer_new();
-  assert(inBuf_ != nullptr);
+  assert(inBuf_ != NULL);
 }
 
 StratumSession::~StratumSession() {
@@ -643,26 +764,24 @@ void StratumSession::recvData(struct evbuffer *buf) {
 void StratumSession::handleStratumMessage(const string &line) {
   DLOG(INFO) << "recv(" << line.size() << "): " << line;
 
-  JsonNode jnode;
-  if (!JsonNode::parse(line.data(), line.data() + line.size(), jnode)) {
+  StratumMessage smsg(line);
+  if (!smsg.isValid()) {
     LOG(ERROR) << "decode line fail, not a json string";
     return;
   }
-  JsonNode jid = jnode["id"];
-  JsonNode jmethod = jnode["method"];
-  JsonNode jparams = jnode["params"];
 
-  string idStr = "null";
-  if (jid.type() == Utilities::JS::type::Int) {
-    idStr = jid.str();
-  } else if (jid.type() == Utilities::JS::type::Str) {
-    idStr = "\"" + jnode["id"].str() + "\"";
+  string idStr;
+  if (smsg.isStringId()) {
+    idStr = "\"" + smsg.getId() + "\"";
+  } else {
+    idStr = smsg.getId();
+  }
+  if (idStr.empty()) {
+    idStr = "null";
   }
 
-  if (jmethod.type() == Utilities::JS::type::Str &&
-      jmethod.size() != 0 &&
-      jparams.type() == Utilities::JS::type::Array) {
-    handleRequest(idStr, jmethod.str(), jparams);
+  if (!smsg.getMethod().empty()) {
+    handleRequest(idStr, smsg);
     return;
   }
 
@@ -687,16 +806,17 @@ void StratumSession::responseTrue(const string &idStr) {
   sendData(s);
 }
 
-void StratumSession::handleRequest(const string &idStr, const string &method,
-                                   JsonNode &jparams) {
+void StratumSession::handleRequest(const string &idStr,
+                                   const StratumMessage &smsg) {
+  const string method = smsg.getMethod();
   if (method == "mining.submit") {  // most of requests are 'mining.submit'
-    handleRequest_Submit(idStr, jparams);
+    handleRequest_Submit(idStr, smsg);
   }
   else if (method == "mining.subscribe") {
-    handleRequest_Subscribe(idStr, jparams);
+    handleRequest_Subscribe(idStr, smsg);
   }
   else if (method == "mining.authorize") {
-    handleRequest_Authorize(idStr, jparams);
+    handleRequest_Authorize(idStr, smsg);
   } else {
     // unrecognised method, just ignore it
     LOG(WARNING) << "unrecognised method: \"" << method << "\"";
@@ -704,12 +824,12 @@ void StratumSession::handleRequest(const string &idStr, const string &method,
 }
 
 void StratumSession::handleRequest_Subscribe(const string &idStr,
-                                             const JsonNode &jparams) {
-  if (state_ != CONNECTED) {
+                                             const StratumMessage &smsg) {
+  if (state_ != DOWN_CONNECTED) {
     responseError(idStr, StratumError::UNKNOWN);
     return;
   }
-  state_ = SUBSCRIBED;
+  state_ = DOWN_SUBSCRIBED;
 
   //
   //  params[0] = client version     [optional]
@@ -719,16 +839,22 @@ void StratumSession::handleRequest_Subscribe(const string &idStr,
   //  {"id": 1, "method": "mining.subscribe", "params": ["bfgminer/4.4.0-32-gac4e9b3", "01ad557d"]}
   //
 
-  // minerAgent_ could be nullptr
-  if (jparams.children()->size() >= 1) {
-    // 30 is max length for miner agent.
-    minerAgent_ = strdup(jparams.children()->at(0).str().substr(0, 30).c_str());
+  string minerAgent;
+  if (!smsg.parseMiningSubscribe(minerAgent)) {
+    minerAgent = "unknown";
   }
 
+  // 30 is max length for miner agent
+  minerAgent_ = strdup(minerAgent.substr(0, 30).c_str());
+
+  //
+  // Response:
+  //
   //  result[0] = 2-tuple with name of subscribed notification and subscription ID.
   //              Theoretically it may be used for unsubscribing, but obviously miners won't use it.
   //  result[1] = ExtraNonce1, used for building the coinbase.
   //  result[2] = Extranonce2_size, the number of bytes that the miner users for its ExtraNonce2 counter
+  //
   assert(kExtraNonce2Size_ == 4);
   const uint32_t extraNonce1 = (uint32_t)sessionId_;
   const string s = Strings::Format("{\"id\":%s,\"result\":[[[\"mining.set_difficulty\",\"%08x\"]"
@@ -739,8 +865,8 @@ void StratumSession::handleRequest_Subscribe(const string &idStr,
 }
 
 void StratumSession::handleRequest_Authorize(const string &idStr,
-                                             const JsonNode &jparams) {
-  if (state_ != SUBSCRIBED) {
+                                             const StratumMessage &smsg) {
+  if (state_ != DOWN_SUBSCRIBED) {
     responseError(idStr, StratumError::NOT_SUBSCRIBED);
     return;
   }
@@ -750,25 +876,28 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
   //  params[1] = password
   //  eg. {"params": ["slush.miner1", "password"], "id": 2, "method": "mining.authorize"}
   //
-  if (jparams.children()->size() < 1) {
+
+  string workerName, fullWorkerName;
+  if (!smsg.parseMiningAuthorize(fullWorkerName)) {
     responseError(idStr, StratumError::INVALID_USERNAME);
     return;
   }
 
+  workerName = getWorkerName(fullWorkerName);  // split by '.'
+  if (workerName.empty())
+    workerName = DEFAULT_WORKER_NAME;
+
   // auth success
   responseTrue(idStr);
-  state_ = AUTHENTICATED;
-
-  string workerName = getWorkerName(jparams.children()->at(0).str());
-  if (workerName.empty()) {
-    workerName = DEFAULT_WORKER_NAME;
-  }
+  state_ = DOWN_AUTHENTICATED;
 
   // sent sessionId, minerAgent_, workerName to server_
   server_->registerWorker(this, minerAgent_, workerName);
+
+  // minerAgent_ will not use anymore
   if (minerAgent_) {
     free(minerAgent_);
-    minerAgent_ = nullptr;
+    minerAgent_ = NULL;
   }
 
   // send mining.set_difficulty
@@ -779,8 +908,8 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
 }
 
 void StratumSession::handleRequest_Submit(const string &idStr,
-                                          JsonNode &jparams) {
-  if (state_ != AUTHENTICATED) {
+                                          const StratumMessage &smsg) {
+  if (state_ != DOWN_AUTHENTICATED) {
     responseError(idStr, StratumError::UNAUTHORIZED);
     // there must be something wrong, send reconnect command
     const string s = "{\"id\":null,\"method\":\"client.reconnect\",\"params\":[]}\n";
@@ -793,13 +922,14 @@ void StratumSession::handleRequest_Submit(const string &idStr,
   //  params[2] = ExtraNonce 2
   //  params[3] = nTime
   //  params[4] = nonce
-  if (jparams.children()->size() < 5) {
+  Share share;
+  if (!smsg.parseMiningSubmit(share)) {
     responseError(idStr, StratumError::ILLEGAL_PARARMS);
     return;
   }
 
   // submit share
-  server_->submitShare(jparams, this);
+  server_->submitShare(share, this);
 
   responseTrue(idStr);  // we assume shares are valid
 }
@@ -810,17 +940,18 @@ void StratumSession::handleRequest_Submit(const string &idStr,
 StratumServer::StratumServer(const string &listenIP, const uint16_t listenPort)
 :running_ (true), listenIP_(listenIP), listenPort_(listenPort), base_(NULL)
 {
-  upSessions_    .resize(kUpSessionCount_, nullptr);
+  upSessions_    .resize(kUpSessionCount_, NULL);
   upSessionCount_.resize(kUpSessionCount_, 0);
 
   upEvTimer_ = NULL;
-  downSessions_.resize(AGENT_MAX_SESSION_ID + 1, nullptr);
+  downSessions_.resize(AGENT_MAX_SESSION_ID + 1, NULL);
 }
 
 StratumServer::~StratumServer() {
   // remove upsessions
-  for (auto upsession : upSessions_) {
-    if (upsession == nullptr)
+  for (size_t i = 0; i < upSessions_.size(); i++) {
+    UpStratumClient *upsession = upSessions_[i];  // alias
+    if (upsession == NULL)
       continue;
 
     // remove this upsession and down sessions which belong to this
@@ -896,7 +1027,7 @@ bool StratumServer::setup() {
   // create up sessions
   for (int8_t i = 0; i < kUpSessionCount_; i++) {
     UpStratumClient *up = createUpSession(i);
-    if (up == nullptr)
+    if (up == NULL)
       return false;
 
     assert(up->idx_ == i);
@@ -990,7 +1121,7 @@ void StratumServer::checkUpSessions() {
   // check up sessions
   for (int8_t i = 0; i < kUpSessionCount_; i++)
   {
-    // if upsession's socket error, it'll be removed and set to nullptr
+    // if upsession's socket error, it'll be removed and set to NULL
     if (upSessions_[i] != NULL) {
       if (upSessions_[i]->isAvailable() == true)
       	continue;
@@ -1118,7 +1249,7 @@ void StratumServer::removeUpConnection(UpStratumClient *upconn) {
   // remove down session which belong to this up connection
   for (size_t i = 0; i < downSessions_.size(); i++) {
     StratumSession *s = downSessions_[i];
-    if (s == nullptr)
+    if (s == NULL)
       continue;
 
     if (s->upSessionIdx_ == upconn->idx_)
@@ -1136,7 +1267,7 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
   StratumServer *server = up->server_;
 
   if (events & BEV_EVENT_CONNECTED) {
-    up->state_ = UpStratumClient::State::CONNECTED;
+    up->state_ = UP_CONNECTED;
 
     // do subscribe
     string s = Strings::Format("{\"id\":1,\"method\":\"mining.subscribe\""
@@ -1165,7 +1296,7 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
 void StratumServer::sendMiningNotifyToAll(const int8_t idx, const string &notify) {
   for (size_t i = 0; i < downSessions_.size(); i++) {
     StratumSession *s = downSessions_[i];
-    if (s == nullptr || s->upSessionIdx_ != idx)
+    if (s == NULL || s->upSessionIdx_ != idx)
       continue;
 
     s->sendData(notify);
@@ -1174,7 +1305,7 @@ void StratumServer::sendMiningNotifyToAll(const int8_t idx, const string &notify
 
 void StratumServer::sendMiningNotify(StratumSession *downSession) {
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
-  if (up == nullptr || up->latestMiningNotifyStr_.length() == 0)
+  if (up == NULL || up->latestMiningNotifyStr_.length() == 0)
     return;
 
   downSession->sendData(up->latestMiningNotifyStr_);
@@ -1182,7 +1313,7 @@ void StratumServer::sendMiningNotify(StratumSession *downSession) {
 
 void StratumServer::sendDefaultMiningDifficulty(StratumSession *downSession) {
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
-  if (up == nullptr)
+  if (up == NULL)
     return;
 
   const string s = Strings::Format("{\"id\":null,\"method\":\"mining.set_difficulty\""
@@ -1227,9 +1358,9 @@ void StratumServer::submitShare(const Share &share,
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
 
   bool isTimeChanged = true;
-  if ((jobId == up->latestJobId_[2] && share.time_ == up->latestJobGbtTime_[2]) ||
-      (jobId == up->latestJobId_[1] && share.time_ == up->latestJobGbtTime_[1]) ||
-      (jobId == up->latestJobId_[0] && share.time_ == up->latestJobGbtTime_[0])) {
+  if ((share.jobId_ == up->latestJobId_[2] && share.time_ == up->latestJobGbtTime_[2]) ||
+      (share.jobId_ == up->latestJobId_[1] && share.time_ == up->latestJobGbtTime_[1]) ||
+      (share.jobId_ == up->latestJobId_[0] && share.time_ == up->latestJobGbtTime_[0])) {
     isTimeChanged = false;
   }
 
