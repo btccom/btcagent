@@ -109,7 +109,7 @@ public:
 };
 
 
-//////////////////////////////////// Share /////////////////////////////////////
+///////////////////////////////// StratumJob ///////////////////////////////////
 class StratumJob {
 public:
   uint32_t jobId_;
@@ -138,7 +138,7 @@ class StratumMessage {
   bool   isStringId_;  // "id" is string or not
 
   // json
-  jsmntok_t t_[32]; // we expect no more than 32 tokens
+  jsmntok_t t_[64];    // we expect no more than 64 tokens
   int r_;
 
   Share      share_;    // mining.submit
