@@ -228,8 +228,9 @@ void StratumMessage::_parseMiningSubmit() {
     //
     // [Worker Name, Job ID, ExtraNonce2(hex), nTime(hex), nonce(hex)]
     //
-    if (jsoneq(&t_[i], "params") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 5) {
-      i++;  // ptr move to the frist element: Worker Name
+    if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size == 5) {
+      i++;  // ptr move to params
+      i++;  // ptr move to params[0]
 
       // Job ID
       share_.jobId_       = (uint8_t) strtoul(getJsonStr(&t_[i+1]).c_str(), NULL, 10);
@@ -262,13 +263,18 @@ void StratumMessage::_parseMiningNotify() {
     // "504e86b9",   // time, hex
     // false]        // is_clean
     //
-    if (jsoneq(&t_[i], "params") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 9) {
-      i++;  // ptr move to the frist element: Job ID
+    if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size == 9) {
+      i++;  // ptr move to params
+      i++;  // ptr move to params[0]
       sjob_.jobId_    = (uint8_t)strtoul(getJsonStr(&t_[i]).c_str(), NULL, 10);
       sjob_.prevHash_ = getJsonStr(&t_[i+1]);
 
       // list of merkle branches
-      i += t_[i+4].size + 1;
+      i += 4;  // ptr move to params[4]: list of merkle branches
+      if (t_[i].type != JSMN_ARRAY)
+        return;  // should be array
+
+      i += t_[i].size + 1;  // move to params[5]
 
       sjob_.version_  = (int32_t) strtoul(getJsonStr(&t_[i]).c_str(),   NULL, 16);
       sjob_.time_     = (uint32_t)strtoul(getJsonStr(&t_[i+2]).c_str(), NULL, 16);
@@ -288,8 +294,9 @@ void StratumMessage::_parseMiningSetDifficulty() {
     //
     // { "id": null, "method": "mining.set_difficulty", "params": [2]}
     //
-    if (jsoneq(&t_[i], "params") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 1) {
-      i++;  // ptr move to the frist element
+    if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size == 1) {
+      i++;  // ptr move to params
+      i++;  // ptr move to params[0]
       const uint32_t diff = (uint32_t)strtoul(getJsonStr(&t_[i]).c_str(), NULL, 10);
 
       if (diff > 0) {
@@ -305,10 +312,11 @@ void StratumMessage::_parseMiningSetDifficulty() {
 void StratumMessage::_parseMiningSubscribe() {
   for (int i = 1; i < r_; i++) {
     //
-    //  {"id": 1, "method": "mining.subscribe", "params": ["bfgminer/4.4.0-32-gac4e9b3", "01ad557d"]}
+    // {"id": 1, "method": "mining.subscribe", "params": ["bfgminer/4.4.0-32-gac4e9b3", "01ad557d"]}
     //
-    if (jsoneq(&t_[i], "params") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 2) {
-      i++;  // ptr move to the frist element
+    if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size == 2) {
+      i++;  // ptr move to params
+      i++;  // ptr move to params[0]
       minerAgent_ = getJsonStr(&t_[i]);
 
       // set the method_
@@ -323,8 +331,9 @@ void StratumMessage::_parseMiningAuthorize() {
     //
     // {"params": ["slush.miner1", "password"], "id": 2, "method": "mining.authorize"}
     //
-    if (jsoneq(&t_[i], "params") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 2) {
-      i++;  // ptr move to the frist element
+    if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size == 2) {
+      i++;  // ptr move to params
+      i++;  // ptr move to params[0]
       workerName_ = getJsonStr(&t_[i]);
 
       // set the method_
@@ -394,7 +403,7 @@ bool StratumMessage::isStringId() const {
 
 bool StratumMessage::getResultBoolean() const {
   for (int i = 1; i < r_; i++) {
-    if (jsoneq(&t_[i], "result") == 0 && t_[0].type == JSMN_STRING) {
+    if (jsoneq(&t_[i], "result") == 0 && t_[i+1].type == JSMN_PRIMITIVE) {
       const string s = getJsonStr(&t_[i+1]);
       return str2lower(s) == "true" ? true : false;
     }
@@ -453,17 +462,33 @@ bool StratumMessage::getExtraNonce1AndExtraNonce2Size(uint32_t *nonce1,
     // {"id":1,"result":[[["mining.set_difficulty","01000002"],
     //                    ["mining.notify","01000002"]],"01000002",8],"error":null}
     //
-    if (jsoneq(&t_[i], "result") == 0 && t_[i].type == JSMN_ARRAY && t_[i].size == 3) {
-      i++;  // ptr move to the frist element
+    if (jsoneq(&t_[i], "result") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size == 3) {
+      i++;  // ptr move to "result"
 
-      // 1. subscriptions details: 2-tuple
-      i += t_[i].size + 1;   // ["mining.set_difficulty","01000002"]
-      i += t_[i].size + 1;   // ["mining.notify","01000002"]
+      //
+      // subscriptions details: 2-tuple
+      //
+      i++;  // ptr move to result[0]
+      i++;  // ptr move to result[0][0]
+      // ["mining.set_difficulty","01000002"]
+      if (!(t_[i].type == JSMN_ARRAY && t_[i].size == 2)) {
+        return false;
+      }
+      i += t_[i].size;
+
+      i++;  // ptr move to result[0][1]
+      // ["mining.notify","01000002"]
+      if (!(t_[i].type == JSMN_ARRAY && t_[i].size == 2)) {
+        return false;
+      }
+      i += t_[i].size;
 
       // extranonce1, hex
+      i++;  // ptr move to result[1]
       *nonce1 = (uint32_t)strtoul(getJsonStr(&t_[i]).c_str(), NULL, 16);
-      i++;
+
       // Extranonce2_size
+      i++;  // ptr move to result[2]
       *n2size = (int32_t)strtol(getJsonStr(&t_[i]).c_str(), NULL, 10);
 
       r = true;
