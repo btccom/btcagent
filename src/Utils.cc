@@ -162,6 +162,6 @@ const char *splitNotify(const string &line) {
 
 string str2lower(const string &str) {
   string data = str;
-	std::transform(data.begin(), data.end(), data.begin(), ::tolower);
+  std::transform(data.begin(), data.end(), data.begin(), ::tolower);
   return data;
 }
