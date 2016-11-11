@@ -19,7 +19,6 @@
 #include <glog/logging.h>
 
 #include "gtest/gtest.h"
-#include "Common.h"
 #include "Utils.h"
 
 TEST(Utils, Strings_Format) {
