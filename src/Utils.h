@@ -32,6 +32,8 @@
 
 #include <glog/logging.h>
 
+#include "jsmn.h"
+
 using  std::string;
 using  std::vector;
 
@@ -48,8 +50,29 @@ public:
   static void Append(string & dest, const char * fmt, ...);
 };
 
+class PoolConf {
+public:
+  string host_;
+  uint16_t port_;
+  string upPoolUserName_;
+
+  PoolConf(): port_(0u) {}
+
+  PoolConf(const PoolConf &r) {
+    host_ = r.host_;
+    port_ = r.port_;
+    upPoolUserName_ = r.upPoolUserName_;
+  }
+};
+
+string getJsonStr(const char *c,const jsmntok_t *t);
+bool parseConfJson(const string &jsonStr,
+                   string &listenIP, string &listenPort,
+                   std::vector<PoolConf> &poolConfs);
 
 // slite stratum 'mining.notify'
 const char *splitNotify(const string &line);
+
+string str2lower(const string &str);
 
 #endif
