@@ -19,7 +19,28 @@
 #ifndef UTILS_H_
 #define UTILS_H_
 
-#include "Common.h"
+#include <assert.h>
+#include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
+
+#include <string>
+#include <vector>
+#include <utility>
+
+#include <glog/logging.h>
+
+using  std::string;
+using  std::vector;
+
+//
+// WARNING: DO NOT CHANGE THE NAME.
+// the version could be changed like: "btccom-agent/xx.xx"
+//
+#define BTCCOM_MINER_AGENT   "btccom-agent/0.1"
+
 
 class Strings {
 public:
