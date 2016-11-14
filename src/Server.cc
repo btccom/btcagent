@@ -1342,8 +1342,8 @@ void StratumServer::sendDefaultMiningDifficulty(StratumSession *downSession) {
     return;
 
   const string s = Strings::Format("{\"id\":null,\"method\":\"mining.set_difficulty\""
-                             ",\"params\":[%" PRIu32"]}\n",
-                             up->poolDefaultDiff_);
+                                   ",\"params\":[%" PRIu32"]}\n",
+                                   up->poolDefaultDiff_);
   downSession->sendData(s);
 }
 
