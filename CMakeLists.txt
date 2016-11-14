@@ -21,8 +21,9 @@ ENDIF()
 
 SET(CMAKE_CXX_COMPILER "g++")
 SET(CMAKE_C_COMPILER   "gcc")
-SET(CMAKE_CXX_COMPILER_ARG1 "-std=c++0x")
 
+SET(CMAKE_CXX_COMPILER_ARG1 "-std=c++98")
+SET(CMAKE_C_COMPILER_ARG1 "-std=c99")
 
 find_package(Glog)
 if(NOT GLOG_FOUND)
@@ -37,7 +38,7 @@ endif(NOT LibEvent_FOUND)
 include_directories(src test ${GLOG_INCLUDE_DIRS} ${LIBEVENT_INCLUDE_DIR})
 set(THRID_LIBRARIES -lpthread ${GLOG_LIBRARIES} ${LIBEVENT_LIB})
 
-file(GLOB LIB_SOURCES src/*.cc)
+file(GLOB LIB_SOURCES src/*.cc src/*.c)
 add_library(btccomagent STATIC ${LIB_SOURCES})
 
 file(GLOB_RECURSE TEST_SOURCES test/*.cc)

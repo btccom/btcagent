@@ -30,7 +30,7 @@
 
 #include "Server.h"
 
-StratumServer *gStratumServer = nullptr;
+StratumServer *gStratumServer = NULL;
 
 void handler(int sig) {
   if (gStratumServer) {
@@ -76,29 +76,25 @@ int main(int argc, char **argv) {
   signal(SIGINT,  handler);
 
   try {
-    JsonNode j;  // conf json
-    // parse xxxx.json
+    string listenIP, listenPort;
+    std::vector<PoolConf> poolConfs;
+
+    // get conf json string
     std::ifstream agentConf(optConf);
     string agentJsonStr((std::istreambuf_iterator<char>(agentConf)),
                         std::istreambuf_iterator<char>());
-    if (!JsonNode::parse(agentJsonStr.c_str(),
-                         agentJsonStr.c_str() + agentJsonStr.length(), j)) {
-      LOG(ERROR) << "json decode failure";
-      exit(EXIT_FAILURE);
+    if (!parseConfJson(agentJsonStr, listenIP, listenPort, poolConfs)) {
+      LOG(ERROR) << "parse json config file failure";
+      return false;
     }
 
-    gStratumServer = new StratumServer(j["agent_listen_ip"].str(),
-                                       j["agent_listen_port"].uint16());
+    gStratumServer = new StratumServer(listenIP, atoi(listenPort.c_str()));
 
     // add pools
-    {
-      auto pools = j["pools"].array();
-      for (size_t i = 0; i < pools.size(); i++) {
-        auto poolParams = pools[i].array();
-        gStratumServer->addUpPool(poolParams[0].str(),
-                                  poolParams[1].uint16(),
-                                  poolParams[2].str());
-    	}
+    for (size_t i = 0; i < poolConfs.size(); i++) {
+      gStratumServer->addUpPool(poolConfs[i].host_,
+                                poolConfs[i].port_,
+                                poolConfs[i].upPoolUserName_);
     }
 
     if (!gStratumServer->setup()) {

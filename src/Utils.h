@@ -19,7 +19,34 @@
 #ifndef UTILS_H_
 #define UTILS_H_
 
-#include "Common.h"
+#define __STDC_FORMAT_MACROS
+#define __STDC_LIMIT_MACROS
+
+#include <assert.h>
+#include <math.h>
+#include <inttypes.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
+
+#include <string>
+#include <vector>
+#include <utility>
+
+#include <glog/logging.h>
+
+#include "jsmn.h"
+
+using  std::string;
+using  std::vector;
+
+//
+// WARNING: DO NOT CHANGE THE NAME.
+// the version could be changed like: "btccom-agent/xx.xx"
+//
+#define BTCCOM_MINER_AGENT   "btccom-agent/0.1"
+
 
 class Strings {
 public:
@@ -27,8 +54,29 @@ public:
   static void Append(string & dest, const char * fmt, ...);
 };
 
+class PoolConf {
+public:
+  string host_;
+  uint16_t port_;
+  string upPoolUserName_;
+
+  PoolConf(): port_(0u) {}
+
+  PoolConf(const PoolConf &r) {
+    host_ = r.host_;
+    port_ = r.port_;
+    upPoolUserName_ = r.upPoolUserName_;
+  }
+};
+
+string getJsonStr(const char *c,const jsmntok_t *t);
+bool parseConfJson(const string &jsonStr,
+                   string &listenIP, string &listenPort,
+                   std::vector<PoolConf> &poolConfs);
 
 // slite stratum 'mining.notify'
 const char *splitNotify(const string &line);
+
+string str2lower(const string &str);
 
 #endif
