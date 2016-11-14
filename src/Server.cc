@@ -314,10 +314,13 @@ void StratumMessage::_parseMiningSubscribe() {
     //
     // {"id": 1, "method": "mining.subscribe", "params": ["bfgminer/4.4.0-32-gac4e9b3", "01ad557d"]}
     //
-    if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size == 2) {
-      i++;  // ptr move to params
-      i++;  // ptr move to params[0]
-      minerAgent_ = getJsonStr(&t_[i]);
+    if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY) {
+      // some miners will use empty "params"
+      if (t_[i+1].size >= 1) {
+        i++;  // ptr move to params
+        i++;  // ptr move to params[0]
+        minerAgent_ = getJsonStr(&t_[i]);
+      }
 
       // set the method_
       method_ = "mining.subscribe";
@@ -331,7 +334,7 @@ void StratumMessage::_parseMiningAuthorize() {
     //
     // {"params": ["slush.miner1", "password"], "id": 2, "method": "mining.authorize"}
     //
-    if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size == 2) {
+    if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size >= 1) {
       i++;  // ptr move to params
       i++;  // ptr move to params[0]
       workerName_ = getJsonStr(&t_[i]);
