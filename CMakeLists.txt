@@ -22,8 +22,7 @@ ENDIF()
 SET(CMAKE_CXX_COMPILER "g++")
 SET(CMAKE_C_COMPILER   "gcc")
 
-# -ansi: In C mode, this is equivalent to -std=c90. In C++ mode, it is equivalent to -std=c++98.
-SET(CMAKE_CXX_COMPILER_ARG1 "-ansi")
+SET(CMAKE_CXX_COMPILER_ARG1 "-std=c++98 -std=c99")
 
 find_package(Glog)
 if(NOT GLOG_FOUND)
