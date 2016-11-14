@@ -19,8 +19,12 @@
 #ifndef UTILS_H_
 #define UTILS_H_
 
+#define __STDC_FORMAT_MACROS
+#define __STDC_LIMIT_MACROS
+
 #include <assert.h>
 #include <math.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
