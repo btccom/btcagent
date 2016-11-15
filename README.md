@@ -28,7 +28,6 @@ Note:
 ```
 apt-get update
 apt-get install -y build-essential cmake git
-apt-get install -y libconfig++-dev
 
 #
 # install libevent

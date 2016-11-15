@@ -29,7 +29,6 @@ BtcAgent是定制的高效的专用矿池代理系统。其采用了自定义[�
 ```
 apt-get update
 apt-get install -y build-essential cmake git
-apt-get install -y libconfig++-dev
 
 #
 # install libevent
