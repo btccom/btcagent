@@ -30,7 +30,7 @@ set(CMAKE_C_COMPILER_ARG1 "-std=c99")
 
 include_directories(src test ${SDK_DIR}/include)
 link_directories(${SDK_DIR}/lib)
-set(THRID_LIBRARIES -ldl -lpthread -levent -lglog)
+set(THRID_LIBRARIES -ldl -lpthread -levent)
 
 file(GLOB LIB_SOURCES src/*.cc src/*.c)
 add_library(btccomagent STATIC ${LIB_SOURCES})

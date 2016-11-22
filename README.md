@@ -1,6 +1,6 @@
 # BtcAgent for Embedded System
 
-## Build
+## Cross Build
 
 * OS: `Ubuntu 14.04 LTS, 64 Bits`
 

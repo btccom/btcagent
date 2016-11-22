@@ -29,12 +29,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <unistd.h>
+#include <errno.h>
 
+#include <iostream>
 #include <string>
 #include <vector>
 #include <utility>
-
-#include <glog/logging.h>
 
 #include "jsmn.h"
 
@@ -47,6 +48,8 @@ using  std::vector;
 //
 #define BTCCOM_MINER_AGENT   "btccom-agent/0.1"
 
+#define LOG(x) std::cout
+#define DLOG(x) std::cout
 
 class Strings {
 public:
