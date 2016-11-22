@@ -39,6 +39,13 @@
 
 #include "jsmn.h"
 
+#if defined(SUPPORT_GLOG)
+ #include <glog/logging.h>
+#else
+ #define LOG(x) std::cout
+ #define DLOG(x) std::cout
+#endif
+
 using  std::string;
 using  std::vector;
 
@@ -48,8 +55,6 @@ using  std::vector;
 //
 #define BTCCOM_MINER_AGENT   "btccom-agent/0.1"
 
-#define LOG(x) std::cout
-#define DLOG(x) std::cout
 
 class Strings {
 public:

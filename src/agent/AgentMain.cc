@@ -32,10 +32,15 @@ void handler(int sig) {
 }
 
 void usage() {
+#if defined(SUPPORT_GLOG)
+  fprintf(stderr, "Usage:\n\tagent -c \"agent_conf.json\" -l \"log_dir\"\n");
+#else
   fprintf(stderr, "Usage:\n\tagent -c \"agent_conf.json\"\n");
+#endif
 }
 
 int main(int argc, char **argv) {
+  char *optLogDir = NULL;
   char *optConf   = NULL;
   int c;
 
@@ -43,16 +48,36 @@ int main(int argc, char **argv) {
     usage();
     return 1;
   }
+#if defined(SUPPORT_GLOG)
+  while ((c = getopt(argc, argv, "c:l:h")) != -1) {
+#else
   while ((c = getopt(argc, argv, "c:h")) != -1) {
+#endif
     switch (c) {
       case 'c':
         optConf = optarg;
+        break;
+      case 'l':
+        optLogDir = optarg;
         break;
       case 'h': default:
         usage();
         exit(0);
     }
   }
+
+#if defined(SUPPORT_GLOG)
+  // Initialize Google's logging library.
+  google::InitGoogleLogging(argv[0]);
+  if (strcmp(optLogDir, "stderr") == 0) {
+    FLAGS_logtostderr = 1;
+  } else {
+    FLAGS_log_dir = string(optLogDir);
+  }
+  FLAGS_max_log_size = 10;  // max log file size 10 MB
+  FLAGS_logbuflevel = -1;
+  FLAGS_stop_logging_if_full_disk = true;
+#endif
 
   signal(SIGTERM, handler);
   signal(SIGINT,  handler);
@@ -91,5 +116,8 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+#if defined(SUPPORT_GLOG)
+  google::ShutdownGoogleLogging();
+#endif
   return 0;
 }
