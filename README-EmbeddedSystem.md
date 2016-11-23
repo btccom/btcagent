@@ -27,9 +27,9 @@ copy include and libraries to toolchain
 #
 # cross build agent
 #
-git clone https://github.com/btccom/btcagent.git -b develop
+git clone https://github.com/btccom/btcagent.git
 cd btcagent
-cp CMakeLists4EmbeddedSystem.txt CMakeLists.txt
+ln -s CMakeLists4EmbeddedSystem.txt CMakeLists.txt
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release -DTOOLCHAIN=/path/to/toolchain ..
 make
