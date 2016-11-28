@@ -1177,7 +1177,13 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
 
   // can't alloc session Id
   if (server->sessionIDManager_.ifFull()) {
+
+#ifdef _WIN32
+    LOG(ERROR) << "fixme: close(fd)!";
+#else
     close(fd);
+#endif
+
     return;
   }
 
@@ -1191,7 +1197,13 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
   const int8_t upSessionIdx = server->findUpSessionIdx();
   if (upSessionIdx == -1) {
     LOG(ERROR) << "no available up session";
+
+#ifdef _WIN32
+    LOG(ERROR) << "fixme: close(fd)!";
+#else
     close(fd);
+#endif
+
     return;
   }
 

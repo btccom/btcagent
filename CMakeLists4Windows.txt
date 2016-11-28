@@ -40,6 +40,6 @@ file(GLOB_RECURSE TEST_SOURCES test/*.cc)
 add_executable(unittest ${TEST_SOURCES})
 target_link_libraries(unittest btccomagent ${THRID_LIBRARIES})
 
-file(GLOB_RECURSE AGENT_SOURCES src/agent/*.cc)
+file(GLOB_RECURSE AGENT_SOURCES src/agent/*.cc src/win32/getopt/*.c)
 add_executable(agent ${AGENT_SOURCES})
-target_link_libraries(agent btccomagent ${THRID_LIBRARIES})
+target_link_libraries(agent btccomagent ws2_32 ${THRID_LIBRARIES})
