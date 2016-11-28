@@ -23,6 +23,10 @@
 
 #include "Server.h"
 
+#ifdef _WIN32
+ #include "win32/getopt/getopt.h"
+#endif
+
 StratumServer *gStratumServer = NULL;
 
 void handler(int sig) {
