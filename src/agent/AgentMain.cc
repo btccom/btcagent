@@ -16,17 +16,10 @@
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdlib.h>
-#include <stdio.h>
 #include <signal.h>
-#include <err.h>
-#include <errno.h>
-#include <unistd.h>
 
 #include <fstream>
 #include <streambuf>
-
-#include <glog/logging.h>
 
 #include "Server.h"
 
@@ -39,7 +32,11 @@ void handler(int sig) {
 }
 
 void usage() {
+#if defined(SUPPORT_GLOG)
   fprintf(stderr, "Usage:\n\tagent -c \"agent_conf.json\" -l \"log_dir\"\n");
+#else
+  fprintf(stderr, "Usage:\n\tagent -c \"agent_conf.json\"\n");
+#endif
 }
 
 int main(int argc, char **argv) {
@@ -51,7 +48,11 @@ int main(int argc, char **argv) {
     usage();
     return 1;
   }
+#if defined(SUPPORT_GLOG)
   while ((c = getopt(argc, argv, "c:l:h")) != -1) {
+#else
+  while ((c = getopt(argc, argv, "c:h")) != -1) {
+#endif
     switch (c) {
       case 'c':
         optConf = optarg;
@@ -65,6 +66,7 @@ int main(int argc, char **argv) {
     }
   }
 
+#if defined(SUPPORT_GLOG)
   // Initialize Google's logging library.
   google::InitGoogleLogging(argv[0]);
   if (strcmp(optLogDir, "stderr") == 0) {
@@ -75,6 +77,7 @@ int main(int argc, char **argv) {
   FLAGS_max_log_size = 10;  // max log file size 10 MB
   FLAGS_logbuflevel = -1;
   FLAGS_stop_logging_if_full_disk = true;
+#endif
 
   signal(SIGTERM, handler);
   signal(SIGINT,  handler);
@@ -113,6 +116,8 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+#if defined(SUPPORT_GLOG)
   google::ShutdownGoogleLogging();
+#endif
   return 0;
 }

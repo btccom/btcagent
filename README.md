@@ -9,8 +9,11 @@ BtcAgent is a kind of stratum proxy which use [customize protocol](https://githu
   * Memory: less than 64MBytes
   * CPU: 1 Core
 
-It's so efficient and we are going to build it at a ARM platform like Open-WRT. So people could use WiFi-Route as the stratum proxy, it's very cool and easy to manange.
+Support Platform:
 
+* Linux / Unix system
+* Embedded System like open-wrt / dd-wrt / PandoraBox
+* *Windows: coming soon*
 
 Note:
 
@@ -24,6 +27,7 @@ Note:
 ## Install
 
 * OS: `Ubuntu 14.04 LTS, 64 Bits`
+  * if you want build on Embedded System like open-wrt/dd-wrt/PandoraBox, please see: [build for Embedded System](README-EmbeddedSystem.md)
 
 ```
 apt-get update
@@ -55,6 +59,7 @@ cd glog-0.3.4
 mkdir -p /work && cd /work
 git clone https://github.com/btccom/btcagent.git
 cd btcagent
+ln -s CMakeLists-Default.txt CMakeLists.txt
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make

@@ -13,6 +13,13 @@ BtcAgent是定制的高效的专用矿池代理系统。其采用了自定义[�
 * 内存: 小于 64M
 * CPU负载: 低于0.05（单核）
 
+
+支持系统平台:
+
+* Linux / Unix 等类似系统系统
+* 嵌入式系统：open-wrt / dd-wrt / PandoraBox
+* *Windows：即将推出*
+
 提示：
 
 * 其协议目前依然未定型，依然可能会改变
@@ -25,6 +32,7 @@ BtcAgent是定制的高效的专用矿池代理系统。其采用了自定义[�
 ## 安装
 
 * 操作系统: `Ubuntu 14.04 LTS, 64 Bits`
+  * 嵌入式平台编译请参考：[嵌入式平台交叉编译](README-EmbeddedSystem.md)
 
 ```
 apt-get update
@@ -56,6 +64,7 @@ cd glog-0.3.4
 mkdir -p /work && cd /work
 git clone https://github.com/btccom/btcagent.git
 cd btcagent
+ln -s CMakeLists-Default.txt CMakeLists.txt
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make

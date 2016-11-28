@@ -29,14 +29,22 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <unistd.h>
+#include <errno.h>
 
+#include <iostream>
 #include <string>
 #include <vector>
 #include <utility>
 
-#include <glog/logging.h>
-
 #include "jsmn.h"
+
+#if defined(SUPPORT_GLOG)
+ #include <glog/logging.h>
+#else
+ #define LOG(x) std::cout
+ #define DLOG(x) std::cout
+#endif
 
 using  std::string;
 using  std::vector;
