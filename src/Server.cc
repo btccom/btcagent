@@ -1184,7 +1184,7 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
   if (server->sessionIDManager_.ifFull()) {
 
 #ifdef _WIN32
-    LOG(ERROR) << "fixme: close(fd)!";
+	  closesocket(fd);
 #else
     close(fd);
 #endif
@@ -1204,7 +1204,7 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
     LOG(ERROR) << "no available up session";
 
 #ifdef _WIN32
-    LOG(ERROR) << "fixme: close(fd)!";
+	closesocket(fd);
 #else
     close(fd);
 #endif
