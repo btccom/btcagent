@@ -1050,6 +1050,11 @@ bool StratumServer::setup() {
   if (upPoolHost_.size() == 0)
     return false;
 
+#ifdef _WIN32
+  WSADATA wsa_data;
+  WSAStartup(0x0201, &wsa_data);
+#endif
+
   base_ = event_base_new();
   if(!base_) {
     LOG(ERROR) << "server: cannot create event base";
