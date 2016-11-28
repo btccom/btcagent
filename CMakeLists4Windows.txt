@@ -31,7 +31,7 @@ if(NOT LibEvent_FOUND)
 endif(NOT LibEvent_FOUND)
 
 include_directories(src test ${LIBEVENT_INCLUDE_DIR})
-set(THRID_LIBRARIES -lpthread ${LIBEVENT_LIB})
+set(THRID_LIBRARIES ${LIBEVENT_LIB})
 
 file(GLOB LIB_SOURCES src/*.cc src/*.c)
 add_library(btccomagent STATIC ${LIB_SOURCES})
