@@ -18,7 +18,9 @@
  */
 #include "Server.h"
 
-#include <arpa/inet.h>
+#ifndef _WIN32
+ #include <arpa/inet.h>
+#endif
 
 #include <event2/event.h>
 #include <event2/buffer.h>

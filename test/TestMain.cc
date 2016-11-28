@@ -17,7 +17,11 @@
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <signal.h>
-#include <execinfo.h>
+
+#ifndef _WIN32
+ #include <execinfo.h>
+#endif
+
 #include <string>
 #include "gtest/gtest.h"
 

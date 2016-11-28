@@ -53,6 +53,12 @@ class UpStratumClient;
 
 //////////////////////////////// StratumError ////////////////////////////////
 class StratumError {
+
+// Win32 #define NO_ERROR as well. There is the same value, so #undef NO_ERROR first.
+#ifdef _WIN32
+ #undef NO_ERROR
+#endif
+
 public:
   enum {
     NO_ERROR        = 0,
