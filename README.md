@@ -1,6 +1,6 @@
 # BtcAgent
 
-[Chinese Version/中文版本](https://github.com/btccom/btcagent/blob/master/README-zh_CN.md)
+[Chinese Version/中文版本](README-zh_CN.md)
 
 BtcAgent is a kind of stratum proxy which use [customize protocol](https://github.com/btccom/btcpool/blob/master/docs/AGENT.md) to communicate with the pool. It's very efficient and designed for huge mining farm. And you still can find each miner at the pool.
 
