@@ -30,7 +30,7 @@
 #include <event2/listener.h>
 
 static
-bool resolve(const string &host, struct	in_addr *sin_addr) {
+bool resolve(const string &host, struct in_addr *sin_addr) {
   struct evutil_addrinfo *ai = NULL;
   struct evutil_addrinfo hints_in;
   memset(&hints_in, 0, sizeof(evutil_addrinfo));
@@ -1001,7 +1001,7 @@ StratumServer::~StratumServer() {
     evconnlistener_free(listener_);
 
   if (base_)
-  	event_base_free(base_);
+    event_base_free(base_);
 }
 
 void StratumServer::stop() {
@@ -1161,7 +1161,7 @@ void StratumServer::checkUpSessions() {
     // if upsession's socket error, it'll be removed and set to NULL
     if (upSessions_[i] != NULL) {
       if (upSessions_[i]->isAvailable() == true)
-      	continue;
+        continue;
       else
         removeUpConnection(upSessions_[i]);
     }
@@ -1184,7 +1184,7 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
   if (server->sessionIDManager_.ifFull()) {
 
 #ifdef _WIN32
-	  closesocket(fd);
+    closesocket(fd);
 #else
     close(fd);
 #endif
@@ -1204,7 +1204,7 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
     LOG(ERROR) << "no available up session";
 
 #ifdef _WIN32
-	closesocket(fd);
+    closesocket(fd);
 #else
     close(fd);
 #endif
