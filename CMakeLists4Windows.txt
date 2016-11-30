@@ -3,24 +3,44 @@ cmake_minimum_required (VERSION 2.6)
 project (PoolAgent)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
-#
-# cmake -DCMAKE_BUILD_TYPE=Debug ..
-# cmake -DCMAKE_BUILD_TYPE=Release ..
-#
-message("CMAKE_BUILD_TYPE = ${CMAKE_BUILD_TYPE}")
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release
+        CACHE STRING "Set build type to Debug o Release (default Release)" FORCE)
+endif()
+
 IF(CMAKE_BUILD_TYPE MATCHES Debug)
   message("Debug build.")
-  set(CMAKE_CXX_FLAGS "-g -O0 -Wall")
-ELSEIF(CMAKE_BUILD_TYPE MATCHES Release)
-  message("Release build.")
-  set(CMAKE_CXX_FLAGS "-O2 -Wall")
 ELSE()
-  message("Some other build type.")
+  message("Release build.")
 ENDIF()
 
-
-SET(CMAKE_CXX_COMPILER "g++")
-SET(CMAKE_C_COMPILER   "gcc")
+###
+# static linking VC++ runtime library
+###
+if(POOLAGENT__STATIC_LINKING_VC_LIB)
+  message("Static linking VC++ runtime library (/MT).")
+  
+  # debug mode
+  set(CompilerFlags CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG)
+  foreach(CompilerFlag ${CompilerFlags})
+    string(REPLACE "/MDd" "" ${CompilerFlag} "${${CompilerFlag}}")
+    string(REPLACE "/MD" "" ${CompilerFlag} "${${CompilerFlag}}")
+    set(${CompilerFlag} "${${CompilerFlag}} /MTd")
+    message("${CompilerFlag}=${${CompilerFlag}}")
+  endforeach()
+  
+  # release mode
+  set(CompilerFlags CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELEASE)
+  foreach(CompilerFlag ${CompilerFlags})
+    string(REPLACE "/MDd" "" ${CompilerFlag} "${${CompilerFlag}}")
+    string(REPLACE "/MD" "" ${CompilerFlag} "${${CompilerFlag}}")
+    set(${CompilerFlag} "${${CompilerFlag}} /MT")
+    message("${CompilerFlag}=${${CompilerFlag}}")
+  endforeach()
+else()
+  message("Dynamic linking VC++ runtime library (/MD).")
+  message("Use -DPOOLAGENT__STATIC_LINKING_VC_LIB=ON for static linking.")
+endif()
 
 SET(CMAKE_CXX_COMPILER_ARG1 "-std=c++98")
 SET(CMAKE_C_COMPILER_ARG1 "-std=c99")

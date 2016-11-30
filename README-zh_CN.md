@@ -17,8 +17,8 @@ BtcAgent是定制的高效的专用矿池代理系统。其采用了自定义[�
 支持系统平台:
 
 * Linux / Unix 等类似系统系统
-* 嵌入式系统：open-wrt / dd-wrt / PandoraBox
-* *Windows：即将推出*
+* [嵌入式系统](README-EmbeddedSystem.md)：open-wrt / dd-wrt / PandoraBox
+* [Windows](README-Windows.md) XP 及以上（测试版）
 
 提示：
 

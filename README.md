@@ -12,8 +12,8 @@ BtcAgent is a kind of stratum proxy which use [customize protocol](https://githu
 Support Platform:
 
 * Linux / Unix system
-* Embedded System like open-wrt / dd-wrt / PandoraBox
-* *Windows: coming soon*
+* [Embedded System](README-EmbeddedSystem.md) like open-wrt / dd-wrt / PandoraBox
+* [Windows](README-Windows.md) XP or later (testing)
 
 Note:
 
