@@ -18,7 +18,11 @@
  */
 #include "Server.h"
 
-#include <arpa/inet.h>
+#ifndef _WIN32
+ #include <arpa/inet.h>
+#endif
+
+#include <time.h>
 
 #include <event2/event.h>
 #include <event2/buffer.h>
@@ -26,7 +30,7 @@
 #include <event2/listener.h>
 
 static
-bool resolve(const string &host, struct	in_addr *sin_addr) {
+bool resolve(const string &host, struct in_addr *sin_addr) {
   struct evutil_addrinfo *ai = NULL;
   struct evutil_addrinfo hints_in;
   memset(&hints_in, 0, sizeof(evutil_addrinfo));
@@ -997,7 +1001,7 @@ StratumServer::~StratumServer() {
     evconnlistener_free(listener_);
 
   if (base_)
-  	event_base_free(base_);
+    event_base_free(base_);
 }
 
 void StratumServer::stop() {
@@ -1045,6 +1049,11 @@ UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
 bool StratumServer::setup() {
   if (upPoolHost_.size() == 0)
     return false;
+
+#ifdef _WIN32
+  WSADATA wsa_data;
+  WSAStartup(0x0201, &wsa_data);
+#endif
 
   base_ = event_base_new();
   if(!base_) {
@@ -1152,7 +1161,7 @@ void StratumServer::checkUpSessions() {
     // if upsession's socket error, it'll be removed and set to NULL
     if (upSessions_[i] != NULL) {
       if (upSessions_[i]->isAvailable() == true)
-      	continue;
+        continue;
       else
         removeUpConnection(upSessions_[i]);
     }
@@ -1173,7 +1182,13 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
 
   // can't alloc session Id
   if (server->sessionIDManager_.ifFull()) {
+
+#ifdef _WIN32
+    closesocket(fd);
+#else
     close(fd);
+#endif
+
     return;
   }
 
@@ -1187,7 +1202,13 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
   const int8_t upSessionIdx = server->findUpSessionIdx();
   if (upSessionIdx == -1) {
     LOG(ERROR) << "no available up session";
+
+#ifdef _WIN32
+    closesocket(fd);
+#else
     close(fd);
+#endif
+
     return;
   }
 

@@ -17,7 +17,11 @@
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <signal.h>
-#include <execinfo.h>
+
+#ifndef _WIN32
+ #include <execinfo.h>
+#endif
+
 #include <string>
 #include "gtest/gtest.h"
 
@@ -57,7 +61,12 @@ typedef char * CString;
 int main(int argc, char **argv) {
   signal(SIGSEGV, handler);
   signal(SIGFPE, handler);
+
+// Windows will not trigger SIGPIPE when 
+// sending data to a disconnected socket.
+#ifndef _WIN32
   signal(SIGPIPE, handler);
+#endif
 
 #if defined(SUPPORT_GLOG)
   // Initialize Google's logging library.

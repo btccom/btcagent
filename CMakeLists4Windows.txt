@@ -1,0 +1,65 @@
+cmake_minimum_required (VERSION 2.6)
+
+project (PoolAgent)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release
+        CACHE STRING "Set build type to Debug o Release (default Release)" FORCE)
+endif()
+
+IF(CMAKE_BUILD_TYPE MATCHES Debug)
+  message("Debug build.")
+ELSE()
+  message("Release build.")
+ENDIF()
+
+###
+# static linking VC++ runtime library
+###
+if(POOLAGENT__STATIC_LINKING_VC_LIB)
+  message("Static linking VC++ runtime library (/MT).")
+  
+  # debug mode
+  set(CompilerFlags CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG)
+  foreach(CompilerFlag ${CompilerFlags})
+    string(REPLACE "/MDd" "" ${CompilerFlag} "${${CompilerFlag}}")
+    string(REPLACE "/MD" "" ${CompilerFlag} "${${CompilerFlag}}")
+    set(${CompilerFlag} "${${CompilerFlag}} /MTd")
+    message("${CompilerFlag}=${${CompilerFlag}}")
+  endforeach()
+  
+  # release mode
+  set(CompilerFlags CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELEASE)
+  foreach(CompilerFlag ${CompilerFlags})
+    string(REPLACE "/MDd" "" ${CompilerFlag} "${${CompilerFlag}}")
+    string(REPLACE "/MD" "" ${CompilerFlag} "${${CompilerFlag}}")
+    set(${CompilerFlag} "${${CompilerFlag}} /MT")
+    message("${CompilerFlag}=${${CompilerFlag}}")
+  endforeach()
+else()
+  message("Dynamic linking VC++ runtime library (/MD).")
+  message("Use -DPOOLAGENT__STATIC_LINKING_VC_LIB=ON for static linking.")
+endif()
+
+SET(CMAKE_CXX_COMPILER_ARG1 "-std=c++98")
+SET(CMAKE_C_COMPILER_ARG1 "-std=c99")
+
+find_package(LibEvent)
+if(NOT LibEvent_FOUND)
+  message(FATAL_ERROR "libevent2 not found!")
+endif(NOT LibEvent_FOUND)
+
+include_directories(src test ${LIBEVENT_INCLUDE_DIR})
+set(THRID_LIBRARIES ${LIBEVENT_LIB})
+
+file(GLOB LIB_SOURCES src/*.cc src/*.c)
+add_library(btccomagent STATIC ${LIB_SOURCES})
+
+file(GLOB_RECURSE TEST_SOURCES test/*.cc)
+add_executable(unittest ${TEST_SOURCES})
+target_link_libraries(unittest btccomagent ws2_32 ${THRID_LIBRARIES})
+
+file(GLOB_RECURSE AGENT_SOURCES src/agent/*.cc src/win32/getopt/*.c)
+add_executable(agent ${AGENT_SOURCES})
+target_link_libraries(agent btccomagent ws2_32 ${THRID_LIBRARIES})
