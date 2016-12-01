@@ -14,9 +14,32 @@ ELSE()
   message("Release build.")
 ENDIF()
 
+
+###
+# Use IOCP (I/O Completion Port) replace select() for libevent
+###
+option(POOLAGENT__USE_IOCP
+  "Use IOCP (I/O Completion Port) replace select() for libevent" OFF)
+
+if(POOLAGENT__USE_IOCP)
+  message("Use IOCP (I/O Completion Port) for libevent")
+  set(CompilerFlags CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELEASE)
+  foreach(CompilerFlag ${CompilerFlags})
+    set(${CompilerFlag} "${${CompilerFlag}} /DUSE_IOCP")
+    message("${CompilerFlag}=${${CompilerFlag}}")
+  endforeach()
+else()
+  message("Use select() for libevent")
+  message("(-DPOOLAGENT__USE_IOCP=ON switching to IOCP)")
+endif()
+
+
 ###
 # static linking VC++ runtime library
 ###
+option(POOLAGENT__STATIC_LINKING_VC_LIB
+  "Static linking VC++ runtime library (/MT)" OFF)
+
 if(POOLAGENT__STATIC_LINKING_VC_LIB)
   message("Static linking VC++ runtime library (/MT).")
   
@@ -39,8 +62,9 @@ if(POOLAGENT__STATIC_LINKING_VC_LIB)
   endforeach()
 else()
   message("Dynamic linking VC++ runtime library (/MD).")
-  message("Use -DPOOLAGENT__STATIC_LINKING_VC_LIB=ON for static linking.")
+  message("(-DPOOLAGENT__STATIC_LINKING_VC_LIB=ON switching to static linking.)")
 endif()
+
 
 SET(CMAKE_CXX_COMPILER_ARG1 "-std=c++98")
 SET(CMAKE_C_COMPILER_ARG1 "-std=c99")

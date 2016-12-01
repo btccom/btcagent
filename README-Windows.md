@@ -48,6 +48,15 @@ start PoolAgent.sln
 
 Then build ```ALL_BUILD``` project in Visual Studio. ```build\Debug\agent.exe``` is the final product, it static linked with libevent. But by default, it dynamic linked with VC++ runtime library. You must install ```Visual C++ Redistributable for Visual Studio 20xx``` at another computers.
 
+There are ```btcagent``` specific Cmake variables (the values being the default):
+
+```
+# Static linking VC++ runtime library (/MT)
+POOLAGENT__STATIC_LINKING_VC_LIB:BOOL=OFF
+
+# Use IOCP (I/O Completion Port) replace select() for libevent
+POOLAGENT__USE_IOCP:BOOL=OFF
+```
 
 ## Static linking with VC++ runtime library
 
