@@ -32,7 +32,11 @@ The ```INSTALL``` project will install libevent to ```C:\Program Files (x86)\lib
 
 ### Glog
 
-Glog is disabled in Windows version. May it be available in future.
+GLog support is optional and testing for Win32 version. It cannot work with ```-DPOOLAGENT__STATIC_LINKING_VC_LIB=ON``` for my test.
+
+You can download & build it with ```google-glog.sln``` within the source code directory. And rename ```libglog.lib``` as ```glog.lib``` so CMake will find it. copy ```glob.lib``` to ```VS_install_dir\lib```, ```src/windows/glob``` to ```VS_install_dir\include```. At last, use ```cmake -DPOOLAGENT__USE_GLOG=ON ..``` for ```btcagent```. You cannot use ```-DPOOLAGENT__STATIC_LINKING_VC_LIB=ON``` at the same time, even if you build glog with ```/MT```. Or some symbols like ```std::ios_base``` will missing...
+
+If you have some advise for static linking VC++ runtime library with GLog, create an issue.
 
 
 ### btcagent
@@ -56,6 +60,9 @@ POOLAGENT__STATIC_LINKING_VC_LIB:BOOL=OFF
 
 # Use IOCP (I/O Completion Port) replace select() for libevent
 POOLAGENT__USE_IOCP:BOOL=OFF
+
+# Use GLog for logging replace stdout
+POOLAGENT__USE_GLOG:BOOL=OFF
 ```
 
 ## Static linking with VC++ runtime library
@@ -91,6 +98,13 @@ foreach(CompilerFlag ${CompilerFlags})
   message("${CompilerFlag}=${${CompilerFlag}}")
 endforeach()
 ```
+
+
+### GLog
+
+Build ```btcagent``` with GLog and static linking VC++ runtime library caused linking error. I don't know how to fix.
+
+If you have some advise for this, create an issue.
 
 
 ### btcagent
