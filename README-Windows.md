@@ -13,7 +13,7 @@ Add ```CmakeInstallDirectory\bin``` to ```PATH``` environment variable.
 
 ### libevent
 
-There is no cmake support for ```libevent-2.0.x-stable```. You have to build it by yourself if you want to stable version. It has a ```makefile.nmake``` but unfinished and not recommended by developers.
+```libevent-2.0.x-stable``` is no cmake support. You have to build it by yourself if you want to stable version. It has a ```makefile.nmake``` but unfinished and not recommended by developers.
 
 And ```libevent-2.1.x-rc``` has good support for cmake. You can open a ```cmd``` and ```cd``` to the source code directory, then run these command:
 
@@ -32,11 +32,21 @@ The ```INSTALL``` project will install libevent to ```C:\Program Files (x86)\lib
 
 ### Glog
 
-GLog support is optional and testing for Win32 version. It cannot work with ```-DPOOLAGENT__STATIC_LINKING_VC_LIB=ON``` for my test.
+Last release ```glog: 0.3.4``` has an issue for VS2015 that duplicate definition ```snprintf``` at src/windows/port.cc, comment needed if using VS2015. Even that, the test case crashed with an exception.
 
-You can download & build it with ```google-glog.sln``` within the source code directory. And rename ```libglog.lib``` as ```glog.lib``` so CMake will find it. copy ```glob.lib``` to ```VS_install_dir\VC\lib```, ```src/windows/glob``` to ```VS_install_dir\VC\include```. At last, use ```cmake -DPOOLAGENT__USE_GLOG=ON ..``` for ```btcagent```. You cannot use ```-DPOOLAGENT__STATIC_LINKING_VC_LIB=ON``` at the same time, even if you build glog with ```/MT```. Or some symbols like ```std::ios_base``` will missing...
+Recommended version is the master branch from github, it fix the issue. The build command with cmake is:
 
-If you have some advise for static linking VC++ runtime library with GLog, create an issue.
+```cmd
+git clone https://github.com/google/glog.git
+mkdir glog/build
+cd glog/build
+cmake ..
+start -G "Visual Studio 14 2015" google-glog.sln
+```
+
+Then build ```ALL_BUILD``` & ```INSTALL``` project with VS2015, then copy ```C:\Program Files (x86)\google-glog\include``` & ```C:\Program Files (x86)\google-glog\lib``` to ```VS_install_dir\VC\```.
+
+If you build with ```google-glog.sln``` in the project root directory, you have to copy ```libglog_static.lib``` to ```VS_install_dir\VC\lib``` and rename it to ```glog.lib``` so cmake can find it when build ```btcagent```. (It isn't recommended because of ```snprintf``` issue.)
 
 
 ### btcagent
@@ -72,9 +82,9 @@ For static linking with VC++ runtime library, we use ```/MT``` in the project's 
 All librarys the project reliant must linked with ```/MT``` or ```/MTd```, else some symbols will lost at the final linking.
 
 
-### libevent
+### libevent & GLog
 
-You can add there codes to ```CMakeLists.txt``` of ```libevent``` that modify the default ```/MD``` & ```/MDd``` property to ```/MT``` & ```/MTd```:
+You can add there codes to the end of ```CMakeLists.txt``` that modify the default ```/MD``` & ```/MDd``` property to ```/MT``` & ```/MTd```:
 
 ```cmake
 ###
@@ -99,12 +109,7 @@ foreach(CompilerFlag ${CompilerFlags})
 endforeach()
 ```
 
-
-### GLog
-
-Build ```btcagent``` with GLog and static linking VC++ runtime library caused linking error. I don't know how to fix.
-
-If you have some advise for this, create an issue.
+Then build as normal.
 
 
 ### btcagent
@@ -141,3 +146,9 @@ agent.exe -c agent_conf.json
 run without stdout:
 ```cmd
 agent.exe -c agent_conf.json > nul
+```
+
+run with GLog enabled:
+```cmd
+agent.exe -c agent_conf.json -l log
+```

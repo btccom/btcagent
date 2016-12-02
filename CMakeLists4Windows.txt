@@ -78,7 +78,7 @@ if(POOLAGENT__USE_GLOG)
   set(CompilerFlags CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG
                     CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELEASE)
   foreach(CompilerFlag ${CompilerFlags})
-    set(${CompilerFlag} "${${CompilerFlag}} /DSUPPORT_GLOG")
+    set(${CompilerFlag} "${${CompilerFlag}} /DGOOGLE_GLOG_DLL_DECL= /DSUPPORT_GLOG")
     message("${CompilerFlag}=${${CompilerFlag}}")
   endforeach()
 else()
