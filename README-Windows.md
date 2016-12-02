@@ -34,7 +34,7 @@ The ```INSTALL``` project will install libevent to ```C:\Program Files (x86)\lib
 
 GLog support is optional and testing for Win32 version. It cannot work with ```-DPOOLAGENT__STATIC_LINKING_VC_LIB=ON``` for my test.
 
-You can download & build it with ```google-glog.sln``` within the source code directory. And rename ```libglog.lib``` as ```glog.lib``` so CMake will find it. copy ```glob.lib``` to ```VS_install_dir\lib```, ```src/windows/glob``` to ```VS_install_dir\include```. At last, use ```cmake -DPOOLAGENT__USE_GLOG=ON ..``` for ```btcagent```. You cannot use ```-DPOOLAGENT__STATIC_LINKING_VC_LIB=ON``` at the same time, even if you build glog with ```/MT```. Or some symbols like ```std::ios_base``` will missing...
+You can download & build it with ```google-glog.sln``` within the source code directory. And rename ```libglog.lib``` as ```glog.lib``` so CMake will find it. copy ```glob.lib``` to ```VS_install_dir\VC\lib```, ```src/windows/glob``` to ```VS_install_dir\VC\include```. At last, use ```cmake -DPOOLAGENT__USE_GLOG=ON ..``` for ```btcagent```. You cannot use ```-DPOOLAGENT__STATIC_LINKING_VC_LIB=ON``` at the same time, even if you build glog with ```/MT```. Or some symbols like ```std::ios_base``` will missing...
 
 If you have some advise for static linking VC++ runtime library with GLog, create an issue.
 
