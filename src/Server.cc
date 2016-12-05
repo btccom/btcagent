@@ -29,6 +29,10 @@
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
 
+#if (defined _WIN32 && defined USE_IOCP)
+ #include <event2/thread.h>
+#endif
+
 static
 bool resolve(const string &host, struct in_addr *sin_addr) {
   struct evutil_addrinfo *ai = NULL;
@@ -1052,10 +1056,26 @@ bool StratumServer::setup() {
 
 #ifdef _WIN32
   WSADATA wsa_data;
-  WSAStartup(0x0201, &wsa_data);
+
+  if (WSAStartup(0x202, &wsa_data) == SOCKET_ERROR) {
+      LOG(ERROR) << "WSAStartup failed: " << WSAGetLastError();
+      return false;
+  }
+
+  #ifdef USE_IOCP
+    // use IOCP for Windows
+    evthread_use_windows_threads();
+    struct event_config *cfg = event_config_new();
+    event_config_set_flag(cfg, EVENT_BASE_FLAG_STARTUP_IOCP);
+    base_ = event_base_new_with_config(cfg);
+  #else
+    // use select() by default
+    base_ = event_base_new();
+  #endif
+#else
+  base_ = event_base_new();
 #endif
 
-  base_ = event_base_new();
   if(!base_) {
     LOG(ERROR) << "server: cannot create event base";
     return false;
