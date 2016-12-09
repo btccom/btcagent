@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
     string agentJsonStr((std::istreambuf_iterator<char>(agentConf)),
                         std::istreambuf_iterator<char>());
     if (!parseConfJson(agentJsonStr, listenIP, listenPort, poolConfs)) {
-      LOG(ERROR) << "parse json config file failure";
+      LOG(ERROR) << "parse json config file failure" << std::endl;
       return false;
     }
 
@@ -109,14 +109,14 @@ int main(int argc, char **argv) {
     }
 
     if (!gStratumServer->setup()) {
-      LOG(ERROR) << "setup failure";
+      LOG(ERROR) << "setup failure" << std::endl;
     } else {
       gStratumServer->run();
     }
     delete gStratumServer;
   }
   catch (std::exception & e) {
-    LOG(FATAL) << "exception: " << e.what();
+    LOG(FATAL) << "exception: " << e.what() << std::endl;
     return 1;
   }
 

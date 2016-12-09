@@ -47,7 +47,7 @@
 #if defined(SUPPORT_GLOG)
   #include <glog/logging.h>
 #else
-  #define LOG(x) std::cout << std::endl
+  #define LOG(x) std::cout
 
   #ifdef NDEBUG
     // Disable debug output with Release build.
@@ -55,7 +55,7 @@
     // output streaming expression no matter a line break.
     #define DLOG(x) if(0)std::cout
   #else
-    #define DLOG(x) std::cout << std::endl
+    #define DLOG(x) std::cout
   #endif
 #endif
 
