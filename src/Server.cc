@@ -1282,6 +1282,8 @@ void StratumServer::addDownConnection(StratumSession *conn) {
   assert(downSessions_[conn->sessionId_] == NULL);
   downSessions_  [conn->sessionId_] = conn;
   upSessionCount_[conn->upSessionIdx_]++;
+
+  LOG(INFO) << "downsocket connected, sessionId: " << conn->sessionId_ << std::endl;
 }
 
 void StratumServer::removeDownConnection(StratumSession *downconn) {
