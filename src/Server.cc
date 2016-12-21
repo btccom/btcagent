@@ -28,6 +28,7 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
+#include <event2/util.h>
 
 #if (defined _WIN32 && defined USE_IOCP)
  #include <event2/thread.h>
@@ -61,7 +62,7 @@ bool resolve(const string &host, struct in_addr *sin_addr) {
     *sin_addr = sin->sin_addr;
 
     char ipStr[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(sin->sin_addr), ipStr, INET_ADDRSTRLEN);
+    evutil_inet_ntop(AF_INET, &(sin->sin_addr), ipStr, INET_ADDRSTRLEN);
     LOG(INFO) << "resolve host: " << host << ", ip: " << ipStr << std::endl;
   } else if (ai->ai_family == AF_INET6) {
     // not support yet
@@ -1125,7 +1126,7 @@ bool StratumServer::setup() {
   sin.sin_family = AF_INET;
   sin.sin_port   = htons(listenPort_);
   sin.sin_addr.s_addr = htonl(INADDR_ANY);
-  if (inet_pton(AF_INET, listenIP_.c_str(), &sin.sin_addr) == 0) {
+  if (evutil_inet_pton(AF_INET, listenIP_.c_str(), &sin.sin_addr) == 0) {
     LOG(ERROR) << "invalid ip: " << listenIP_ << std::endl;
     return false;
   }
