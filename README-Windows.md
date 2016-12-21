@@ -123,6 +123,15 @@ cmake -DPOOLAGENT__STATIC_LINKING_VC_LIB=ON -G "Visual Studio 14 2015" ..
 start PoolAgent.sln
 ```
 
+## Support Windows XP
+
+Simply add an arg ```-T v140_xp``` to Cmake if build with VS2015.
+
+```cmd
+cmake -G "Visual Studio 14 2015" -T v140_xp ..
+```
+
+Libevent and GLog need the arg too.
 
 ## Configure & Run
 
