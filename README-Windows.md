@@ -146,6 +146,20 @@ Edit ```CMakeLists.txt``` and comment the two lines:
 
 And rebuild with clear build dir.
 
+## 32bit or 64bit
+
+Default is 32bit:
+
+```cmd
+cmake -G "Visual Studio 14 2015" ..
+```
+
+Append ```Win64``` at generator for 64bit:
+
+```cmd
+cmake -G "Visual Studio 14 2015 Win64" ..
+```
+
 ## Configure & Run
 
 config json file example:
