@@ -1316,7 +1316,21 @@ void StratumServer::addUpConnection(UpStratumClient *conn) {
 
 void StratumServer::removeUpConnection(UpStratumClient *upconn) {
   DLOG(INFO) << "remove up connection, idx: " << (int32_t)(upconn->idx_) << std::endl;
-  assert(upSessions_[upconn->idx_] != NULL);
+  
+  // It will be NULL if the OS (not only Windows but also Linux) has
+  // no network device or just no available network access.
+  // The situation often occurs when Wifi users lost their connection.
+  // Or each time while Windows XP startup - it will autostart every
+  // program before init it's network.
+  // We'd better tender exit for the situation or the process will crash
+  // and Windows XP will popup a message box that block any action (such as
+  // auto restart) from it's daemon process.
+  //assert(upSessions_[upconn->idx_] != NULL);
+
+  if (upSessions_[upconn->idx_] == NULL) {
+    LOG(ERROR) << "network unavailable" << std::endl;
+    exit(1);
+  }
 
   // remove down session which belong to this up connection
   for (size_t i = 0; i < downSessions_.size(); i++) {
