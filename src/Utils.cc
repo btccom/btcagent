@@ -91,7 +91,7 @@ bool parseConfJson(const string &jsonStr,
 
   // assume the top-level element is an object
   if (r < 1 || t[0].type != JSMN_OBJECT) {
-    LOG(ERROR) << "json decode failure";
+    LOG(ERROR) << "json decode failure" << std::endl;
     return false;
   }
 
@@ -154,7 +154,7 @@ const char *splitNotify(const string &line) {
     }
   }
   if (pch == NULL) {
-    LOG(ERROR) << "invalid mining.notify: " << line;
+    LOG(ERROR) << "invalid mining.notify: " << line << std::endl;
     return NULL;
   }
   return pch;

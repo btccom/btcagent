@@ -28,6 +28,7 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
+#include <event2/util.h>
 
 #if (defined _WIN32 && defined USE_IOCP)
  #include <event2/thread.h>
@@ -47,11 +48,11 @@ bool resolve(const string &host, struct in_addr *sin_addr) {
   // TODO: use non-blocking to resolve hostname
   int err = evutil_getaddrinfo(host.c_str(), NULL, &hints_in, &ai);
   if (err != 0) {
-    LOG(ERROR) << "evutil_getaddrinfo err: " << err << ", " << evutil_gai_strerror(err);
+    LOG(ERROR) << "evutil_getaddrinfo err: " << err << ", " << evutil_gai_strerror(err) << std::endl;
     return false;
   }
   if (ai == NULL) {
-    LOG(ERROR) << "evutil_getaddrinfo res is null";
+    LOG(ERROR) << "evutil_getaddrinfo res is null" << std::endl;
     return false;
   }
 
@@ -61,11 +62,11 @@ bool resolve(const string &host, struct in_addr *sin_addr) {
     *sin_addr = sin->sin_addr;
 
     char ipStr[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(sin->sin_addr), ipStr, INET_ADDRSTRLEN);
-    LOG(INFO) << "resolve host: " << host << ", ip: " << ipStr;
+    evutil_inet_ntop(AF_INET, &(sin->sin_addr), ipStr, INET_ADDRSTRLEN);
+    LOG(INFO) << "resolve host: " << host << ", ip: " << ipStr << std::endl;
   } else if (ai->ai_family == AF_INET6) {
     // not support yet
-    LOG(ERROR) << "not support ipv6 yet";
+    LOG(ERROR) << "not support ipv6 yet" << std::endl;
     return false;
   }
   evutil_freeaddrinfo(ai);
@@ -360,7 +361,7 @@ void StratumMessage::parse() {
 
   r_ = jsmn_parse(&p, content_.c_str(), content_.length(), t_, sizeof(t_)/sizeof(t_[0]));
   if (r_ < 0) {
-    LOG(ERROR) << "failed to parse JSON: " << r_;
+    LOG(ERROR) << "failed to parse JSON: " << r_ << std::endl;
     return;
   }
 
@@ -535,7 +536,7 @@ UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
 
   lastJobReceivedTime_ = 0u;
 
-  DLOG(INFO) << "idx_: " << (int32_t)idx_;
+  DLOG(INFO) << "idx_: " << (int32_t)idx_ << std::endl;
 }
 
 UpStratumClient::~UpStratumClient() {
@@ -592,7 +593,7 @@ bool UpStratumClient::handleMessage() {
 
       default:
         LOG(ERROR) << "received unknown ex-message, type: " << buf[1]
-        << ", len: " << exMessageLen;
+        << ", len: " << exMessageLen << std::endl;
         break;
     }
     return true;  // read message success, return true
@@ -626,13 +627,13 @@ void UpStratumClient::handleExMessage_MiningSetDiff(const string *exMessage) {
   }
 
   LOG(INFO) << "up[" << (int32_t)idx_ << "] CMD_MINING_SET_DIFF, diff: "
-  << diff << ", sessions count: " << count;
+  << diff << ", sessions count: " << count << std::endl;
 }
 
 void UpStratumClient::sendData(const char *data, size_t len) {
   // add data to a bufferevent’s output buffer
   bufferevent_write(bev_, data, len);
-//  DLOG(INFO) << "UpStratumClient send(" << len << "): " << data;
+//  DLOG(INFO) << "UpStratumClient send(" << len << "): " << data << std::endl;
 }
 
 void UpStratumClient::sendMiningNotify(const string &line) {
@@ -650,11 +651,11 @@ void UpStratumClient::convertMiningNotifyStr(const string &line) {
 }
 
 void UpStratumClient::handleStratumMessage(const string &line) {
-  DLOG(INFO) << "UpStratumClient recv(" << line.size() << "): " << line;
+  DLOG(INFO) << "UpStratumClient recv(" << line.size() << "): " << line << std::endl;
 
   StratumMessage smsg(line);
   if (!smsg.isValid()) {
-    LOG(ERROR) << "decode line fail, not a json string";
+    LOG(ERROR) << "decode line fail, not a json string" << std::endl;
     return;
   }
 
@@ -686,7 +687,7 @@ void UpStratumClient::handleStratumMessage(const string &line) {
       << ", jobId: "    << sjob.jobId_
       << ", prevhash: " << sjob.prevHash_
       << ", version: "  << sjob.version_
-      << ", clean: "    << (sjob.isClean_ ? "true" : "false");
+      << ", clean: "    << (sjob.isClean_ ? "true" : "false") << std::endl;
     }
     else if (smsg.parseMiningSetDifficulty(&difficulty)) {
       //
@@ -707,15 +708,15 @@ void UpStratumClient::handleStratumMessage(const string &line) {
     uint32_t nonce1 = 0u;
     int32_t n2size = 0;
     if (!smsg.getExtraNonce1AndExtraNonce2Size(&nonce1, &n2size)) {
-      LOG(FATAL) << "get extra nonce1 and extra nonce2 failure";
+      LOG(FATAL) << "get extra nonce1 and extra nonce2 failure" << std::endl;
       return;
     }
     extraNonce1_ = nonce1;
-    DLOG(INFO) << "extraNonce1 / SessionID: " << extraNonce1_;
+    DLOG(INFO) << "extraNonce1 / SessionID: " << extraNonce1_ << std::endl;
 
     // check extra nonce2's size, MUST be 8 bytes
     if (n2size != 8) {
-      LOG(FATAL) << "extra nonce2's size is NOT 8 bytes";
+      LOG(FATAL) << "extra nonce2's size is NOT 8 bytes" << std::endl;
       return;
     }
 
@@ -737,7 +738,7 @@ void UpStratumClient::handleStratumMessage(const string &line) {
     //
     state_ = UP_AUTHENTICATED;  // authorize successful
     LOG(INFO) << "auth success, name: \"" << userName_
-    << "\", extraNonce1: " << extraNonce1_;
+    << "\", extraNonce1: " << extraNonce1_ << std::endl;
     return;
   }
 }
@@ -784,7 +785,7 @@ void StratumSession::setReadTimeout(const int32_t timeout) {
 void StratumSession::sendData(const char *data, size_t len) {
   // add data to a bufferevent’s output buffer
   bufferevent_write(bev_, data, len);
-  DLOG(INFO) << "send(" << len << "): " << data;
+  DLOG(INFO) << "send(" << len << "): " << data << std::endl;
 }
 
 void StratumSession::recvData(struct evbuffer *buf) {
@@ -798,11 +799,11 @@ void StratumSession::recvData(struct evbuffer *buf) {
 }
 
 void StratumSession::handleStratumMessage(const string &line) {
-  DLOG(INFO) << "recv(" << line.size() << "): " << line;
+  DLOG(INFO) << "recv(" << line.size() << "): " << line << std::endl;
 
   StratumMessage smsg(line);
   if (!smsg.isValid()) {
-    LOG(ERROR) << "decode line fail, not a json string";
+    LOG(ERROR) << "decode line fail, not a json string" << std::endl;
     return;
   }
 
@@ -855,7 +856,7 @@ void StratumSession::handleRequest(const string &idStr,
     handleRequest_Authorize(idStr, smsg);
   } else {
     // unrecognised method, just ignore it
-    LOG(WARNING) << "unrecognised method: \"" << method << "\"";
+    LOG(WARNING) << "unrecognised method: \"" << method << "\"" << std::endl;
   }
 }
 
@@ -1012,7 +1013,7 @@ void StratumServer::stop() {
   if (!running_)
     return;
 
-  LOG(INFO) << "stop tcp server event loop";
+  LOG(INFO) << "stop tcp server event loop" << std::endl;
   running_ = false;
   event_base_loopexit(base_, NULL);
 }
@@ -1023,7 +1024,7 @@ void StratumServer::addUpPool(const string &host, const uint16_t port,
   upPoolPort_    .push_back(port);
   upPoolUserName_.push_back(upPoolUserName);
 
-  LOG(INFO) << "add pool: " << host << ":" << port << ", username: " << upPoolUserName;
+  LOG(INFO) << "add pool: " << host << ":" << port << ", username: " << upPoolUserName << std::endl;
 }
 
 UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
@@ -1042,7 +1043,7 @@ UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
       continue;
     }
     LOG(INFO) << "success connect[" << (int32_t)up->idx_ << "]: " << upPoolHost_[i] << ":"
-    << upPoolPort_[i] << ", username: " << upPoolUserName_[i];
+    << upPoolPort_[i] << ", username: " << upPoolUserName_[i] << std::endl;
 
     return up;  // connect success
   }
@@ -1058,7 +1059,7 @@ bool StratumServer::setup() {
   WSADATA wsa_data;
 
   if (WSAStartup(0x202, &wsa_data) == SOCKET_ERROR) {
-      LOG(ERROR) << "WSAStartup failed: " << WSAGetLastError();
+      LOG(ERROR) << "WSAStartup failed: " << WSAGetLastError() << std::endl;
       return false;
   }
 
@@ -1077,7 +1078,7 @@ bool StratumServer::setup() {
 #endif
 
   if(!base_) {
-    LOG(ERROR) << "server: cannot create event base";
+    LOG(ERROR) << "server: cannot create event base" << std::endl;
     return false;
   }
 
@@ -1125,8 +1126,8 @@ bool StratumServer::setup() {
   sin.sin_family = AF_INET;
   sin.sin_port   = htons(listenPort_);
   sin.sin_addr.s_addr = htonl(INADDR_ANY);
-  if (inet_pton(AF_INET, listenIP_.c_str(), &sin.sin_addr) == 0) {
-    LOG(ERROR) << "invalid ip: " << listenIP_;
+  if (evutil_inet_pton(AF_INET, listenIP_.c_str(), &sin.sin_addr) == 0) {
+    LOG(ERROR) << "invalid ip: " << listenIP_ << std::endl;
     return false;
   }
 
@@ -1138,7 +1139,7 @@ bool StratumServer::setup() {
                                       -1,
                                       (struct sockaddr*)&sin, sizeof(sin));
   if(!listener_) {
-    LOG(ERROR) << "cannot create listener: " << listenIP_ << ":" << listenPort_;
+    LOG(ERROR) << "cannot create listener: " << listenIP_ << ":" << listenPort_ << std::endl;
     return false;
   }
   return true;
@@ -1214,14 +1215,14 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
 
   bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
   if(bev == NULL) {
-    LOG(ERROR) << "bufferevent_socket_new fail";
+    LOG(ERROR) << "bufferevent_socket_new fail" << std::endl;
     server->stop();
     return;
   }
 
   const int8_t upSessionIdx = server->findUpSessionIdx();
   if (upSessionIdx == -1) {
-    LOG(ERROR) << "no available up session";
+    LOG(ERROR) << "no available up session" << std::endl;
 
 #ifdef _WIN32
     closesocket(fd);
@@ -1259,19 +1260,19 @@ void StratumServer::downEventCallback(struct bufferevent *bev,
   assert((events & BEV_EVENT_CONNECTED) != BEV_EVENT_CONNECTED);
 
   if (events & BEV_EVENT_EOF) {
-    LOG(INFO) << "downsocket closed, sessionId: " << conn->sessionId_;
+    LOG(INFO) << "downsocket closed, sessionId: " << conn->sessionId_ << std::endl;
   }
   else if (events & BEV_EVENT_ERROR) {
     LOG(INFO) << "got an error on the downsocket, sessionId: " << conn->sessionId_
-    << ", err: " << evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR());
+    << ", err: " << evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()) << std::endl;
   }
   else if (events & BEV_EVENT_TIMEOUT) {
     LOG(INFO) << "downsocket read/write timeout, events: " << events
-    << ", sessionId:" << conn->sessionId_;
+    << ", sessionId:" << conn->sessionId_ << std::endl;
   }
   else {
     LOG(ERROR) << "unhandled downsocket events: " << events
-    << ", sessionId:" << conn->sessionId_;
+    << ", sessionId:" << conn->sessionId_ << std::endl;
   }
   server->removeDownConnection(conn);
 }
@@ -1282,6 +1283,8 @@ void StratumServer::addDownConnection(StratumSession *conn) {
   assert(downSessions_[conn->sessionId_] == NULL);
   downSessions_  [conn->sessionId_] = conn;
   upSessionCount_[conn->upSessionIdx_]++;
+
+  LOG(INFO) << "downsocket connected, sessionId: " << conn->sessionId_ << std::endl;
 }
 
 void StratumServer::removeDownConnection(StratumSession *downconn) {
@@ -1305,15 +1308,29 @@ void StratumServer::upReadCallback(struct bufferevent *bev, void *ptr) {
 }
 
 void StratumServer::addUpConnection(UpStratumClient *conn) {
-  DLOG(INFO) << "add up connection, idx: " << (int32_t)(conn->idx_);
+  DLOG(INFO) << "add up connection, idx: " << (int32_t)(conn->idx_) << std::endl;
   assert(upSessions_[conn->idx_] == NULL);
 
   upSessions_[conn->idx_] = conn;
 }
 
 void StratumServer::removeUpConnection(UpStratumClient *upconn) {
-  DLOG(INFO) << "remove up connection, idx: " << (int32_t)(upconn->idx_);
-  assert(upSessions_[upconn->idx_] != NULL);
+  DLOG(INFO) << "remove up connection, idx: " << (int32_t)(upconn->idx_) << std::endl;
+  
+  // It will be NULL if the OS (not only Windows but also Linux) has
+  // no network device or just no available network access.
+  // The situation often occurs when Wifi users lost their connection.
+  // Or each time while Windows XP startup - it will autostart every
+  // program before init it's network.
+  // We'd better tender exit for the situation or the process will crash
+  // and Windows XP will popup a message box that block any action (such as
+  // auto restart) from it's daemon process.
+  //assert(upSessions_[upconn->idx_] != NULL);
+
+  if (upSessions_[upconn->idx_] == NULL) {
+    LOG(ERROR) << "network unavailable" << std::endl;
+    exit(1);
+  }
 
   // remove down session which belong to this up connection
   for (size_t i = 0; i < downSessions_.size(); i++) {
@@ -1346,17 +1363,17 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
   }
 
   if (events & BEV_EVENT_EOF) {
-    LOG(INFO) << "upsession closed";
+    LOG(INFO) << "upsession closed" << std::endl;
   }
   else if (events & BEV_EVENT_ERROR) {
     LOG(INFO) << "got an error on the upsession: "
-    << evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR());
+    << evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()) << std::endl;
   }
   else if (events & BEV_EVENT_TIMEOUT) {
-    LOG(INFO) << "upsession read/write timeout, events: " << events;
+    LOG(INFO) << "upsession read/write timeout, events: " << events << std::endl;
   }
   else {
-    LOG(ERROR) << "unhandled upsession events: " << events;
+    LOG(ERROR) << "unhandled upsession events: " << events << std::endl;
   }
 
   server->removeUpConnection(up);

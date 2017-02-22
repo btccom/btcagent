@@ -123,6 +123,42 @@ cmake -DPOOLAGENT__STATIC_LINKING_VC_LIB=ON -G "Visual Studio 14 2015" ..
 start PoolAgent.sln
 ```
 
+## Support Windows XP
+
+Simply add an arg ```-T v140_xp``` to Cmake if build with VS2015.
+
+```cmd
+cmake -G "Visual Studio 14 2015" -T v140_xp ..
+```
+
+Libevent and GLog need the arg too.
+
+### libevent
+
+XP has not ```inet_ntop()``` and ```inet_pton()``` so must disable them or a "endpoint not found" will trigger when running.
+
+Edit ```CMakeLists.txt``` and comment the two lines:
+
+```cmake
+#CHECK_FUNCTION_EXISTS_EX(inet_ntop EVENT__HAVE_INET_NTOP)
+#CHECK_FUNCTION_EXISTS_EX(inet_pton EVENT__HAVE_INET_PTON)
+```
+
+And rebuild with clear build dir.
+
+## 32bit or 64bit
+
+Default is 32bit:
+
+```cmd
+cmake -G "Visual Studio 14 2015" ..
+```
+
+Append ```Win64``` at generator for 64bit:
+
+```cmd
+cmake -G "Visual Studio 14 2015 Win64" ..
+```
 
 ## Configure & Run
 
