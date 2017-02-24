@@ -1250,7 +1250,7 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
   
   // get source IP address
   char saddrBuffer[INET_ADDRSTRLEN];
-  inet_ntop(AF_INET, &conn->saddr_, saddrBuffer, INET_ADDRSTRLEN);
+  evutil_inet_ntop(AF_INET, &conn->saddr_, saddrBuffer, INET_ADDRSTRLEN);
   
   LOG(INFO) << "miner connected, sessionId: " << conn->sessionId_ << ", IP: " << saddrBuffer << std::endl;
 }
@@ -1269,7 +1269,7 @@ void StratumServer::downEventCallback(struct bufferevent *bev,
   
   // get source IP address
   char saddrBuffer[INET_ADDRSTRLEN];
-  inet_ntop(AF_INET, &conn->saddr_, saddrBuffer, INET_ADDRSTRLEN);
+  evutil_inet_ntop(AF_INET, &conn->saddr_, saddrBuffer, INET_ADDRSTRLEN);
 
   if (events & BEV_EVENT_EOF) {
     LOG(INFO) << "miner disconnected, sessionId: " << conn->sessionId_ << ", IP: " << saddrBuffer << std::endl;
