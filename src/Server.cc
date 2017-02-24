@@ -759,9 +759,10 @@ bool UpStratumClient::isAvailable() {
 ////////////////////////////////// StratumSession //////////////////////////////
 StratumSession::StratumSession(const int8_t upSessionIdx,
                                const uint16_t sessionId,
-                               struct bufferevent *bev, StratumServer *server)
+                               struct bufferevent *bev, StratumServer *server,
+                               struct in_addr saddr)
 : state_(DOWN_CONNECTED), minerAgent_(NULL), upSessionIdx_(upSessionIdx),
-sessionId_(sessionId), bev_(bev), server_(server)
+sessionId_(sessionId), bev_(bev), server_(server), saddr_(saddr)
 {
   inBuf_ = evbuffer_new();
   assert(inBuf_ != NULL);
@@ -1236,7 +1237,8 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
   uint16_t sessionId = 0u;
   server->sessionIDManager_.allocSessionId(&sessionId);
 
-  StratumSession *conn = new StratumSession(upSessionIdx, sessionId, bev, server);
+  StratumSession *conn = new StratumSession(upSessionIdx, sessionId, bev, server,
+                                            ((struct sockaddr_in *)saddr)->sin_addr);
   bufferevent_setcb(bev,
                     StratumServer::downReadCallback, NULL,
                     StratumServer::downEventCallback, (void*)conn);
@@ -1245,6 +1247,12 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
   bufferevent_enable(bev, EV_READ|EV_WRITE);
 
   server->addDownConnection(conn);
+  
+  // get source IP address
+  char saddrBuffer[INET_ADDRSTRLEN];
+  inet_ntop(AF_INET, &conn->saddr_, saddrBuffer, INET_ADDRSTRLEN);
+  
+  LOG(INFO) << "miner connected, sessionId: " << conn->sessionId_ << ", IP: " << saddrBuffer << std::endl;
 }
 
 void StratumServer::downReadCallback(struct bufferevent *bev, void *ptr) {
@@ -1258,21 +1266,25 @@ void StratumServer::downEventCallback(struct bufferevent *bev,
 
   // should not be 'BEV_EVENT_CONNECTED'
   assert((events & BEV_EVENT_CONNECTED) != BEV_EVENT_CONNECTED);
+  
+  // get source IP address
+  char saddrBuffer[INET_ADDRSTRLEN];
+  inet_ntop(AF_INET, &conn->saddr_, saddrBuffer, INET_ADDRSTRLEN);
 
   if (events & BEV_EVENT_EOF) {
-    LOG(INFO) << "downsocket closed, sessionId: " << conn->sessionId_ << std::endl;
+    LOG(INFO) << "miner disconnected, sessionId: " << conn->sessionId_ << ", IP: " << saddrBuffer << std::endl;
   }
   else if (events & BEV_EVENT_ERROR) {
-    LOG(INFO) << "got an error on the downsocket, sessionId: " << conn->sessionId_
+    LOG(INFO) << "got an error from the miner, sessionId: " << conn->sessionId_ << ", IP: " << saddrBuffer 
     << ", err: " << evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()) << std::endl;
   }
   else if (events & BEV_EVENT_TIMEOUT) {
-    LOG(INFO) << "downsocket read/write timeout, events: " << events
-    << ", sessionId:" << conn->sessionId_ << std::endl;
+    LOG(INFO) << "read/write from the miner timeout, events: " << events
+    << ", sessionId:" << conn->sessionId_ << ", IP: " << saddrBuffer << std::endl;
   }
   else {
-    LOG(ERROR) << "unhandled downsocket events: " << events
-    << ", sessionId:" << conn->sessionId_ << std::endl;
+    LOG(ERROR) << "unhandled event from the miner: " << events
+    << ", sessionId:" << conn->sessionId_ << ", IP: " << saddrBuffer << std::endl;
   }
   server->removeDownConnection(conn);
 }
@@ -1283,8 +1295,6 @@ void StratumServer::addDownConnection(StratumSession *conn) {
   assert(downSessions_[conn->sessionId_] == NULL);
   downSessions_  [conn->sessionId_] = conn;
   upSessionCount_[conn->upSessionIdx_]++;
-
-  LOG(INFO) << "downsocket connected, sessionId: " << conn->sessionId_ << std::endl;
 }
 
 void StratumServer::removeDownConnection(StratumSession *downconn) {

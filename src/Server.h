@@ -364,11 +364,13 @@ public:
   uint16_t sessionId_;
   struct bufferevent *bev_;
   StratumServer *server_;
+  struct in_addr saddr_;
 
 
 public:
   StratumSession(const int8_t upSessionIdx, const uint16_t sessionId,
-                 struct bufferevent *bev, StratumServer *server);
+                 struct bufferevent *bev, StratumServer *server,
+                 struct in_addr saddr);
   ~StratumSession();
 
   void recvData(struct evbuffer *buf);
