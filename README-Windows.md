@@ -73,6 +73,9 @@ POOLAGENT__USE_IOCP:BOOL=OFF
 
 # Use GLog for logging replace stdout
 POOLAGENT__USE_GLOG:BOOL=OFF
+
+# Print logs to stdout with files
+POOLAGENT__GLOG_TO_STDOUT:BOOL=OFF
 ```
 
 ## Static linking with VC++ runtime library

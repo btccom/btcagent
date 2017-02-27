@@ -86,6 +86,25 @@ else()
   message("(-DPOOLAGENT__USE_GLOG=ON switching to GLog)")
 endif()
 
+###
+# Print logs to stdout with files
+###
+option(POOLAGENT__GLOG_TO_STDOUT
+  "Print logs to stdout with files" OFF)
+
+if(POOLAGENT__GLOG_TO_STDOUT)
+  message("-- Print logs to stdout with files")
+  set(CompilerFlags CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG
+                    CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELEASE)
+  foreach(CompilerFlag ${CompilerFlags})
+    set(${CompilerFlag} "${${CompilerFlag}} /DGLOG_TO_STDOUT")
+    message("${CompilerFlag}=${${CompilerFlag}}")
+  endforeach()
+else()
+  message("-- Only logs to file")
+  message("(-DPOOLAGENT__GLOG_TO_STDOUT=ON printing logs to stdout with files)")
+endif()
+
 
 SET(CMAKE_CXX_COMPILER_ARG1 "-std=c++98")
 SET(CMAKE_C_COMPILER_ARG1 "-std=c99")

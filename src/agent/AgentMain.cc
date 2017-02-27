@@ -20,6 +20,7 @@
 
 #include <fstream>
 #include <streambuf>
+#include "Utils.h"
 
 #include "Server.h"
 
@@ -81,6 +82,13 @@ int main(int argc, char **argv) {
   FLAGS_max_log_size = 10;  // max log file size 10 MB
   FLAGS_logbuflevel = -1;
   FLAGS_stop_logging_if_full_disk = true;
+
+ #if defined(GLOG_TO_STDOUT)
+  // Print logs to stdout with glog
+  GLogToStdout glogToStdout;
+  google::AddLogSink(&glogToStdout);
+ #endif
+
 #endif
 
   signal(SIGTERM, handler);

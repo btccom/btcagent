@@ -68,6 +68,20 @@ using  std::vector;
 //
 #define BTCCOM_MINER_AGENT   "btccom-agent/0.1"
 
+#if defined(SUPPORT_GLOG) && defined(GLOG_TO_STDOUT)
+// Print logs to stdout with glog
+class GLogToStdout : public google::LogSink {
+public:
+    virtual void send(google::LogSeverity severity, const char* full_filename,
+        const char* base_filename, int line,
+        const struct ::tm* tm_time,
+        const char* message, size_t message_len);
+
+    virtual std::string ToString(google::LogSeverity severity, const char* file, int line,
+        const struct ::tm* tm_time,
+        const char* message, size_t message_len);
+};
+#endif
 
 class Strings {
 public:
