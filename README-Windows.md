@@ -40,8 +40,8 @@ Recommended version is the master branch from github, it fix the issue. The buil
 git clone https://github.com/google/glog.git
 mkdir glog/build
 cd glog/build
-cmake ..
-start -G "Visual Studio 14 2015" google-glog.sln
+cmake -G "Visual Studio 14 2015" ..
+start google-glog.sln
 ```
 
 Then build ```ALL_BUILD``` & ```INSTALL``` project with VS2015, then copy ```C:\Program Files (x86)\google-glog\include``` & ```C:\Program Files (x86)\google-glog\lib``` to ```VS_install_dir\VC\```.
