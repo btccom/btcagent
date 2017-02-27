@@ -1373,17 +1373,17 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
   }
 
   if (events & BEV_EVENT_EOF) {
-    LOG(INFO) << "upsession closed" << std::endl;
+    LOG(INFO) << "pool server closed the connection" << std::endl;
   }
   else if (events & BEV_EVENT_ERROR) {
-    LOG(INFO) << "got an error on the upsession: "
+    LOG(INFO) << "got an error from the pool server: "
     << evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()) << std::endl;
   }
   else if (events & BEV_EVENT_TIMEOUT) {
-    LOG(INFO) << "upsession read/write timeout, events: " << events << std::endl;
+    LOG(INFO) << "read/write from pool server timeout, events: " << events << std::endl;
   }
   else {
-    LOG(ERROR) << "unhandled upsession events: " << events << std::endl;
+    LOG(ERROR) << "unhandled events from pool server: " << events << std::endl;
   }
 
   server->removeUpConnection(up);
