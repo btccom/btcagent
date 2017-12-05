@@ -670,11 +670,11 @@ void UpStratumClient::handleStratumMessage(const string &line) {
       //
       convertMiningNotifyStr(line);  // convert mining.notify string
       sendMiningNotify(line);        // send stratum job to all miners
-
-      latestJobId_[1]      = latestJobId_[2];
-      latestJobGbtTime_[1] = latestJobGbtTime_[2];
+     
       latestJobId_[0]      = latestJobId_[1];
       latestJobGbtTime_[0] = latestJobGbtTime_[1];
+      latestJobId_[1]      = latestJobId_[2];
+      latestJobGbtTime_[1] = latestJobGbtTime_[2];
 
       // the jobId always between [0, 9]
       latestJobId_[2]      = (uint8_t)sjob.jobId_;
