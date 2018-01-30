@@ -96,6 +96,14 @@ string getWorkerName(const string &fullName) {
   return fullName.substr(pos + 1);  // not include '.'
 }
 
+static
+string getUserName(const string &fullName) {
+  size_t pos = fullName.find(".");
+  if (pos == fullName.npos) {
+    return "";
+  }
+  return fullName.substr(0, pos);  // not include '.'
+}
 
 //////////////////////////////// StratumError ////////////////////////////////
 const char * StratumError::toString(int err) {
@@ -597,6 +605,7 @@ bool UpStratumClient::handleMessage() {
   // stratum message
   string line;
   if (tryReadLine(line, inBuf_)) {
+    DLOG(INFO) << "Try to read line : " << line << "\n";
     handleStratumMessage(line);
     return true;
   }
@@ -722,6 +731,7 @@ void UpStratumClient::handleStratumMessage(const string &line) {
     string s = Strings::Format("{\"id\": 1, \"method\": \"mining.authorize\","
                                "\"params\": [\"%s\", \"\"]}\n",
                                userName_.c_str());
+    DLOG(INFO) << "From pool authorize information " << s << "\n";
     sendData(s);
     return;
   }
@@ -732,7 +742,7 @@ void UpStratumClient::handleStratumMessage(const string &line) {
     // {"error": null, "id": 2, "result": true}
     //
     state_ = UP_AUTHENTICATED;  // authorize successful
-    LOG(INFO) << "auth success, name: \"" << userName_
+    DLOG(INFO) << "auth success, name: \"" << userName_
     << "\", extraNonce1: " << extraNonce1_;
     return;
   }
@@ -840,6 +850,7 @@ void StratumSession::responseTrue(const string &idStr) {
 
 void StratumSession::handleRequest(const string &idStr,
                                    const StratumMessage &smsg) {
+  DLOG(INFO) << "Start handle the DownSession";
   const string method = smsg.getMethod();
   if (method == "mining.submit") {  // most of requests are 'mining.submit'
     handleRequest_Submit(idStr, smsg);
@@ -875,6 +886,7 @@ void StratumSession::handleRequest_Subscribe(const string &idStr,
   if (!smsg.parseMiningSubscribe(minerAgent)) {
     minerAgent = "unknown";
   }
+  DLOG(INFO) << "Subcribe Process, minerAgent is " << minerAgent;
 
   // 30 is max length for miner agent
   minerAgent_ = strdup(minerAgent.substr(0, 30).c_str());
@@ -915,30 +927,55 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
     return;
   }
 
-  workerName = getWorkerName(fullWorkerName);  // split by '.'
-  if (workerName.empty())
-    workerName = DEFAULT_WORKER_NAME;
+  workerName_ = getWorkerName(fullWorkerName);  // split by '.'
+  if (workerName_.empty())
+    workerName_ = DEFAULT_WORKER_NAME;
+  DLOG(INFO) << "Authorize WorkName is " << workerName_ << "\n";
 
-  // auth success
-  responseTrue(idStr);
-  state_ = DOWN_AUTHENTICATED;
 
-  // sent sessionId, minerAgent_, workerName to server_
-  server_->registerWorker(this, minerAgent_, workerName);
+  userName_ = getUserName(fullWorkerName);  // split by '.'
+  if (userName_.empty())
+    userName_ = DEFAULT_WORKER_NAME;
 
-  // minerAgent_ will not use anymore
-  if (minerAgent_) {
-    free(minerAgent_);
-    minerAgent_ = NULL;
+  DLOG(INFO) << "Authorize userName is " << userName_ << "\n";
+//  bool exitUser = false;
+//  for (auto it = server_->upUsers_.begin(); it != server_->upUsers_.end(), ++it) {
+//    if (it->second == userName_){
+//      exitUser = true;
+//      break;
+//    }
+//  }
+  if (server_->usersUp_.find(userName_) == server_->usersUp_.end()) {
+    if (!server_->setupUpStratumSessions(userName_)) {
+      responseError(idStr, StratumError::INTERNAL_ERROR);
+    }
+
+    // choose first upSession idx as upSessionIdx
+    upSessionIdx_ = server_->usersUp_[userName_];
+    // auth success
+    responseTrue(idStr);
+    state_ = DOWN_AUTHENTICATED;
+  } else {
+    upSessionIdx_ = server_->findUpSessionIdx(userName_);
+    // auth success
+    responseTrue(idStr);
+    state_ = DOWN_AUTHENTICATED;
+
+    server_->registerWorker(this, minerAgent_, workerName_);
+    // minerAgent_ will not use anymore
+    if (minerAgent_) {
+      free(minerAgent_);
+      minerAgent_ = NULL;
+    }
+    // send mining.set_difficulty
+    server_->sendDefaultMiningDifficulty(this);
+
+    // send latest stratum job
+    server_->sendMiningNotify(this);
   }
 
-  // send mining.set_difficulty
-  server_->sendDefaultMiningDifficulty(this);
-
-  // send latest stratum job
-  server_->sendMiningNotify(this);
+  server_->addDownConnection(this);
 }
-
 void StratumSession::handleRequest_Submit(const string &idStr,
                                           const StratumMessage &smsg) {
   if (state_ != DOWN_AUTHENTICATED) {
@@ -972,8 +1009,8 @@ void StratumSession::handleRequest_Submit(const string &idStr,
 StratumServer::StratumServer(const string &listenIP, const uint16_t listenPort)
 :running_ (true), listenIP_(listenIP), listenPort_(listenPort), base_(NULL)
 {
-  upSessions_    .resize(kUpSessionCount_, NULL);
-  upSessionCount_.resize(kUpSessionCount_, 0);
+  // upSessions_    .resize(kUpSessionCount_, NULL);
+  // upSessionCount_.resize(kUpSessionCount_, 0);
 
   upEvTimer_ = NULL;
   downSessions_.resize(AGENT_MAX_SESSION_ID + 1, NULL);
@@ -1013,13 +1050,12 @@ void StratumServer::stop() {
   event_base_loopexit(base_, NULL);
 }
 
-void StratumServer::addUpPool(const string &host, const uint16_t port,
-                              const string &upPoolUserName) {
+void StratumServer::addUpPool(const string &host, const uint16_t port) {
   upPoolHost_    .push_back(host);
   upPoolPort_    .push_back(port);
-  upPoolUserName_.push_back(upPoolUserName);
 
-  LOG(INFO) << "add pool: " << host << ":" << port << ", username: " << upPoolUserName;
+
+  LOG(INFO) << "add pool: " << host << ":" << port << "\n";
 }
 
 UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
@@ -1031,14 +1067,15 @@ UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
     if (!resolve(upPoolHost_[i], &sin.sin_addr)) {
       continue;
     }
+    string userName = upUsers_[idx];
 
-    UpStratumClient *up = new UpStratumClient(idx, base_, upPoolUserName_[i], this);
+    UpStratumClient *up = new UpStratumClient(idx, base_, userName, this);
     if (!up->connect(sin)) {
       delete up;
       continue;
     }
     LOG(INFO) << "success connect[" << (int32_t)up->idx_ << "]: " << upPoolHost_[i] << ":"
-    << upPoolPort_[i] << ", username: " << upPoolUserName_[i];
+              << upPoolPort_[i] << ", username: " << userName;
 
     return up;  // connect success
   }
@@ -1046,7 +1083,8 @@ UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
   return NULL;
 }
 
-bool StratumServer::setup() {
+
+bool StratumServer::setupUpStratumSessions(const string &userName) {
   if (upPoolHost_.size() == 0)
     return false;
 
@@ -1055,40 +1093,34 @@ bool StratumServer::setup() {
   WSAStartup(0x0201, &wsa_data);
 #endif
 
-  base_ = event_base_new();
-  if(!base_) {
-    LOG(ERROR) << "server: cannot create event base";
-    return false;
-  }
 
+  DLOG(INFO) << "create UpSession process, max up session is  " << maxUpSessionCount_ << "\n";
+  usersUp_[userName] = maxUpSessionCount_;
+  maxUpSessionCount_ += kUpSessionCount_;
+  upSessions_.resize(maxUpSessionCount_);
+  upSessionCount_.resize(maxUpSessionCount_, 0);
   // create up sessions
   for (int8_t i = 0; i < kUpSessionCount_; i++) {
-    UpStratumClient *up = createUpSession(i);
+    uint16_t  idx;
+    upSessionIDManager_.allocSessionId(&idx);
+    upUsers_[idx] = userName;
+    UpStratumClient *up = createUpSession(idx);
     if (up == NULL)
       return false;
 
-    assert(up->idx_ == i);
+    assert(up->idx_ == idx);
+    DLOG(INFO) << "add to the userUpSessions_";
     addUpConnection(up);
   }
 
-  // wait util all up session available
-  {
-    struct event *checkTimer;
-    checkTimer = event_new(base_, -1, EV_PERSIST,
-                           StratumServer::upSesssionCheckCallback, this);
-    struct timeval oneSec = {1, 0};
-    event_add(checkTimer, &oneSec);
+  return  true;
+}
 
-    // run event dispatch, it will break util all up sessions are available
-    event_base_dispatch(base_);
+bool StratumServer::setup() {
 
-    // get here means: all up sessions are available
-    event_del(checkTimer);
-    event_free(checkTimer);
-  }
-
-  // if one of upsessions init failure, it'll stop the server.
-  if (!running_) {
+  base_ = event_base_new();
+  if(!base_) {
+    LOG(ERROR) << "server: cannot create event base";
     return false;
   }
 
@@ -1109,6 +1141,7 @@ bool StratumServer::setup() {
     LOG(ERROR) << "invalid ip: " << listenIP_;
     return false;
   }
+  DLOG(INFO) << "load the listen address success";
 
   listener_ = evconnlistener_new_bind(base_,
                                       StratumServer::listenerCallback,
@@ -1131,7 +1164,7 @@ void StratumServer::upSesssionCheckCallback(evutil_socket_t fd,
 }
 
 void StratumServer::waitUtilAllUpSessionsAvailable() {
-  for (int8_t i = 0; i < kUpSessionCount_; i++) {
+  for (int8_t i = 0; i < maxUpSessionCount_; i++) {
 
     // lost upsession when init, we should stop server
     if (upSessions_[i] == NULL) {
@@ -1155,21 +1188,25 @@ void StratumServer::upWatcherCallback(evutil_socket_t fd,
 }
 
 void StratumServer::checkUpSessions() {
-  // check up sessions
-  for (int8_t i = 0; i < kUpSessionCount_; i++)
-  {
-    // if upsession's socket error, it'll be removed and set to NULL
-    if (upSessions_[i] != NULL) {
-      if (upSessions_[i]->isAvailable() == true)
-        continue;
-      else
-        removeUpConnection(upSessions_[i]);
-    }
 
-    UpStratumClient *up = createUpSession(i);
-    if (up != NULL)
-      addUpConnection(up);
-  }
+  for ( auto i = 0; i != upSessions_.size(); i++) {
+
+
+      UpStratumClient *upSession = upSessions_[i];  // alias
+      auto idx = upSession->idx_;
+
+      if (upSession != NULL) {
+        if (upSession->isAvailable()) {
+          continue;
+        }
+        else
+          removeUpConnection(upSession);
+      }
+
+      UpStratumClient *up = createUpSession(idx);
+      if (up != NULL)
+        addUpConnection(up);
+    }
 }
 
 void StratumServer::listenerCallback(struct evconnlistener *listener,
@@ -1199,8 +1236,9 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
     return;
   }
 
-  const int8_t upSessionIdx = server->findUpSessionIdx();
-  if (upSessionIdx == -1) {
+  // default upSessionIdx is -1
+  const int8_t upSessionIdx  = -1;
+  if (upSessionIdx == -2) {
     LOG(ERROR) << "no available up session";
 
 #ifdef _WIN32
@@ -1223,7 +1261,7 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
   // By default, a newly created bufferevent has writing enabled.
   bufferevent_enable(bev, EV_READ|EV_WRITE);
 
-  server->addDownConnection(conn);
+  // server->addDownConnection(conn);
 }
 
 void StratumServer::downReadCallback(struct bufferevent *bev, void *ptr) {
@@ -1239,7 +1277,7 @@ void StratumServer::downEventCallback(struct bufferevent *bev,
   assert((events & BEV_EVENT_CONNECTED) != BEV_EVENT_CONNECTED);
 
   if (events & BEV_EVENT_EOF) {
-    LOG(INFO) << "downsocket closed, sessionId: " << conn->sessionId_;
+     LOG(INFO) << "downsocket closed, sessionId: " << conn->sessionId_;
   }
   else if (events & BEV_EVENT_ERROR) {
     LOG(INFO) << "got an error on the downsocket, sessionId: " << conn->sessionId_
@@ -1262,19 +1300,25 @@ void StratumServer::addDownConnection(StratumSession *conn) {
   assert(downSessions_[conn->sessionId_] == NULL);
   downSessions_  [conn->sessionId_] = conn;
   upSessionCount_[conn->upSessionIdx_]++;
+
+  assert(conn->state_ == DOWN_AUTHENTICATED);
+  assert(conn->upSessionIdx_ != -1);
+  upSessions_[conn->upSessionIdx_]->upDownSessions_.push_back(conn);
 }
 
 void StratumServer::removeDownConnection(StratumSession *downconn) {
   // unregister worker
-  unRegisterWorker(downconn);
+  if (downconn->state_ == DOWN_AUTHENTICATED) {
 
-  // clear resources
-  sessionIDManager_.freeSessionId(downconn->sessionId_);
-  downSessions_  [downconn->sessionId_] = NULL;
-  upSessionCount_[downconn->upSessionIdx_]--;
-  delete downconn;
+    unRegisterWorker(downconn);
+
+    // clear resources
+    sessionIDManager_.freeSessionId(downconn->sessionId_);
+    downSessions_[downconn->sessionId_] = NULL;
+    upSessionCount_[downconn->upSessionIdx_]--;
+    delete downconn;
+  }
 }
-
 void StratumServer::run() {
   assert(base_ != NULL);
   event_base_dispatch(base_);
@@ -1286,6 +1330,9 @@ void StratumServer::upReadCallback(struct bufferevent *bev, void *ptr) {
 
 void StratumServer::addUpConnection(UpStratumClient *conn) {
   DLOG(INFO) << "add up connection, idx: " << (int32_t)(conn->idx_);
+
+  DLOG(INFO) << "want to create userName_ " << conn->userName_ << " idx_ " << (int32_t) conn->idx_;
+
   assert(upSessions_[conn->idx_] == NULL);
 
   upSessions_[conn->idx_] = conn;
@@ -1322,6 +1369,7 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
     string s = Strings::Format("{\"id\":1,\"method\":\"mining.subscribe\""
                                ",\"params\":[\"%s\"]}\n", BTCCOM_MINER_AGENT);
     up->sendData(s);
+    DLOG(INFO) << "subscribe to the pooler ";
     return;
   }
 
@@ -1342,9 +1390,11 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
   server->removeUpConnection(up);
 }
 
-void StratumServer::sendMiningNotifyToAll(const int8_t idx, const string &notify) {
-  for (size_t i = 0; i < downSessions_.size(); i++) {
-    StratumSession *s = downSessions_[i];
+void StratumServer::sendMiningNotifyToAll(const int8_t idx,  const string &notify) {
+
+  UpStratumClient *up = upSessions_[idx];
+  for (size_t i = 0; i < up->upDownSessions_.size(); i++) {
+    StratumSession *s = up->upDownSessions_[i];
     if (s == NULL || s->upSessionIdx_ != idx)
       continue;
 
@@ -1354,6 +1404,8 @@ void StratumServer::sendMiningNotifyToAll(const int8_t idx, const string &notify
 
 void StratumServer::sendMiningNotify(StratumSession *downSession) {
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
+  DLOG(INFO) << "laster MiningNotifyStr is " << up->latestMiningNotifyStr_.length();
+
   if (up == NULL || up->latestMiningNotifyStr_.length() == 0)
     return;
 
@@ -1364,10 +1416,11 @@ void StratumServer::sendDefaultMiningDifficulty(StratumSession *downSession) {
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
   if (up == NULL)
     return;
-
+  DLOG(INFO) << "Start to send sendDefaultMiningDifficulty "<< "\n";
   const string s = Strings::Format("{\"id\":null,\"method\":\"mining.set_difficulty\""
                                    ",\"params\":[%" PRIu32"]}\n",
                                    up->poolDefaultDiff_);
+
   downSession->sendData(s);
 }
 
@@ -1382,11 +1435,11 @@ void StratumServer::sendMiningDifficulty(UpStratumClient *upconn,
   downSession->sendData(s);
 }
 
-int8_t StratumServer::findUpSessionIdx() {
+int8_t StratumServer::findUpSessionIdx(const string &userName) {
   int32_t count = -1;
   int8_t idx = -1;
 
-  for (size_t i = 0; i < upSessions_.size(); i++) {
+  for (int8_t i = usersUp_[userName]; i < usersUp_[userName]+kUpSessionCount_; i++) {
     if (upSessions_[i] == NULL || !upSessions_[i]->isAvailable())
       continue;
 

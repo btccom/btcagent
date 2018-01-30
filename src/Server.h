@@ -22,6 +22,7 @@
 #include "Utils.h"
 #include "jsmn.h"
 
+#include <iostream>
 #include <event2/event.h>
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
@@ -30,7 +31,8 @@
 #include <bitset>
 #include <map>
 #include <set>
-
+#include <unordered_map>
+#include <deque>
 
 #define CMD_MAGIC_NUMBER      0x7Fu
 // types
@@ -196,7 +198,6 @@ class StratumServer {
   // disconnect, just some miners which belong to this connection(UpStratumClient)
   // will reconnect instead of all miners reconnect to the Agent.
   //
-  static const int8_t kUpSessionCount_ = 5;  // MAX is 127
   bool running_;
 
   string   listenIP_;
@@ -204,14 +205,13 @@ class StratumServer {
 
   vector<string>   upPoolHost_;
   vector<uint16_t> upPoolPort_;
-  vector<string>   upPoolUserName_;
 
   // up stream connnections
   vector<UpStratumClient *> upSessions_;
   vector<int32_t> upSessionCount_;
   struct event *upEvTimer_;
 
-  // down stream connections
+    // down stream connections
   vector<StratumSession *> downSessions_;
 
   // libevent2
@@ -224,16 +224,18 @@ class StratumServer {
 
 public:
   SessionIDManager sessionIDManager_;
-
+  SessionIDManager upSessionIDManager_;
+  std::unordered_map<int8_t , string> upUsers_;
+  int8_t  maxUpSessionCount_ = 0;
+  std::unordered_map<string , int8_t> usersUp_;
+  static const int8_t kUpSessionCount_ = 5;  // MAX is 127
 
 public:
   StratumServer(const string &listenIP, const uint16_t listenPort);
   ~StratumServer();
 
   UpStratumClient *createUpSession(const int8_t idx);
-
-  void addUpPool(const string &host, const uint16_t port,
-                 const string &upPoolUserName);
+  void addUpPool(const string &host, const uint16_t port);
 
   void addDownConnection   (StratumSession *conn);
   void removeDownConnection(StratumSession *conn);
@@ -260,7 +262,7 @@ public:
   void sendMiningDifficulty(UpStratumClient *upconn,
                             uint16_t sessionId, uint64_t diff);
 
-  int8_t findUpSessionIdx();
+  int8_t findUpSessionIdx(const string &workName);
 
   void submitShare(const Share &share, StratumSession *downSession);
   void registerWorker  (StratumSession *downSession, const char *minerAgent,
@@ -268,6 +270,7 @@ public:
   void unRegisterWorker(StratumSession *downSession);
 
   bool setup();
+  bool setupUpStratumSessions(const string &workerName);
   void run();
   void stop();
 };
@@ -285,7 +288,7 @@ class UpStratumClient {
   struct bufferevent *bev_;
   struct evbuffer *inBuf_;
   uint64_t extraNonce2_;
-  string userName_;
+
 
   bool handleMessage();
   void handleStratumMessage(const string &line);
@@ -309,6 +312,8 @@ public:
   // last stratum job received from pool
   uint32_t lastJobReceivedTime_;
 
+  vector<StratumSession *> upDownSessions_;
+  string userName_;
 public:
   UpStratumClient(const int8_t idx,
                   struct event_base *base, const string &userName,
@@ -344,8 +349,6 @@ class StratumSession {
   //----------------------
   struct evbuffer *inBuf_;
   static const int32_t kExtraNonce2Size_ = 4;
-  StratumSessionState state_;
-  char *minerAgent_;
 
   void setReadTimeout(const int32_t timeout);
 
@@ -364,6 +367,10 @@ public:
   uint16_t sessionId_;
   struct bufferevent *bev_;
   StratumServer *server_;
+  string workerName_;
+  string userName_;
+  StratumSessionState state_;
+  char *minerAgent_;
 
 
 public:

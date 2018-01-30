@@ -165,6 +165,15 @@ stdout_logfile_backups=5
 stdout_logfile=/work/btcagent/build/log_btcagent_3334/agent_stdout.log
 ```
 
+`vim /etc/supervisor/supervisord.conf` change or insert `minfds` in section `[supervisord]`:
+
+```
+[supervisord]
+minfds=65535
+```
+
+restart supervisor: `service supervisor restart`.
+
 than update supervisor:
 
 ```

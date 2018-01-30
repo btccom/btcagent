@@ -104,8 +104,8 @@ int main(int argc, char **argv) {
     // add pools
     for (size_t i = 0; i < poolConfs.size(); i++) {
       gStratumServer->addUpPool(poolConfs[i].host_,
-                                poolConfs[i].port_,
-                                poolConfs[i].upPoolUserName_);
+                                poolConfs[i].port_);
+                                //poolConfs[i].upPoolUserName_);
     }
 
     if (!gStratumServer->setup()) {

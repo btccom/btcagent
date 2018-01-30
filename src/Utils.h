@@ -71,14 +71,14 @@ class PoolConf {
 public:
   string host_;
   uint16_t port_;
-  string upPoolUserName_;
+  // string upPoolUserName_;
 
   PoolConf(): port_(0u) {}
 
   PoolConf(const PoolConf &r) {
     host_ = r.host_;
     port_ = r.port_;
-    upPoolUserName_ = r.upPoolUserName_;
+    // upPoolUserName_ = r.upPoolUserName_;
   }
 };
 
