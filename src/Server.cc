@@ -961,18 +961,21 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
     responseTrue(idStr);
     state_ = DOWN_AUTHENTICATED;
 
-    server_->registerWorker(this, minerAgent_, workerName_);
-    // minerAgent_ will not use anymore
-    if (minerAgent_) {
-      free(minerAgent_);
-      minerAgent_ = NULL;
-    }
-    // send mining.set_difficulty
-    server_->sendDefaultMiningDifficulty(this);
+  // sent sessionId, minerAgent_, workerName to server_
+  server_->registerWorker(this, minerAgent_, workerName_);
 
-    // send latest stratum job
-    server_->sendMiningNotify(this);
+  // minerAgent_ will not use anymore
+  if (minerAgent_) {
+    free(minerAgent_);
+    minerAgent_ = NULL;
   }
+
+  // send mining.set_difficulty
+  server_->sendDefaultMiningDifficulty(this);
+
+  // send latest stratum job
+  server_->sendMiningNotify(this);
+}
 
   server_->addDownConnection(this);
 }
@@ -1009,8 +1012,7 @@ void StratumSession::handleRequest_Submit(const string &idStr,
 StratumServer::StratumServer(const string &listenIP, const uint16_t listenPort)
 :running_ (true), listenIP_(listenIP), listenPort_(listenPort), base_(NULL)
 {
-  // upSessions_    .resize(kUpSessionCount_, NULL);
-  // upSessionCount_.resize(kUpSessionCount_, 0);
+
 
   upEvTimer_ = NULL;
   downSessions_.resize(AGENT_MAX_SESSION_ID + 1, NULL);
