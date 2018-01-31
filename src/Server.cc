@@ -938,13 +938,9 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
     userName_ = DEFAULT_WORKER_NAME;
 
   DLOG(INFO) << "Authorize userName is " << userName_ << "\n";
-//  bool exitUser = false;
-//  for (auto it = server_->upUsers_.begin(); it != server_->upUsers_.end(), ++it) {
-//    if (it->second == userName_){
-//      exitUser = true;
-//      break;
-//    }
-//  }
+
+  // if it was first time that user requests authorizing, just create upSessionClients for this user,
+  // if not, choose one of upSessionClient which belongs to the user, register this user's worker
   if (server_->usersUp_.find(userName_) == server_->usersUp_.end()) {
     if (!server_->setupUpStratumSessions(userName_)) {
       responseError(idStr, StratumError::INTERNAL_ERROR);
@@ -956,6 +952,7 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
     responseTrue(idStr);
     state_ = DOWN_AUTHENTICATED;
   } else {
+    // find upSessionIdx with least downSessions
     upSessionIdx_ = server_->findUpSessionIdx(userName_);
     // auth success
     responseTrue(idStr);

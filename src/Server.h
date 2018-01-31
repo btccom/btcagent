@@ -225,9 +225,9 @@ class StratumServer {
 public:
   SessionIDManager sessionIDManager_;
   SessionIDManager upSessionIDManager_;
-  std::unordered_map<int8_t , string> upUsers_;
-  int8_t  maxUpSessionCount_ = 0;
-  std::unordered_map<string , int8_t> usersUp_;
+  std::unordered_map<int8_t , string> upUsers_; // key:upSessionIdx value:userName
+  int8_t  maxUpSessionCount_ = 0;               // record the number of existed upSession
+  std::unordered_map<string , int8_t> usersUp_; // key:userName value:upSessionIdx to start count, eg. user1:0 user2:5
   static const int8_t kUpSessionCount_ = 5;  // MAX is 127
 
 public:
