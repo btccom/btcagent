@@ -941,13 +941,13 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
 
   // if it was first time that user requests authorizing, just create upSessionClients for this user,
   // if not, choose one of upSessionClient which belongs to the user, register this user's worker
-  if (server_->usersUp_.find(userName_) == server_->usersUp_.end()) {
+  if (server_->userUpsessionIdx_.find(userName_) == server_->userUpsessionIdx_.end()) {
     if (!server_->setupUpStratumSessions(userName_)) {
       responseError(idStr, StratumError::INTERNAL_ERROR);
     }
 
     // choose first upSession idx as upSessionIdx
-    upSessionIdx_ = server_->usersUp_[userName_];
+    upSessionIdx_ = server_->userUpsessionIdx_[userName_];
     // auth success
     responseTrue(idStr);
     state_ = DOWN_AUTHENTICATED;
@@ -1066,7 +1066,7 @@ UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
     if (!resolve(upPoolHost_[i], &sin.sin_addr)) {
       continue;
     }
-    string userName = upUsers_[idx];
+    string userName = upIdxUser_[idx];
 
     UpStratumClient *up = new UpStratumClient(idx, base_, userName, this);
     if (!up->connect(sin)) {
@@ -1094,7 +1094,7 @@ bool StratumServer::setupUpStratumSessions(const string &userName) {
 
 
   DLOG(INFO) << "create UpSession process, max up session is  " << maxUpSessionCount_ << "\n";
-  usersUp_[userName] = maxUpSessionCount_;
+  userUpsessionIdx_[userName] = maxUpSessionCount_;
   maxUpSessionCount_ += kUpSessionCount_;
   upSessions_.resize(maxUpSessionCount_);
   upSessionCount_.resize(maxUpSessionCount_, 0);
@@ -1102,7 +1102,7 @@ bool StratumServer::setupUpStratumSessions(const string &userName) {
   for (int8_t i = 0; i < kUpSessionCount_; i++) {
     uint16_t  idx;
     upSessionIDManager_.allocSessionId(&idx);
-    upUsers_[idx] = userName;
+    upIdxUser_[idx] = userName;
     UpStratumClient *up = createUpSession(idx);
     if (up == NULL)
       return false;
@@ -1438,7 +1438,7 @@ int8_t StratumServer::findUpSessionIdx(const string &userName) {
   int32_t count = -1;
   int8_t idx = -1;
 
-  for (int8_t i = usersUp_[userName]; i < usersUp_[userName]+kUpSessionCount_; i++) {
+  for (int8_t i = userUpsessionIdx_[userName]; i < userUpsessionIdx_[userName]+kUpSessionCount_; i++) {
     if (upSessions_[i] == NULL || !upSessions_[i]->isAvailable())
       continue;
 
