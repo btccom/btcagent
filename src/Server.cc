@@ -668,11 +668,17 @@ void UpStratumClient::handleStratumMessage(const string &line) {
   uint32_t difficulty = 0u;
 
   if (state_ == UP_AUTHENTICATED) {
-    if (idx_ == server_->userUpsessionIdx_[userName_] && !register_) {
-      assert(upDownSessions_.size() == 1);
-      StratumSession *downSession = upDownSessions_[0];
+
+    while (unRegisterWorkers_.size()) {
+      StratumSession *downSession = unRegisterWorkers_.back();
       server_->registerWorker(downSession, downSession->minerAgent_, downSession->workerName_);
-      register_ = true;
+
+      // send mining.set_difficulty
+      server_->sendDefaultMiningDifficulty(downSession);
+
+      // send latest stratum job
+      server_->sendMiningNotify(downSession);
+      unRegisterWorkers_.pop_back();
     }
     if (smsg.parseMiningNotify(sjob)) {
       //
@@ -955,32 +961,39 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
     // choose first upSession idx as upSessionIdx
     upSessionIdx_ = server_->userUpsessionIdx_[userName_];
 
-    // auth success
-    responseTrue(idStr);
-    state_ = DOWN_AUTHENTICATED;
+    server_->upSessions_[upSessionIdx_]->unRegisterWorkers_.push_back(this);
+
   } else {
     // find upSessionIdx with least downSessions
     upSessionIdx_ = server_->findUpSessionIdx(userName_);
-    // auth success
-    responseTrue(idStr);
-    state_ = DOWN_AUTHENTICATED;
+    // if upSessionIdx_ == 1, show the second down Session was too fast, all the upStratum don't accomplish the authorize
+    if (upSessionIdx_ == -1)
+    {
+      server_->upSessions_[upSessionIdx_]->unRegisterWorkers_.push_back(this);
 
-  // sent sessionId, minerAgent_, workerName to server_
-  server_->registerWorker(this, minerAgent_, workerName_);
+    }
+    else {
 
-  // minerAgent_ will not use anymore
-  if (minerAgent_) {
-    free(minerAgent_);
-    minerAgent_ = NULL;
+      // sent sessionId, minerAgent_, workerName to server_
+      server_->registerWorker(this, minerAgent_, workerName_);
+
+      // minerAgent_ will not use anymore
+      if (minerAgent_) {
+        free(minerAgent_);
+        minerAgent_ = NULL;
+      }
+      DLOG(INFO) << "Start send DefaultMiningDifficulty";
+      // send mining.set_difficulty
+      server_->sendDefaultMiningDifficulty(this);
+
+      // send latest stratum job
+      server_->sendMiningNotify(this);
+    }
   }
-  DLOG(INFO) << "Start send DefaultMiningDifficulty";
-  // send mining.set_difficulty
-  server_->sendDefaultMiningDifficulty(this);
 
-  // send latest stratum job
-  server_->sendMiningNotify(this);
-}
-
+  // auth success
+  responseTrue(idStr);
+  state_ = DOWN_AUTHENTICATED;
   server_->addDownConnection(this);
 }
 void StratumSession::handleRequest_Submit(const string &idStr,
@@ -1100,11 +1113,10 @@ bool StratumServer::setupUpStratumSessions(const string &userName) {
 #endif
 
 
-  DLOG(INFO) << "create UpSession process, max up session is  " << maxUpSessionCount_ << "\n";
-  userUpsessionIdx_[userName] = maxUpSessionCount_;
-  maxUpSessionCount_ += kUpSessionCount_;
-  upSessions_.resize(maxUpSessionCount_);
-  upSessionCount_.resize(maxUpSessionCount_, 0);
+  DLOG(INFO) << "create UpSession process, max up session is  " << upSessions_.size() << "\n";
+  userUpsessionIdx_[userName] = upSessions_.size();
+  upSessions_.resize(upSessions_.size()+ maxUpSessionCount_);
+  upSessionCount_.resize(upSessions_.size()+maxUpSessionCount_, 0);
   // create up sessions
   for (int8_t i = 0; i < kUpSessionCount_; i++) {
     uint16_t  idx;
@@ -1172,7 +1184,7 @@ void StratumServer::upSesssionCheckCallback(evutil_socket_t fd,
 }
 
 void StratumServer::waitUtilAllUpSessionsAvailable() {
-  for (int8_t i = 0; i < maxUpSessionCount_; i++) {
+  for (int8_t i = 0; i < upSessions_.size(); i++) {
 
     // lost upsession when init, we should stop server
     if (upSessions_[i] == NULL) {
@@ -1460,6 +1472,7 @@ int8_t StratumServer::findUpSessionIdx(const string &userName) {
       count = upSessionCount_[i];
     }
   }
+  DLOG(INFO) << "FINALLY WE FOUND " << idx;
   return idx;
 }
 
@@ -1559,7 +1572,7 @@ void StratumServer::registerWorker(StratumSession *downSession,
   strcpy((char *)p, workerName.c_str());
   p += workerName.length() + 1;
   assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
-  DLOG(INFO) << "start choose upSessions idx " << downSession->upSessionIdx_;
+  DLOG(INFO) << "start choose upSessions idx " << (int32_t) downSession->upSessionIdx_;
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
   up->sendData(buf);
 }

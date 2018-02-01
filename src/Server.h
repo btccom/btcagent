@@ -206,8 +206,7 @@ class StratumServer {
   vector<string>   upPoolHost_;
   vector<uint16_t> upPoolPort_;
 
-  // up stream connnections
-  vector<UpStratumClient *> upSessions_;
+
   vector<int32_t> upSessionCount_;
   struct event *upEvTimer_;
 
@@ -229,6 +228,8 @@ public:
   int8_t  maxUpSessionCount_ = 0;               // record the number of existed upSession
   std::unordered_map<string , int8_t> userUpsessionIdx_; // key:userName value:upSessionIdx to start count, eg. user1:0 user2:5
   static const int8_t kUpSessionCount_ = 5;  // MAX is 127
+  // up stream connnections
+  vector<UpStratumClient *> upSessions_;
 
 public:
   StratumServer(const string &listenIP, const uint16_t listenPort);
@@ -315,7 +316,8 @@ public:
   vector<StratumSession *> upDownSessions_;
   string userName_;
   bool   register_; // check whether if  worker was registered when user was first authorized
-
+  // unRegister workers
+  vector<StratumSession *> unRegisterWorkers_;
 public:
   UpStratumClient(const int8_t idx,
                   struct event_base *base, const string &userName,
