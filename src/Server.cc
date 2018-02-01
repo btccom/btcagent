@@ -1130,8 +1130,7 @@ bool StratumServer::setupUpStratumSessions(const string &userName) {
     DLOG(INFO) << "add to the userUpSessions_";
     addUpConnection(up);
   }
-  // do unregister status
-  upSessions_[userUpsessionIdx_[userName]]->register_ = false;
+
 
   return  true;
 }

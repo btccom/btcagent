@@ -315,7 +315,7 @@ public:
 
   vector<StratumSession *> upDownSessions_;
   string userName_;
-  bool   register_; // check whether if  worker was registered when user was first authorized
+
   // unRegister workers
   vector<StratumSession *> unRegisterWorkers_;
 public:
