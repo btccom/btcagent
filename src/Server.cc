@@ -668,6 +668,12 @@ void UpStratumClient::handleStratumMessage(const string &line) {
   uint32_t difficulty = 0u;
 
   if (state_ == UP_AUTHENTICATED) {
+    if (idx_ == server_->userUpsessionIdx_[userName_] && !register_) {
+      assert(upDownSessions_.size() == 1);
+      StratumSession *downSession = upDownSessions_[0];
+      server_->registerWorker(downSession, downSession->minerAgent_, downSession->workerName_);
+      register_ = true;
+    }
     if (smsg.parseMiningNotify(sjob)) {
       //
       // mining.notify
@@ -948,6 +954,7 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
 
     // choose first upSession idx as upSessionIdx
     upSessionIdx_ = server_->userUpsessionIdx_[userName_];
+
     // auth success
     responseTrue(idStr);
     state_ = DOWN_AUTHENTICATED;
@@ -1111,6 +1118,8 @@ bool StratumServer::setupUpStratumSessions(const string &userName) {
     DLOG(INFO) << "add to the userUpSessions_";
     addUpConnection(up);
   }
+  // do unregister status
+  upSessions_[userUpsessionIdx_[userName]]->register_ = false;
 
   return  true;
 }

@@ -314,6 +314,8 @@ public:
 
   vector<StratumSession *> upDownSessions_;
   string userName_;
+  bool   register_; // check whether if  worker was registered when user was first authorized
+
 public:
   UpStratumClient(const int8_t idx,
                   struct event_base *base, const string &userName,
