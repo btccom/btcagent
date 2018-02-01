@@ -969,6 +969,8 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
     // if upSessionIdx_ == 1, show the second down Session was too fast, all the upStratum don't accomplish the authorize
     if (upSessionIdx_ == -1)
     {
+      // choose first upSession idx as upSessionIdx
+      upSessionIdx_ = server_->userUpsessionIdx_[userName_];
       server_->upSessions_[upSessionIdx_]->unRegisterWorkers_.push_back(this);
 
     }
@@ -1471,7 +1473,7 @@ int8_t StratumServer::findUpSessionIdx(const string &userName) {
       count = upSessionCount_[i];
     }
   }
-  DLOG(INFO) << "FINALLY WE FOUND " << idx;
+  DLOG(INFO) << "FINALLY WE FOUND " << (int32_t) idx;
   return idx;
 }
 
