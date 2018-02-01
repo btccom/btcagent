@@ -966,11 +966,12 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
   } else {
     // find upSessionIdx with least downSessions
     upSessionIdx_ = server_->findUpSessionIdx(userName_);
-    // if upSessionIdx_ == 1, show the second down Session was too fast, all the upStratum don't accomplish the authorize
+    // if upSessionIdx_ == -1, show the second down Session was too fast, all the upStratum don't accomplish the authorize
     if (upSessionIdx_ == -1)
     {
       // choose first upSession idx as upSessionIdx
       upSessionIdx_ = server_->userUpsessionIdx_[userName_];
+      DLOG(INFO) << "upSession is " << upSessionIdx_;
       server_->upSessions_[upSessionIdx_]->unRegisterWorkers_.push_back(this);
 
     }
