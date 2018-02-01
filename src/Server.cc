@@ -973,7 +973,7 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
     free(minerAgent_);
     minerAgent_ = NULL;
   }
-
+  DLOG(INFO) << "Start send DefaultMiningDifficulty";
   // send mining.set_difficulty
   server_->sendDefaultMiningDifficulty(this);
 
@@ -1559,7 +1559,7 @@ void StratumServer::registerWorker(StratumSession *downSession,
   strcpy((char *)p, workerName.c_str());
   p += workerName.length() + 1;
   assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
-
+  DLOG(INFO) << "start choose upSessions idx " << downSession->upSessionIdx_;
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
   up->sendData(buf);
 }
