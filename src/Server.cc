@@ -1115,8 +1115,8 @@ bool StratumServer::setupUpStratumSessions(const string &userName) {
 
   DLOG(INFO) << "create UpSession process, max up session is  " << upSessions_.size() << "\n";
   userUpsessionIdx_[userName] = upSessions_.size();
-  upSessions_.resize(upSessions_.size()+ maxUpSessionCount_);
-  upSessionCount_.resize(upSessions_.size()+maxUpSessionCount_, 0);
+  upSessions_.resize(upSessions_.size() + kUpSessionCount_);
+  upSessionCount_.resize(upSessions_.size() + kUpSessionCount_, 0);
   // create up sessions
   for (int8_t i = 0; i < kUpSessionCount_; i++) {
     uint16_t  idx;
