@@ -671,6 +671,9 @@ void UpStratumClient::handleStratumMessage(const string &line) {
 
     while (unRegisterWorkers_.size()) {
       StratumSession *downSession = unRegisterWorkers_.back();
+      if (downSession == NULL) {
+        continue;
+      }
       server_->registerWorker(downSession, downSession->minerAgent_, downSession->workerName_);
 
       // send mining.set_difficulty
@@ -1089,7 +1092,11 @@ UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
     if (!resolve(upPoolHost_[i], &sin.sin_addr)) {
       continue;
     }
-    string userName = upIdxUser_[idx];
+    string userName;
+    auto it = upIdxUser_.find(idx);
+    if (it != upIdxUser_.end()){
+      userName = it->second;
+    }
 
     UpStratumClient *up = new UpStratumClient(idx, base_, userName, this);
     if (!up->connect(sin)) {
@@ -1117,19 +1124,20 @@ bool StratumServer::setupUpStratumSessions(const string &userName) {
 
 
   DLOG(INFO) << "create UpSession process, max up session is  " << upSessions_.size() << "\n";
-  userUpsessionIdx_[userName] = upSessions_.size();
-  upSessions_.resize(upSessions_.size() + kUpSessionCount_);
-  upSessionCount_.resize(upSessions_.size() + kUpSessionCount_, 0);
+
   // create up sessions
-  for (int8_t i = 0; i < kUpSessionCount_; i++) {
-    uint16_t  idx;
-    upSessionIDManager_.allocSessionId(&idx);
-    upIdxUser_[idx] = userName;
-    UpStratumClient *up = createUpSession(idx);
+  uint16_t  idx;
+  upSessionIDManager_.allocSessionId(&idx);
+  uint32_t  startIdx = (uint32_t) idx * kUpSessionCount_;
+  userUpsessionIdx_[userName] = startIdx;
+
+  for (uint32_t i = startIdx; i < startIdx + kUpSessionCount_; i++) {
+    upIdxUser_[i] = userName;
+    UpStratumClient *up = createUpSession(i);
     if (up == NULL)
       return false;
 
-    assert(up->idx_ == idx);
+    assert(up->idx_ == i);
     DLOG(INFO) << "add to the userUpSessions_";
     addUpConnection(up);
   }
@@ -1210,12 +1218,51 @@ void StratumServer::upWatcherCallback(evutil_socket_t fd,
 }
 
 void StratumServer::checkUpSessions() {
+  DLOG(INFO) << "start checkupSession";
+  uint32_t startIdx;
 
-  for ( auto i = 0; i != upSessions_.size(); i++) {
+  for(auto it = userUpsessionIdx_.begin();
+      it != userUpsessionIdx_.end();)
+  {
+    DLOG(INFO) << "begin it->second "<<it->second <<" userUpsessionIdx " << userUpsessionIdx_.size();
+    startIdx = it->second;
+    bool noDownSession = false;
+    for (auto i = startIdx; i < startIdx + kUpSessionCount_; i++) {
+      if(upSessions_[i] == NULL) {
+        DLOG(INFO)<<"upSessions is null";
+        continue;
+      }
+      if(!upSessions_[i]->state_ == UP_AUTHENTICATED) {
+        break;
+      }
+      if (upSessions_[i]->downSessionCount_) {
+        break;
+      }
+      noDownSession = true;
+    }
+    // if there is no one downSession, drop the all user's upSession
+    if (noDownSession) {
+      DLOG(INFO) << "Start to erase the use name "<<it->first;
+      it = userUpsessionIdx_.erase(it);
+      for (auto i = startIdx; i < startIdx + kUpSessionCount_; i++) {
+        removeUpConnection(upSessions_[i]);
+      }
+    } else{
+      it++;
+    }
+    DLOG(INFO) << "start to next";
+  }
+  DLOG(INFO) << "start to fix the broken upSessions " << upSessions_.size();
 
+  if (upSessions_.empty()) {
+    return;
+  }
+  DLOG(INFO) << "start to check upSessions, upSession's Size is " << upSessions_.size();
+  for (auto it  = upSessions_.begin(); it != upSessions_.end(); it++) {
 
-      UpStratumClient *upSession = upSessions_[i];  // alias
-      auto idx = upSession->idx_;
+      DLOG(INFO) << "start to check each upSession "<< (uint32_t) it->second->idx_ <<
+                  " downSession' count " << it->second->downSessionCount_;
+      UpStratumClient *upSession = it->second;  // alias
 
       if (upSession != NULL) {
         if (upSession->isAvailable()) {
@@ -1224,11 +1271,12 @@ void StratumServer::checkUpSessions() {
         else
           removeUpConnection(upSession);
       }
-
+      auto idx = upSession->idx_;
+      DLOG(INFO)<<"create upSession which username is "<< upIdxUser_[idx];
       UpStratumClient *up = createUpSession(idx);
       if (up != NULL)
         addUpConnection(up);
-    }
+  }
 }
 
 void StratumServer::listenerCallback(struct evconnlistener *listener,
@@ -1321,7 +1369,7 @@ void StratumServer::addDownConnection(StratumSession *conn) {
 
   assert(downSessions_[conn->sessionId_] == NULL);
   downSessions_  [conn->sessionId_] = conn;
-  upSessionCount_[conn->upSessionIdx_]++;
+  upSessions_[conn->upSessionIdx_]->downSessionCount_++;
 
   assert(conn->state_ == DOWN_AUTHENTICATED);
   assert(conn->upSessionIdx_ != -1);
@@ -1329,6 +1377,11 @@ void StratumServer::addDownConnection(StratumSession *conn) {
 }
 
 void StratumServer::removeDownConnection(StratumSession *downconn) {
+  DLOG(INFO) <<"Start remove downSession "<<downconn->upSessionIdx_;
+  if (downSessions_[downconn->sessionId_] == NULL){
+    return;
+  };
+
   // unregister worker
   if (downconn->state_ == DOWN_AUTHENTICATED) {
 
@@ -1337,9 +1390,30 @@ void StratumServer::removeDownConnection(StratumSession *downconn) {
     // clear resources
     sessionIDManager_.freeSessionId(downconn->sessionId_);
     downSessions_[downconn->sessionId_] = NULL;
-    upSessionCount_[downconn->upSessionIdx_]--;
-    delete downconn;
+    // if no up, just delete downconn
+    auto up = upSessions_[downconn->upSessionIdx_];
+
+    if (up == NULL) {
+      delete downconn;
+      return;
+    }
+
+    // if up is not null, delete up's downSession;
+    for (auto i = 0; i < up->upDownSessions_.size(); i++) {
+
+      if (up->upDownSessions_[i] == NULL) {
+        continue;
+      }
+      if (up->upDownSessions_[i]->sessionId_ == downconn->sessionId_) {
+        up->upDownSessions_[i] = NULL;
+      }
+    }
+    up->downSessionCount_--;
+    DLOG(INFO)<<"Delete the downSession, now downSessionCount is "<< up->downSessionCount_;
+
   }
+  delete downconn;
+
 }
 void StratumServer::run() {
   assert(base_ != NULL);
@@ -1358,6 +1432,9 @@ void StratumServer::addUpConnection(UpStratumClient *conn) {
   assert(upSessions_[conn->idx_] == NULL);
 
   upSessions_[conn->idx_] = conn;
+  upIdxUser_ [conn->idx_] = conn->userName_;
+
+
 }
 
 void StratumServer::removeUpConnection(UpStratumClient *upconn) {
@@ -1365,18 +1442,17 @@ void StratumServer::removeUpConnection(UpStratumClient *upconn) {
   assert(upSessions_[upconn->idx_] != NULL);
 
   // remove down session which belong to this up connection
-  for (size_t i = 0; i < downSessions_.size(); i++) {
-    StratumSession *s = downSessions_[i];
+  for (size_t i = 0; i < upconn->upDownSessions_.size(); i++) {
+    StratumSession *s = upconn->upDownSessions_[i];
     if (s == NULL)
       continue;
-
-    if (s->upSessionIdx_ == upconn->idx_)
-      removeDownConnection(s);
+    assert(s->upSessionIdx_ == upconn->idx_);
+    removeDownConnection(s);
   }
-
-  upSessions_    [upconn->idx_] = NULL;
-  upSessionCount_[upconn->idx_] = 0;
+  upSessions_.erase(upconn->idx_);
+  upIdxUser_.erase(upconn->idx_);
   delete upconn;
+  DLOG(INFO) << "successful delete  upconn";
 }
 
 void StratumServer::upEventCallback(struct bufferevent *bev,
@@ -1467,11 +1543,11 @@ int8_t StratumServer::findUpSessionIdx(const string &userName) {
 
     if (count == -1) {
       idx = i;
-      count = upSessionCount_[i];
+      count = upSessions_[i]->downSessionCount_;
     }
-    else if (upSessionCount_[i] < count) {
+    else if (upSessions_[i]->downSessionCount_ < count) {
       idx = i;
-      count = upSessionCount_[i];
+      count = upSessions_[i]->downSessionCount_;
     }
   }
   DLOG(INFO) << "FINALLY WE FOUND " << (int32_t) idx;
