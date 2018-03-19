@@ -20,6 +20,7 @@
 
 #include <fstream>
 #include <streambuf>
+#include "Utils.h"
 
 #include "Server.h"
 
@@ -81,6 +82,13 @@ int main(int argc, char **argv) {
   FLAGS_max_log_size = 10;  // max log file size 10 MB
   FLAGS_logbuflevel = -1;
   FLAGS_stop_logging_if_full_disk = true;
+
+ #if defined(GLOG_TO_STDOUT)
+  // Print logs to stdout with glog
+  GLogToStdout glogToStdout;
+  google::AddLogSink(&glogToStdout);
+ #endif
+
 #endif
 
   signal(SIGTERM, handler);
@@ -95,7 +103,7 @@ int main(int argc, char **argv) {
     string agentJsonStr((std::istreambuf_iterator<char>(agentConf)),
                         std::istreambuf_iterator<char>());
     if (!parseConfJson(agentJsonStr, listenIP, listenPort, poolConfs)) {
-      LOG(ERROR) << "parse json config file failure";
+      LOG(ERROR) << "parse json config file failure" << std::endl;
       return false;
     }
 
@@ -109,14 +117,14 @@ int main(int argc, char **argv) {
     }
 
     if (!gStratumServer->setup()) {
-      LOG(ERROR) << "setup failure";
+      LOG(ERROR) << "setup failure" << std::endl;
     } else {
       gStratumServer->run();
     }
     delete gStratumServer;
   }
   catch (std::exception & e) {
-    LOG(FATAL) << "exception: " << e.what();
+    LOG(FATAL) << "exception: " << e.what() << std::endl;
     return 1;
   }
 

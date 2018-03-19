@@ -21,7 +21,35 @@
 #include <stdarg.h>
 
 #include <algorithm>
+#include <iostream>
+#include <iomanip>
 
+#if defined(SUPPORT_GLOG) && defined(GLOG_TO_STDOUT)
+void GLogToStdout::send(google::LogSeverity severity, const char* full_filename,
+    const char* base_filename, int line, const struct ::tm* tm_time,
+    const char* message, size_t message_len) {
+
+    std::cout << ToString(severity, base_filename, line, tm_time, message, message_len) << std::endl;
+}
+
+std::string GLogToStdout::ToString(google::LogSeverity severity, const char* file, int line,
+    const struct ::tm* tm_time, const char* message, size_t message_len) {
+
+    std::ostringstream stream;
+
+    stream << '[' << 1900 + tm_time->tm_year << '-'
+        << std::setfill('0')
+        << std::setw(2) << 1 + tm_time->tm_mon << '-'
+        << std::setw(2) << tm_time->tm_mday << ' '
+        << std::setw(2) << tm_time->tm_hour << ':'
+        << std::setw(2) << tm_time->tm_min << ':'
+        << std::setw(2) << tm_time->tm_sec << "] ";
+
+    stream << string(message, message_len);
+
+    return stream.str();
+}
+#endif
 
 string Strings::Format(const char * fmt, ...) {
   char tmp[512];
@@ -91,7 +119,7 @@ bool parseConfJson(const string &jsonStr,
 
   // assume the top-level element is an object
   if (r < 1 || t[0].type != JSMN_OBJECT) {
-    LOG(ERROR) << "json decode failure";
+    LOG(ERROR) << "json decode failure" << std::endl;
     return false;
   }
 
@@ -155,7 +183,7 @@ const char *splitNotify(const string &line) {
     }
   }
   if (pch == NULL) {
-    LOG(ERROR) << "invalid mining.notify: " << line;
+    LOG(ERROR) << "invalid mining.notify: " << line << std::endl;
     return NULL;
   }
   return pch;

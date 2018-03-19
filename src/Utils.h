@@ -32,7 +32,7 @@
 
 
 #ifndef _WIN32
- #include <unistd.h>
+  #include <unistd.h>
 #endif
 
 #include <errno.h>
@@ -45,10 +45,18 @@
 #include "jsmn.h"
 
 #if defined(SUPPORT_GLOG)
- #include <glog/logging.h>
+  #include <glog/logging.h>
 #else
- #define LOG(x) std::cout
- #define DLOG(x) std::cout
+  #define LOG(x) std::cout
+
+  #ifdef NDEBUG
+    // Disable debug output with Release build.
+    // It's safe because compiler will ignore whole the
+    // output streaming expression no matter a line break.
+    #define DLOG(x) if(0)std::cout
+  #else
+    #define DLOG(x) std::cout
+  #endif
 #endif
 
 using  std::string;
@@ -60,6 +68,20 @@ using  std::vector;
 //
 #define BTCCOM_MINER_AGENT   "btccom-agent/0.1"
 
+#if defined(SUPPORT_GLOG) && defined(GLOG_TO_STDOUT)
+// Print logs to stdout with glog
+class GLogToStdout : public google::LogSink {
+public:
+    virtual void send(google::LogSeverity severity, const char* full_filename,
+        const char* base_filename, int line,
+        const struct ::tm* tm_time,
+        const char* message, size_t message_len);
+
+    virtual std::string ToString(google::LogSeverity severity, const char* file, int line,
+        const struct ::tm* tm_time,
+        const char* message, size_t message_len);
+};
+#endif
 
 class Strings {
 public:

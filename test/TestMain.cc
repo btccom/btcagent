@@ -41,7 +41,7 @@ static void handler(int sig);
 
 // just for debug, should be removed when release
 void handler(int sig) {
-#if defined(SUPPORT_GLOG)
+#if defined(SUPPORT_GLOG) && ! defined(_WIN32)
   void *array[10];
   size_t size;
 
@@ -84,9 +84,7 @@ int main(int argc, char **argv) {
     newArgv[1] = (char*)testname.c_str();
   }
   
-#if defined(SUPPORT_GLOG)
   testing::InitGoogleTest(&argc, newArgv);
-#endif
 
   int ret = RUN_ALL_TESTS();
   delete [] newArgv;

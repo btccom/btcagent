@@ -14,11 +14,35 @@ ELSE()
   message("Release build.")
 ENDIF()
 
+
+###
+# Use IOCP (I/O Completion Port) replace select() for libevent
+###
+option(POOLAGENT__USE_IOCP
+  "Use IOCP (I/O Completion Port) replace select() for libevent" OFF)
+
+if(POOLAGENT__USE_IOCP)
+  message("-- Use IOCP (I/O Completion Port) for libevent")
+  set(CompilerFlags CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG
+                    CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELEASE)
+  foreach(CompilerFlag ${CompilerFlags})
+    set(${CompilerFlag} "${${CompilerFlag}} /DUSE_IOCP")
+    message("${CompilerFlag}=${${CompilerFlag}}")
+  endforeach()
+else()
+  message("-- Use select() for libevent")
+  message("(-DPOOLAGENT__USE_IOCP=ON switching to IOCP)")
+endif()
+
+
 ###
 # static linking VC++ runtime library
 ###
+option(POOLAGENT__STATIC_LINKING_VC_LIB
+  "Static linking VC++ runtime library (/MT)" OFF)
+
 if(POOLAGENT__STATIC_LINKING_VC_LIB)
-  message("Static linking VC++ runtime library (/MT).")
+  message("-- Static linking VC++ runtime library (/MT).")
   
   # debug mode
   set(CompilerFlags CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG)
@@ -38,20 +62,67 @@ if(POOLAGENT__STATIC_LINKING_VC_LIB)
     message("${CompilerFlag}=${${CompilerFlag}}")
   endforeach()
 else()
-  message("Dynamic linking VC++ runtime library (/MD).")
-  message("Use -DPOOLAGENT__STATIC_LINKING_VC_LIB=ON for static linking.")
+  message("-- Dynamic linking VC++ runtime library (/MD).")
+  message("(-DPOOLAGENT__STATIC_LINKING_VC_LIB=ON switching to static linking.)")
 endif()
+
+
+###
+# Use GLog for logging replace stdout
+###
+option(POOLAGENT__USE_GLOG
+  "Use GLog for logging replace stdout" OFF)
+
+if(POOLAGENT__USE_GLOG)
+  message("-- Use GLog for logging")
+  set(CompilerFlags CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG
+                    CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELEASE)
+  foreach(CompilerFlag ${CompilerFlags})
+    set(${CompilerFlag} "${${CompilerFlag}} /DGOOGLE_GLOG_DLL_DECL= /DSUPPORT_GLOG")
+    message("${CompilerFlag}=${${CompilerFlag}}")
+  endforeach()
+else()
+  message("-- Use stdout for logging")
+  message("(-DPOOLAGENT__USE_GLOG=ON switching to GLog)")
+endif()
+
+###
+# Print logs to stdout with files
+###
+option(POOLAGENT__GLOG_TO_STDOUT
+  "Print logs to stdout with files" OFF)
+
+if(POOLAGENT__GLOG_TO_STDOUT)
+  message("-- Print logs to stdout with files")
+  set(CompilerFlags CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG
+                    CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELEASE)
+  foreach(CompilerFlag ${CompilerFlags})
+    set(${CompilerFlag} "${${CompilerFlag}} /DGLOG_TO_STDOUT")
+    message("${CompilerFlag}=${${CompilerFlag}}")
+  endforeach()
+else()
+  message("-- Only logs to file")
+  message("(-DPOOLAGENT__GLOG_TO_STDOUT=ON printing logs to stdout with files)")
+endif()
+
 
 SET(CMAKE_CXX_COMPILER_ARG1 "-std=c++98")
 SET(CMAKE_C_COMPILER_ARG1 "-std=c99")
+
+if(POOLAGENT__USE_GLOG)
+  find_package(Glog)
+  if(NOT GLOG_FOUND)
+    message(FATAL_ERROR "Glog not found!")
+  endif(NOT GLOG_FOUND)
+endif()
 
 find_package(LibEvent)
 if(NOT LibEvent_FOUND)
   message(FATAL_ERROR "libevent2 not found!")
 endif(NOT LibEvent_FOUND)
 
-include_directories(src test ${LIBEVENT_INCLUDE_DIR})
-set(THRID_LIBRARIES ${LIBEVENT_LIB})
+include_directories(src test ${GLOG_INCLUDE_DIRS} ${LIBEVENT_INCLUDE_DIR})
+set(THRID_LIBRARIES ${GLOG_LIBRARIES} ${LIBEVENT_LIB})
 
 file(GLOB LIB_SOURCES src/*.cc src/*.c)
 add_library(btccomagent STATIC ${LIB_SOURCES})
