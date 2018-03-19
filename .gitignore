@@ -31,3 +31,5 @@
 # build dir & files
 /build*/
 /CMakeLists.txt
+.vs/
+.vscode/
