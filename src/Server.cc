@@ -1085,7 +1085,7 @@ void StratumServer::addUpPool(const string &host, const uint16_t port) {
   upPoolHost_    .push_back(host);
   upPoolPort_    .push_back(port);
 
-  LOG(INFO) << "add pool: " << host << ":" << port << ", username: " << upPoolUserName << std::endl;
+  LOG(INFO) << "add pool: " << host << ":" << port << std::endl;
 }
 
 UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
@@ -1109,7 +1109,7 @@ UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
       continue;
     }
     LOG(INFO) << "success connect[" << (int32_t)up->idx_ << "]: " << upPoolHost_[i] << ":"
-    << upPoolPort_[i] << ", username: " << upPoolUserName_[i] << std::endl;
+    << upPoolPort_[i] << ", username: " << userName << std::endl;
 
     return up;  // connect success
   }
@@ -1330,6 +1330,10 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
 
   uint16_t sessionId = 0u;
   server->sessionIDManager_.allocSessionId(&sessionId);
+
+  // the upSession was not created or not decided at current, so set upSessionIdx as -1.
+  // the upSession will be created or decided after the miner send its worker name.
+  const int8_t upSessionIdx = -1;
 
   StratumSession *conn = new StratumSession(upSessionIdx, sessionId, bev, server,
                                             ((struct sockaddr_in *)saddr)->sin_addr);
