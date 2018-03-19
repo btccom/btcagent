@@ -55,10 +55,13 @@ TEST(Utils, splitNotify) {
 
 
 TEST(Utils, Strings_parseConfJson) {
+  // `pools` contains 3 elements
   {
     string listenIP, listenPort;
     std::vector<PoolConf> poolConfs;
-    string line = "{\"agent_listen_ip\": \"0.0.0.0\",\"agent_listen_port\": 3333,\"pools\": [[\"cn.ss.btc.com\", 1800, \"kevin\"]]}";
+    string line = "{\"agent_listen_ip\": \"0.0.0.0\",\"agent_listen_port\": 3333,\"pools\": ["
+                      "[\"cn.ss.btc.com\", 1800, \"kevin\"]"
+                  "]}";
     ASSERT_EQ(parseConfJson(line, listenIP, listenPort, poolConfs), true);
     ASSERT_EQ(listenIP, "0.0.0.0");
     ASSERT_EQ(listenPort, "3333");
@@ -68,15 +71,35 @@ TEST(Utils, Strings_parseConfJson) {
     // ASSERT_EQ(poolConfs[0].upPoolUserName_, "kevin");
   }
 
+  // `pools` contains 2 elements
   {
     string listenIP, listenPort;
     std::vector<PoolConf> poolConfs;
-    string line = "{\"agent_listen_ip\": \"127.0.0.1\",\"agent_listen_port\": 1800,\"pools\": [[\"cn.ss.btc.com\", 1800, \"kevin\"],[\"us.ss.btc.com\", 3333, \"kevinus\"]]}";
+    string line = "{\"agent_listen_ip\": \"0.0.0.0\",\"agent_listen_port\": 3333,\"pools\": ["
+                      "[\"cn.ss.btc.com\", 1800]"
+                  "]}";
+    ASSERT_EQ(parseConfJson(line, listenIP, listenPort, poolConfs), true);
+    ASSERT_EQ(listenIP, "0.0.0.0");
+    ASSERT_EQ(listenPort, "3333");
+    ASSERT_EQ(poolConfs.size(), 1U);
+    ASSERT_EQ(poolConfs[0].host_, "cn.ss.btc.com");
+    ASSERT_EQ(poolConfs[0].port_, 1800U);
+  }
+
+  // more than one pools
+  {
+    string listenIP, listenPort;
+    std::vector<PoolConf> poolConfs;
+    string line = "{\"agent_listen_ip\": \"127.0.0.1\",\"agent_listen_port\": 1800,\"pools\": ["
+                      "[\"cn.ss.btc.com\", 1800, \"kevin\"],"
+                      "[\"us.ss.btc.com\", 3333, \"kevinus\"],"
+                      "[\"us.ss.btc.com\", 3333, \"kevinus\"]"
+                  "]}";
     ASSERT_EQ(parseConfJson(line, listenIP, listenPort, poolConfs), true);
 
     ASSERT_EQ(listenIP, "127.0.0.1");
     ASSERT_EQ(listenPort, "1800");
-    ASSERT_EQ(poolConfs.size(), 2U);
+    ASSERT_EQ(poolConfs.size(), 3U);
 
     ASSERT_EQ(poolConfs[0].host_, "cn.ss.btc.com");
     ASSERT_EQ(poolConfs[0].port_, 1800U);

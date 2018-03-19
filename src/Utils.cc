@@ -146,10 +146,10 @@ bool parseConfJson(const string &jsonStr,
       const int poolCount = t[i].size;
       LOG(INFO) << "poolCount is : " << poolCount << "\n";
       for (int j = 0; j < poolCount; j++) {
-        // we expect pools to be an array: 2 elements
-        // don't need worker name anymore;
         int idx = i + 1 + j*4;
-        if (t[idx].type != JSMN_ARRAY || t[idx].size != 2) {
+        // we expect pools to be an array: at least 2 elements.
+        // don't need worker name anymore but allow it exists for compatibility.
+        if (t[idx].type != JSMN_ARRAY || t[idx].size < 2) {
           return false;
         }
 
