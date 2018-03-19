@@ -293,7 +293,7 @@ void StratumMessage::_parseMiningNotify() {
 
       i += t_[i].size + 1;  // move to params[5]
 
-      sjob_.version_  = (int32_t) strtoul(getJsonStr(&t_[i]).c_str(),   NULL, 16);
+      sjob_.version_  = (uint32_t)strtoul(getJsonStr(&t_[i]).c_str(),   NULL, 16);
       sjob_.time_     = (uint32_t)strtoul(getJsonStr(&t_[i+2]).c_str(), NULL, 16);
 
       const string isClean = str2lower(getJsonStr(&t_[i+3]));
@@ -520,7 +520,7 @@ bool StratumMessage::getExtraNonce1AndExtraNonce2Size(uint32_t *nonce1,
 
 
 ///////////////////////////////// UpStratumClient //////////////////////////////
-UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
+UpStratumClient::UpStratumClient(const uint32_t idx, struct event_base *base,
                                  const string &userName, StratumServer *server)
 : state_(UP_INIT), idx_(idx), server_(server), poolDefaultDiff_(0)
 {
@@ -782,12 +782,12 @@ bool UpStratumClient::isAvailable() {
 
 
 ////////////////////////////////// StratumSession //////////////////////////////
-StratumSession::StratumSession(const int8_t upSessionIdx,
+StratumSession::StratumSession(const uint32_t upSessionIdx,
                                const uint16_t sessionId,
                                struct bufferevent *bev, StratumServer *server,
                                struct in_addr saddr)
-: state_(DOWN_CONNECTED), minerAgent_(NULL), upSessionIdx_(upSessionIdx),
-sessionId_(sessionId), bev_(bev), server_(server), saddr_(saddr)
+: state_(DOWN_CONNECTED), upSessionIdx_(upSessionIdx), sessionId_(sessionId),
+bev_(bev), server_(server), minerAgent_(NULL), saddr_(saddr)
 {
   inBuf_ = evbuffer_new();
   assert(inBuf_ != NULL);
@@ -975,8 +975,8 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
   } else {
     // find upSessionIdx with least downSessions
     upSessionIdx_ = server_->findUpSessionIdx(userName_);
-    // if upSessionIdx_ == -1, show the second down Session was too fast, all the upStratum don't accomplish the authorize
-    if (upSessionIdx_ == -1)
+    // if upSessionIdx_ == 0xFFFFFFFFUL, show the second down Session was too fast, all the upStratum don't accomplish the authorize
+    if (upSessionIdx_ == 0xFFFFFFFFUL)
     {
       // choose first upSession idx as upSessionIdx
       upSessionIdx_ = server_->userUpsessionIdx_[userName_];
@@ -1088,7 +1088,7 @@ void StratumServer::addUpPool(const string &host, const uint16_t port) {
   LOG(INFO) << "add pool: " << host << ":" << port << std::endl;
 }
 
-UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
+UpStratumClient *StratumServer::createUpSession(const uint32_t idx) {
   for (size_t i = 0; i < upPoolHost_.size(); i++) {
     struct sockaddr_in sin;
     memset(&sin, 0, sizeof(sin));
@@ -1215,7 +1215,7 @@ void StratumServer::upSesssionCheckCallback(evutil_socket_t fd,
 }
 
 void StratumServer::waitUtilAllUpSessionsAvailable() {
-  for (int8_t i = 0; i < upSessions_.size(); i++) {
+  for (uint32_t i = 0; i < upSessions_.size(); i++) {
 
     // lost upsession when init, we should stop server
     if (upSessions_[i] == NULL) {
@@ -1253,7 +1253,7 @@ void StratumServer::checkUpSessions() {
         DLOG(INFO)<<"upSessions is null";
         continue;
       }
-      if(!upSessions_[i]->state_ == UP_AUTHENTICATED) {
+      if(upSessions_[i]->state_ != UP_AUTHENTICATED) {
         break;
       }
       if (upSessions_[i]->downSessionCount_) {
@@ -1331,9 +1331,9 @@ void StratumServer::listenerCallback(struct evconnlistener *listener,
   uint16_t sessionId = 0u;
   server->sessionIDManager_.allocSessionId(&sessionId);
 
-  // the upSession was not created or not decided at current, so set upSessionIdx as -1.
+  // the upSession was not created or not decided at current, so set upSessionIdx as the max value of uint32.
   // the upSession will be created or decided after the miner send its worker name.
-  const int8_t upSessionIdx = -1;
+  const uint32_t upSessionIdx = 0xFFFFFFFFUL;
 
   StratumSession *conn = new StratumSession(upSessionIdx, sessionId, bev, server,
                                             ((struct sockaddr_in *)saddr)->sin_addr);
@@ -1395,7 +1395,7 @@ void StratumServer::addDownConnection(StratumSession *conn) {
   upSessions_[conn->upSessionIdx_]->downSessionCount_++;
 
   assert(conn->state_ == DOWN_AUTHENTICATED);
-  assert(conn->upSessionIdx_ != -1);
+  assert(conn->upSessionIdx_ != 0xFFFFFFFFUL);
   upSessions_[conn->upSessionIdx_]->upDownSessions_.push_back(conn);
 }
 
@@ -1422,8 +1422,7 @@ void StratumServer::removeDownConnection(StratumSession *downconn) {
     }
 
     // if up is not null, delete up's downSession;
-    for (auto i = 0; i < up->upDownSessions_.size(); i++) {
-
+    for (size_t i = 0; i < up->upDownSessions_.size(); i++) {
       if (up->upDownSessions_[i] == NULL) {
         continue;
       }
@@ -1524,7 +1523,7 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
   server->removeUpConnection(up);
 }
 
-void StratumServer::sendMiningNotifyToAll(const int8_t idx,  const string &notify) {
+void StratumServer::sendMiningNotifyToAll(const uint32_t idx,  const string &notify) {
 
   UpStratumClient *up = upSessions_[idx];
   for (size_t i = 0; i < up->upDownSessions_.size(); i++) {
@@ -1569,24 +1568,21 @@ void StratumServer::sendMiningDifficulty(UpStratumClient *upconn,
   downSession->sendData(s);
 }
 
-int8_t StratumServer::findUpSessionIdx(const string &userName) {
-  int32_t count = -1;
-  int8_t idx = -1;
+uint32_t StratumServer::findUpSessionIdx(const string &userName) {
+  uint32_t count = 0xFFFFFFFFUL;
+  uint32_t idx = 0xFFFFFFFFUL;
 
-  for (int8_t i = userUpsessionIdx_[userName]; i < userUpsessionIdx_[userName]+kUpSessionCount_; i++) {
+  for (uint32_t i = userUpsessionIdx_[userName]; i < userUpsessionIdx_[userName]+kUpSessionCount_; i++) {
     if (upSessions_[i] == NULL || !upSessions_[i]->isAvailable())
       continue;
 
-    if (count == -1) {
-      idx = i;
-      count = upSessions_[i]->downSessionCount_;
-    }
-    else if (upSessions_[i]->downSessionCount_ < count) {
+    // find a upSession that has the fewest downSessions.
+    if (upSessions_[i]->downSessionCount_ < count) {
       idx = i;
       count = upSessions_[i]->downSessionCount_;
     }
   }
-  DLOG(INFO) << "FINALLY WE FOUND " << (int32_t) idx;
+  DLOG(INFO) << "FINALLY WE FOUND " << idx << std::endl;
   return idx;
 }
 

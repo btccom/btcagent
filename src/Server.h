@@ -122,7 +122,7 @@ class StratumJob {
 public:
   uint32_t jobId_;
   string prevHash_;
-  int32_t  version_;
+  uint32_t  version_;
   uint32_t time_;      // block time or stratum job time
   bool  isClean_;
 
@@ -232,7 +232,7 @@ public:
   StratumServer(const string &listenIP, const uint16_t listenPort);
   ~StratumServer();
 
-  UpStratumClient *createUpSession(const int8_t idx);
+  UpStratumClient *createUpSession(const uint32_t idx);
   void addUpPool(const string &host, const uint16_t port);
 
   void addDownConnection   (StratumSession *conn);
@@ -254,13 +254,13 @@ public:
   static void upWatcherCallback(evutil_socket_t fd, short events, void *ptr);
   static void upSesssionCheckCallback(evutil_socket_t fd, short events, void *ptr);
 
-  void sendMiningNotifyToAll(const int8_t idx, const string &notify);
+  void sendMiningNotifyToAll(const uint32_t idx, const string &notify);
   void sendMiningNotify(StratumSession *downSession);
   void sendDefaultMiningDifficulty(StratumSession *downSession);
   void sendMiningDifficulty(UpStratumClient *upconn,
                             uint16_t sessionId, uint64_t diff);
 
-  int8_t findUpSessionIdx(const string &workName);
+  uint32_t findUpSessionIdx(const string &workName);
 
   void submitShare(const Share &share, StratumSession *downSession);
   void registerWorker  (StratumSession *downSession, const char *minerAgent,
@@ -296,7 +296,7 @@ class UpStratumClient {
 
 public:
   UpStratumClientState state_;
-  int8_t idx_;
+  uint32_t idx_;
   StratumServer *server_;
 
   uint32_t poolDefaultDiff_;
@@ -317,7 +317,7 @@ public:
   // unRegister workers
   vector<StratumSession *> unRegisterWorkers_;
 public:
-  UpStratumClient(const int8_t idx,
+  UpStratumClient(const uint32_t idx,
                   struct event_base *base, const string &userName,
                   StratumServer *server);
   ~UpStratumClient();
@@ -365,19 +365,19 @@ class StratumSession {
   void responseTrue(const string &idStr);
 
 public:
-  int8_t  upSessionIdx_;
+  StratumSessionState state_;
+  uint32_t  upSessionIdx_;
   uint16_t sessionId_;
   struct bufferevent *bev_;
   StratumServer *server_;
   string workerName_;
   string userName_;
-  StratumSessionState state_;
   char *minerAgent_;
   struct in_addr saddr_;
 
 
 public:
-  StratumSession(const int8_t upSessionIdx, const uint16_t sessionId,
+  StratumSession(const uint32_t upSessionIdx, const uint16_t sessionId,
                  struct bufferevent *bev, StratumServer *server,
                  struct in_addr saddr);
   ~StratumSession();

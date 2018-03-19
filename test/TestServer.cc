@@ -119,7 +119,7 @@ TEST(Server, StratumMessage_parseMiningNotify) {
     StratumJob sjob;
     ASSERT_EQ(smsg.parseMiningNotify(sjob), true);
 
-    ASSERT_EQ(sjob.jobId_, 1);
+    ASSERT_EQ(sjob.jobId_, 1UL);
     ASSERT_EQ(sjob.prevHash_, "4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000");
     ASSERT_EQ(sjob.version_, 0x00000002u);
     ASSERT_EQ(sjob.time_, 0x504e86b9u);
