@@ -1459,7 +1459,6 @@ void StratumServer::addUpConnection(UpStratumClient *conn) {
 }
 
 void StratumServer::removeUpConnection(UpStratumClient *upconn) {
-  DLOG(INFO) << "remove up connection, idx: " << (int32_t)(upconn->idx_) << std::endl;
   
   // It will be NULL if the OS (not only Windows but also Linux) has
   // no network device or just no available network access.
@@ -1471,10 +1470,12 @@ void StratumServer::removeUpConnection(UpStratumClient *upconn) {
   // auto restart) from it's daemon process.
   //assert(upSessions_[upconn->idx_] != NULL);
 
-  if (upSessions_[upconn->idx_] == NULL) {
+  if (upconn == NULL) {
     LOG(ERROR) << "network unavailable" << std::endl;
     exit(1);
   }
+
+  DLOG(INFO) << "remove up connection, idx: " << (int32_t)(upconn->idx_) << std::endl;
 
   // remove down session which belong to this up connection
   for (size_t i = 0; i < upconn->upDownSessions_.size(); i++) {
