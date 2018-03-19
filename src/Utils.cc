@@ -116,18 +116,19 @@ bool parseConfJson(const string &jsonStr,
         return false;  // we expect "pools" to be an array of array
       }
       const int poolCount = t[i].size;
-
+      LOG(INFO) << "poolCount is : " << poolCount << "\n";
       for (int j = 0; j < poolCount; j++) {
-        // we expect pools to be an array: 3 elements
+        // we expect pools to be an array: 2 elements
+        // don't need worker name anymore;
         int idx = i + 1 + j*4;
-        if (t[idx].type != JSMN_ARRAY || t[idx].size != 3) {
+        if (t[idx].type != JSMN_ARRAY || t[idx].size != 2) {
           return false;
         }
 
         PoolConf conf;
         conf.host_ = getJsonStr(c, &t[idx + 1]);
         conf.port_ = (uint16_t)strtoul(getJsonStr(c, &t[idx + 2]).c_str(), NULL, 10);
-        conf.upPoolUserName_= getJsonStr(c, &t[idx + 3]);
+        // conf.upPoolUserName_= getJsonStr(c, &t[idx + 3]);
 
         poolConfs.push_back(conf);
       }
