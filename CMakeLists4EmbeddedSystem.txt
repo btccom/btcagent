@@ -24,7 +24,9 @@ ENDIF()
 set(CMAKE_CXX_COMPILER ${CROSS_PREFIX}g++)
 set(CMAKE_C_COMPILER   ${CROSS_PREFIX}gcc)
 
-set(CMAKE_CXX_COMPILER_ARG1 "-std=c++98")
+# use C++11
+set (CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_COMPILER_ARG1 "-std=c++0x")
 set(CMAKE_C_COMPILER_ARG1 "-std=c99")
 
 include_directories(src test ${SDK_DIR}/include)

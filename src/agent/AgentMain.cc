@@ -28,7 +28,7 @@
  #include "win32/getopt/getopt.h"
 #endif
 
-StratumServer *gStratumServer = NULL;
+StratumServer *gStratumServer = nullptr;
 
 void handler(int sig) {
   if (gStratumServer) {
@@ -45,8 +45,8 @@ void usage() {
 }
 
 int main(int argc, char **argv) {
-  char *optLogDir = NULL;
-  char *optConf   = NULL;
+  char *optLogDir = nullptr;
+  char *optConf   = nullptr;
   int c;
 
   if (argc <= 1) {

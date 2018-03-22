@@ -14,6 +14,12 @@ ELSE()
   message("Release build.")
 ENDIF()
 
+# use C++11
+set (CMAKE_CXX_STANDARD 11)
+
+# avoid errors when include Windows.h
+add_definitions(-DWIN32_LEAN_AND_MEAN)
+
 
 ###
 # Use IOCP (I/O Completion Port) replace select() for libevent

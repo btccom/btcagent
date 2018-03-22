@@ -90,7 +90,7 @@ void Strings::Append(string & dest, const char * fmt, ...) {
 }
 
 string getJsonStr(const char *c,const jsmntok_t *t) {
-  if (t == NULL || t->end <= t->start)
+  if (t == nullptr || t->end <= t->start)
     return "";
 
   return string(c + t->start, t->end - t->start);
@@ -155,7 +155,7 @@ bool parseConfJson(const string &jsonStr,
 
         PoolConf conf;
         conf.host_ = getJsonStr(c, &t[idx + 1]);
-        conf.port_ = (uint16_t)strtoul(getJsonStr(c, &t[idx + 2]).c_str(), NULL, 10);
+        conf.port_ = (uint16_t)strtoul(getJsonStr(c, &t[idx + 2]).c_str(), nullptr, 10);
         // conf.upPoolUserName_= getJsonStr(c, &t[idx + 3]);
 
         poolConfs.push_back(conf);
@@ -175,16 +175,16 @@ bool parseConfJson(const string &jsonStr,
 const char *splitNotify(const string &line) {
   const char *pch = strchr(line.c_str(), '"');
   int i = 1;
-  while (pch != NULL) {
+  while (pch != nullptr) {
     pch = strchr(pch + 1, '"');
     i++;
-    if (pch != NULL && i == 14) {
+    if (pch != nullptr && i == 14) {
       break;
     }
   }
-  if (pch == NULL) {
+  if (pch == nullptr) {
     LOG(ERROR) << "invalid mining.notify: " << line << std::endl;
-    return NULL;
+    return nullptr;
   }
   return pch;
 }
