@@ -204,7 +204,7 @@ class StratumServer {
   vector<string>   upPoolHost_;
   vector<uint16_t> upPoolPort_;
 
-  //struct event *upEvTimer_;
+  struct event *upEvTimer_;
 
   // libevent2
   struct event_base *base_;
@@ -230,6 +230,7 @@ public:
   void removeUpSession(UpStratumClient *upSession);
   void addDownSession(StratumSession *downSession);
   void removeDownSession(StratumSession *downSession);
+  void checkUpSessions();
 
   static void listenerCallback(struct evconnlistener *listener,
                                evutil_socket_t fd,
@@ -241,8 +242,7 @@ public:
   static void upReadCallback (struct bufferevent *, void *ptr);
   static void upEventCallback(struct bufferevent *, short, void *ptr);
 
-  //static void upWatcherCallback(evutil_socket_t fd, short events, void *ptr);
-  //static void upSesssionCheckCallback(evutil_socket_t fd, short events, void *ptr);
+  static void upWatcherCallback(evutil_socket_t fd, short events, void *ptr);
 
   bool setup();
   void run();
@@ -321,7 +321,6 @@ public:
   bool isAvailable();
 
   void submitShare(const Share &share, StratumSession *downSession);
-  void submitWorkerInfo();
 };
 
 

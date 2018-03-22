@@ -940,6 +940,18 @@ void UpStratumClient::removeDownSession(StratumSession *downSession) {
   delete downSession;
 }
 
+bool UpStratumClient::isAvailable() {
+  const uint32_t kJobExpiredTime = 60 * 5;  // seconds
+
+  if (state_ == UP_AUTHENTICATED &&
+      latestMiningNotifyStr_.empty() == false &&
+      poolDefaultDiff_ != 0 &&
+      lastJobReceivedTime_ + kJobExpiredTime > (uint32_t)time(NULL)) {
+    return true;
+  }
+  return false;
+}
+
 void UpStratumClient::submitShare(const Share &share,
                                   StratumSession *downSession) {
 
@@ -1206,17 +1218,15 @@ void StratumSession::handleRequest_Submit(const string &idStr,
 StratumServer::StratumServer(const string &listenIP, const uint16_t listenPort)
 :running_ (true), listenIP_(listenIP), listenPort_(listenPort), base_(nullptr)
 {
-  //upEvTimer_ = nullptr;
+  upEvTimer_ = nullptr;
 }
 
 StratumServer::~StratumServer() {
-  // remove upsessions
-
   if (signal_event_)
     event_free(signal_event_);
 
-  /*if (upEvTimer_)
-    event_del(upEvTimer_);*/
+  if (upEvTimer_)
+    event_del(upEvTimer_);
 
   if (listener_)
     evconnlistener_free(listener_);
@@ -1257,11 +1267,11 @@ bool StratumServer::setup() {
   }
 
   // setup up sessions watcher
-  /*upEvTimer_ = event_new(base_, -1, EV_PERSIST,
+  upEvTimer_ = event_new(base_, -1, EV_PERSIST,
                          StratumServer::upWatcherCallback, this);
   // every 15 seconds to check if up session's available
   struct timeval tenSec = {15, 0};
-  event_add(upEvTimer_, &tenSec);*/
+  event_add(upEvTimer_, &tenSec);
 
   // set up ev listener
   struct sockaddr_in sin;
@@ -1518,4 +1528,42 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
 
 void StratumServer::upReadCallback(struct bufferevent *bev, void *ptr) {
   static_cast<UpStratumClient *>(ptr)->recvData(bufferevent_get_input(bev));
+}
+
+void StratumServer::upWatcherCallback(evutil_socket_t fd,
+                                      short events, void *ptr) {
+  StratumServer *server = static_cast<StratumServer *>(ptr);
+  server->checkUpSessions();
+}
+
+void StratumServer::checkUpSessions() {
+  DLOG(INFO) << "start checkUpSessions..." << std::endl;
+
+  auto upSetIter = upSessionSets_.begin();
+  while (upSetIter != upSessionSets_.end()) {
+    auto upSet = upSetIter->second;
+
+    auto upSessionIter = upSet.begin();
+    while (upSessionIter != upSet.end()) {
+      UpStratumClient *upSession = *upSessionIter;
+
+      if (!upSession->isAvailable()) {
+        LOG(WARNING) << "remove dead up session, userName: " << upSession->userName_
+                     << ", downSessionCount: " << upSession->downSessionCount() << std::endl;
+        upSessionIter = upSet.erase(upSessionIter);
+        delete upSession;
+        continue;
+      }
+
+      upSessionIter++;
+    }
+
+    if (upSet.size() == 0) {
+      upSetIter = upSessionSets_.erase(upSetIter);
+      continue;
+    }
+
+    upSetIter++;
+  }
+
 }
