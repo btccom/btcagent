@@ -30,4 +30,3 @@
 
 # build dir & files
 /build*/
-/CMakeLists.txt

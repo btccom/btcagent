@@ -1,0 +1,30 @@
+#!/bin/sh
+
+echo "-- create log dir for btcagent"
+mkdir /var/log/btcagent
+
+echo "-- set minfds=65535 in supervisor.conf"
+cat /etc/supervisor/supervisord.conf | grep -v 'minfds\s*=' | sed '/\[supervisord\]/a\minfds=65535' | tee /etc/supervisor/supervisord.conf | grep 'minfds\s*='
+
+echo "-- start supervisor & running btcagent"
+service supervisor start
+echo "-- start btcagent"
+supervisorctl reread
+supervisorctl update
+supervisorctl status btcagent
+
+echo "-- Install successfully."
+echo # empty line
+echo "-- Usage:"
+echo "* Edit config file:"
+echo "    vim /etc/btcagent/agent_conf.json"
+echo "* Start supervisor (daemon service of btcagent)"
+echo "    service start supervisor"
+echo "* Restart btcagent:"
+echo "    supervisorctl restart btcagent"
+echo "* Stop btcagent:"
+echo "    supervisorctl stop btcagent"
+echo "* Show logs:"
+echo "    tail -F /var/log/btcagent/*INFO"
+echo "* Count connections:"
+echo "    netstat -antp | grep btcagent"
