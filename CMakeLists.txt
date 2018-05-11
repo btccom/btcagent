@@ -48,5 +48,32 @@ add_executable(unittest ${TEST_SOURCES})
 target_link_libraries(unittest btccomagent ${THRID_LIBRARIES})
 
 file(GLOB_RECURSE AGENT_SOURCES src/agent/*.cc)
-add_executable(agent ${AGENT_SOURCES})
-target_link_libraries(agent btccomagent ${THRID_LIBRARIES})
+add_executable(btcagent-mu ${AGENT_SOURCES})
+target_link_libraries(btcagent-mu btccomagent ${THRID_LIBRARIES})
+
+
+# make instal support
+install(TARGETS btcagent-mu
+        DESTINATION /usr/bin)
+install(FILES src/agent/agent_conf.json README.md README-zh_CN.md
+        DESTINATION /etc/btcagent-mu)
+install(FILES install/btcagent-multi_user.conf
+        DESTINATION /etc/supervisor/conf.d)
+
+# generate deb package by CPack
+set(CPACK_GENERATOR "DEB")
+set(CPACK_PACKAGE_NAME "btcagent-multi_user")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "YihaoPeng yihao.peng@bitmain.com")
+
+SET(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CMAKE_SOURCE_DIR}/install/debian-control/postinst")
+
+# version
+SET(CPACK_PACKAGE_VERSION_MAJOR "0")
+SET(CPACK_PACKAGE_VERSION_MINOR "9")
+SET(CPACK_PACKAGE_VERSION_PATCH "0-beta")
+
+# dependencies
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "supervisor")
+
+include(CPack)
