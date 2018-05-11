@@ -135,8 +135,9 @@ bool parseConfJson(const string &jsonStr,
     else if (jsoneq(c, &t[i], "pools") == 0) {
       //
       // "pools": [
-      //    ["cn.ss.btc.com", 1800, "kevin1"],
-      //    ["cn.ss.btc.com", 1800, "kevin2"],
+      //    ["cn.ss.btc.com", 1800],
+      //    ["cn.ss.btc.com", 443],
+      //    ..
       // ]
       //
       i++;
@@ -144,10 +145,10 @@ bool parseConfJson(const string &jsonStr,
         return false;  // we expect "pools" to be an array of array
       }
       const int poolCount = t[i].size;
-      LOG(INFO) << "poolCount is : " << poolCount << "\n";
+      
+      int idx = i + 1;
       for (int j = 0; j < poolCount; j++) {
-        int idx = i + 1 + j*4;
-        // we expect pools to be an array: at least 2 elements.
+        // we expect a pool is an array: at least 2 elements.
         // don't need worker name anymore but allow it exists for compatibility.
         if (t[idx].type != JSMN_ARRAY || t[idx].size < 2) {
           return false;
@@ -159,6 +160,9 @@ bool parseConfJson(const string &jsonStr,
         // conf.upPoolUserName_= getJsonStr(c, &t[idx + 3]);
 
         poolConfs.push_back(conf);
+
+        // move to the next pool
+        idx += t[idx].size + 1;
       }
       i += poolCount * 4;
     }
