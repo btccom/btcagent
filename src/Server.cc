@@ -1296,6 +1296,8 @@ bool StratumServer::setup() {
     LOG(ERROR) << "cannot create listener: " << listenIP_ << ":" << listenPort_ << std::endl;
     return false;
   }
+
+  LOG(INFO) << "listen on " << listenIP_ << ":" << listenPort_ << std::endl;
   return true;
 }
 
