@@ -59,7 +59,6 @@ cd glog-0.3.4
 mkdir -p /work && cd /work
 git clone https://github.com/btccom/btcagent.git
 cd btcagent
-ln -s CMakeLists-Default.txt CMakeLists.txt
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make
