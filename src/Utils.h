@@ -64,9 +64,9 @@ using  std::vector;
 
 //
 // WARNING: DO NOT CHANGE THE NAME.
-// the version could be changed like: "btccom-agent/xx.xx"
+// the version could be changed like: "btccom-agent/xx.xx.xx-edition"
 //
-#define BTCCOM_MINER_AGENT   "btccom-agent/0.1"
+#define BTCCOM_MINER_AGENT   "btccom-agent/0.9.0-mu"
 
 #if defined(SUPPORT_GLOG) && defined(GLOG_TO_STDOUT)
 // Print logs to stdout with glog
