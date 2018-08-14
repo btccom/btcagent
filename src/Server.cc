@@ -758,7 +758,7 @@ void UpStratumClient::registerWorker(StratumSession *downSession) {
   strcpy((char *)p, workerName.c_str());
   p += workerName.length() + 1;
   assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
-  DLOG(INFO) << "registerWorker: " << userName_ << ", " << downSession->sessionId_;
+  DLOG(INFO) << "registerWorker: " << userName_  << "." << workerName << ", " << minerAgent << ", " << downSession->sessionId_;
 
   sendData(buf);
 }
@@ -1123,7 +1123,9 @@ void StratumSession::handleRequest_Subscribe(const string &idStr,
   DLOG(INFO) << "Subcribe Process, minerAgent is " << minerAgent_;
 
   // 30 is max length for miner agent
-  minerAgent_.resize(30);
+  if (minerAgent_.size() > 30) {
+    minerAgent_.resize(30);
+  }
 
   //
   // Response:
