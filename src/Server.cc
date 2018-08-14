@@ -901,8 +901,6 @@ void UpStratumClient::handleStratumMessage(const string &line) {
 
       // Reply all downSessions established before upSession is authenticated
       sendLineToAllDownSessions(line);
-
-      server_->removeUpSession(this);
     }
     
     return;
