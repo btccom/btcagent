@@ -1017,6 +1017,7 @@ StratumSession::StratumSession(const uint16_t sessionId,
 }
 
 StratumSession::~StratumSession() {
+  server_->sessionIDManager_.freeSessionId(sessionId_);
   evbuffer_free(inBuf_);
   bufferevent_free(bev_);
 }
