@@ -3,7 +3,7 @@
     "agent_listen_port": 3334,
     "pools": [
         ["cn.ss.btc.com", 1800],
-		["cn.ss.btc.com", 443],
-		["cn.ss.btc.com", 3333]
+        ["cn.ss.btc.com", 443],
+        ["cn.ss.btc.com", 3333]
     ]
 }

@@ -55,7 +55,7 @@ target_link_libraries(btcagent-mu btccomagent ${THRID_LIBRARIES})
 # make instal support
 install(TARGETS btcagent-mu
         DESTINATION /usr/bin)
-install(FILES src/agent/agent_conf.json README.md README-zh_CN.md
+install(FILES src/agent/agent_conf.default.json README.md README-zh_CN.md
         DESTINATION /etc/btcagent-mu)
 install(FILES install/btcagent-multi_user.conf
         DESTINATION /etc/supervisor/conf.d)

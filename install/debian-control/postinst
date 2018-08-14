@@ -1,7 +1,14 @@
 #!/bin/sh
 
 echo "-- create log dir for btcagent (multi user version)"
-mkdir /var/log/btcagent-mu
+if ! [ -e /var/log/btcagent-mu ]; then
+    mkdir /var/log/btcagent-mu
+fi
+
+echo "-- copy configure files"
+if ! [ -e /etc/btcagent-mu/agent_conf.json ]; then
+    cp /etc/btcagent-mu/agent_conf.default.json /etc/btcagent-mu/agent_conf.json
+fi
 
 echo "-- set minfds=65535 in supervisor.conf"
 cat /etc/supervisor/supervisord.conf | grep -v 'minfds\s*=' | sed '/\[supervisord\]/a\minfds=65535' | tee /etc/supervisor/supervisord.conf | grep 'minfds\s*='
