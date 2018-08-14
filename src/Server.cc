@@ -803,18 +803,6 @@ void UpStratumClient::handleStratumMessage(const string &line) {
   uint32_t difficulty = 0u;
 
   if (state_ == UP_AUTHENTICATED) {
-
-    // Reply all downSessions established before upSession is available
-    for (auto downSessionItr : downSessions_) {
-      StratumSession *downSession = downSessionItr.second;
-
-      registerWorker(downSession);
-      // send mining.set_difficulty
-      sendDefaultMiningDifficulty(downSession);
-      // send latest stratum job
-      sendMiningNotify(downSession);
-    }
-
     if (smsg.parseMiningNotify(sjob)) {
       //
       // mining.notify
@@ -847,6 +835,12 @@ void UpStratumClient::handleStratumMessage(const string &line) {
       // just set the default pool diff, than ignore
       if (poolDefaultDiff_ == 0) {
         poolDefaultDiff_ = difficulty;
+        
+        // send to miner
+        for (auto downSessionItr : downSessions_) {
+          StratumSession *downSession = downSessionItr.second;
+          sendDefaultMiningDifficulty(downSession);
+        }
       }
     }
 
@@ -898,6 +892,7 @@ void UpStratumClient::handleStratumMessage(const string &line) {
       for (auto downSessionItr : downSessions_) {
         StratumSession *downSession = downSessionItr.second;
         downSession->responseAuthorizedSuccess();
+        registerWorker(downSession);
       }
     }
     else {
@@ -935,8 +930,8 @@ void UpStratumClient::removeDownSession(StratumSession *downSession) {
   if (downSessionIter == downSessions_.end()) {
     return;
   }
-
   downSessions_.erase(downSessionIter);
+  unRegisterWorker(downSession);
   delete downSession;
 }
 
