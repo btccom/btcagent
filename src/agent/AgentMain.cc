@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
   } else {
     FLAGS_log_dir = string(optLogDir);
   }
-  FLAGS_max_log_size = 10;  // max log file size 10 MB
+  FLAGS_max_log_size = 100;  // max log file size: 100 MB
   FLAGS_logbuflevel = -1;
   FLAGS_stop_logging_if_full_disk = true;
 
