@@ -237,7 +237,9 @@ void StratumMessage::_parseMiningSubmit() {
     //
     // [Worker Name, Job ID, ExtraNonce2(hex), nTime(hex), nonce(hex)]
     //
-    if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size == 5) {
+    if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size >= 5) {
+      bool hasVersionMask = t_[i+1].size >= 6;
+
       i++;  // ptr move to params
       i++;  // ptr move to params[0]
 
@@ -249,6 +251,11 @@ void StratumMessage::_parseMiningSubmit() {
       share_.time_        = (uint32_t)strtoul(getJsonStr(&t_[i+3]).c_str(), NULL, 16);
       // nonce(hex)
       share_.nonce_       = (uint32_t)strtoul(getJsonStr(&t_[i+4]).c_str(), NULL, 16);
+
+      if (hasVersionMask) {
+        // versionMask(hex)
+        share_.versionMask_ = (uint32_t)strtoul(getJsonStr(&t_[i+5]).c_str(), NULL, 16);
+      }
 
       // set the method_
       method_ = "mining.submit";
@@ -318,6 +325,26 @@ void StratumMessage::_parseMiningSetDifficulty() {
   }
 }
 
+void StratumMessage::_parseMiningSetVersionMask() {
+  for (int i = 1; i < r_; i++) {
+    //
+    // {"id":null,"method":"mining.set_version_mask","params":["1fffe000"]}
+    //
+    if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size == 1) {
+      i++;  // ptr move to params
+      i++;  // ptr move to params[0]
+      const uint32_t versionMask = (uint32_t)strtoul(getJsonStr(&t_[i]).c_str(), NULL, 16);
+
+      if (versionMask > 0) {
+        versionMask_ = versionMask;
+        // set the method_
+        method_ = "mining.set_version_mask";
+      }
+      break;
+    }
+  }
+}
+
 void StratumMessage::_parseMiningSubscribe() {
   for (int i = 1; i < r_; i++) {
     //
@@ -351,6 +378,29 @@ void StratumMessage::_parseMiningAuthorize() {
       // set the method_
       method_ = "mining.authorize";
       break;
+    }
+  }
+}
+
+void StratumMessage::_parseMiningConfigure() {
+  for (int i = 1; i < r_; i++) {
+    //
+    // {"id":3,"method":"mining.configure","params":[
+    //    ["version-rolling"],
+    //    {"version-rolling.mask":"1fffe000","version-rolling.min-bit-count":2}
+    // ]}
+    //
+    if (jsoneq(&t_[i], "version-rolling.mask") == 0 && t_[i+1].type == JSMN_STRING) {
+      i++;  // ptr move to value
+      const uint32_t versionMask = (uint32_t)strtoul(getJsonStr(&t_[i]).c_str(), NULL, 16);
+
+      if (versionMask > 0) {
+        versionMask_ = versionMask;
+
+        // set the method_
+        method_ = "mining.configure";
+        break;
+      }
     }
   }
 }
@@ -391,6 +441,11 @@ void StratumMessage::parse() {
     return;
   }
 
+  if (method == "mining.set_version_mask") {
+    _parseMiningSetVersionMask();
+    return;
+  }
+
   if (method == "mining.subscribe") {
     _parseMiningSubscribe();
     return;
@@ -398,6 +453,11 @@ void StratumMessage::parse() {
 
   if (method == "mining.authorize") {
     _parseMiningAuthorize();
+    return;
+  }
+
+  if (method == "mining.configure") {
+    _parseMiningConfigure();
     return;
   }
 }
@@ -462,6 +522,20 @@ bool StratumMessage::parseMiningSetDifficulty(uint32_t *diff) const {
   return true;
 }
 
+bool StratumMessage::parseMiningSetVersionMask(uint32_t *versionMask) const {
+  if (method_ != "mining.set_version_mask")
+    return false;
+  *versionMask = versionMask_;
+  return true;
+}
+
+bool StratumMessage::parseMiningConfigure(uint32_t *versionMask) const {
+  if (method_ != "mining.configure")
+    return false;
+  *versionMask = versionMask_;
+  return true;
+}
+
 bool StratumMessage::getExtraNonce1AndExtraNonce2Size(uint32_t *nonce1,
                                                       int32_t *n2size) const {
   bool r = false;
@@ -514,7 +588,7 @@ bool StratumMessage::getExtraNonce1AndExtraNonce2Size(uint32_t *nonce1,
 ///////////////////////////////// UpStratumClient //////////////////////////////
 UpStratumClient::UpStratumClient(const int8_t idx, struct event_base *base,
                                  const string &userName, StratumServer *server)
-: state_(UP_INIT), idx_(idx), server_(server), poolDefaultDiff_(0)
+: state_(UP_INIT), idx_(idx), server_(server), poolDefaultDiff_(0), versionMask_(0)
 {
   bev_ = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
   assert(bev_ != NULL);
@@ -662,6 +736,7 @@ void UpStratumClient::handleStratumMessage(const string &line) {
   const string method = smsg.getMethod();
   StratumJob sjob;
   uint32_t difficulty = 0u;
+  uint32_t versionMask = 0u;
 
   if (state_ == UP_AUTHENTICATED) {
     if (smsg.parseMiningNotify(sjob)) {
@@ -698,6 +773,12 @@ void UpStratumClient::handleStratumMessage(const string &line) {
         poolDefaultDiff_ = difficulty;
       }
     }
+    else if (smsg.parseMiningSetVersionMask(&versionMask)) {
+      //
+      // {"id":null,"method":"mining.set_version_mask","params":["1fffe000"]}
+      //
+      versionMask_ = versionMask;
+    }
   }
 
   if (state_ == UP_CONNECTED) {
@@ -723,9 +804,10 @@ void UpStratumClient::handleStratumMessage(const string &line) {
     // subscribe successful
     state_ = UP_SUBSCRIBED;
 
-    // do mining.authorize
-    string s = Strings::Format("{\"id\": 1, \"method\": \"mining.authorize\","
-                               "\"params\": [\"%s\", \"\"]}\n",
+    // do mining.authorize and mining.configure (for version rolling)
+    string s = Strings::Format("{\"id\":1,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"\"]}\n"
+                               "{\"id\":2,\"method\":\"mining.configure\",\"params\":[[\"version-rolling\"],"
+                               "{\"version-rolling.mask\":\"ffffffff\",\"version-rolling.min-bit-count\":0}]}\n",
                                userName_.c_str());
     sendData(s);
     return;
@@ -855,6 +937,10 @@ void StratumSession::handleRequest(const string &idStr,
   }
   else if (method == "mining.authorize") {
     handleRequest_Authorize(idStr, smsg);
+  }
+  else if (method == "mining.configure") {
+    LOG(INFO) << "method: " << method;
+    handleRequest_MiningConfigure(idStr, smsg);
   } else {
     // unrecognised method, just ignore it
     LOG(WARNING) << "unrecognised method: \"" << method << "\"" << std::endl;
@@ -943,6 +1029,29 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
 
   // send latest stratum job
   server_->sendMiningNotify(this);
+}
+
+void StratumSession::handleRequest_MiningConfigure(const string &idStr,
+                                                   const StratumMessage &smsg) {
+  if (state_ != DOWN_AUTHENTICATED) {
+    responseError(idStr, StratumError::UNAUTHORIZED);
+    return;
+  }
+
+  uint32_t versionMask = 0;
+  if (!smsg.parseMiningConfigure(&versionMask)) {
+    responseError(idStr, StratumError::ILLEGAL_PARARMS);
+    return;
+  }
+
+  LOG(INFO) << "handleRequest_MiningConfigure";
+  const uint32_t allowedVersionMask = server_->getVersionMask(upSessionIdx_);
+  versionMask = versionMask & allowedVersionMask;
+
+  string s = Strings::Format("{\"id\":%s,\"result\":{\"version-rolling\":true,\"version-rolling.mask\":\"%08x\"},\"error\":null}\n"
+                             "{\"id\":null,\"method\":\"mining.set_version_mask\",\"params\":[\"%08x\"]}\n",
+                             idStr.c_str(), versionMask, versionMask);
+  sendData(s);
 }
 
 void StratumSession::handleRequest_Submit(const string &idStr,
@@ -1453,6 +1562,7 @@ void StratumServer::submitShare(const Share &share,
                                 StratumSession *downSession) {
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
 
+  bool hasVersionMask = share.versionMask_ != 0;
   bool isTimeChanged = true;
   if ((share.jobId_ == up->latestJobId_[2] && share.time_ == up->latestJobGbtTime_[2]) ||
       (share.jobId_ == up->latestJobId_[1] && share.time_ == up->latestJobGbtTime_[1]) ||
@@ -1462,16 +1572,24 @@ void StratumServer::submitShare(const Share &share,
 
   //
   // | magic_number(1) | cmd(1) | len (2) | jobId (uint8_t) | session_id (uint16_t) |
-  // | extra_nonce2 (uint32_t) | nNonce (uint32_t) | [nTime (uint32_t) |]
+  // | extra_nonce2 (uint32_t) | nNonce (uint32_t) | [nTime (uint32_t)] | [nVersionMask (uint32_t)] |
   //
+  uint16_t len = 15;
+  if (isTimeChanged) len += 4;
+  if (hasVersionMask) len += 4;
+
+  uint8_t cmd = (isTimeChanged && hasVersionMask) ? CMD_SUBMIT_SHARE_WITH_TIME_VER :
+                (isTimeChanged)  ? CMD_SUBMIT_SHARE_WITH_TIME :
+                (hasVersionMask) ? CMD_SUBMIT_SHARE_WITH_VER :
+                /* default */      CMD_SUBMIT_SHARE;
+
   string buf;
-  const uint16_t len = isTimeChanged ? 19 : 15;  // fixed 19 or 15 bytes
   buf.resize(len, 0);
   uint8_t *p = (uint8_t *)buf.data();
 
   // cmd
   *p++ = CMD_MAGIC_NUMBER;
-  *p++ = isTimeChanged ? CMD_SUBMIT_SHARE_WITH_TIME : CMD_SUBMIT_SHARE;
+  *p++ = cmd;
 
   // len
   *(uint16_t *)p = len;
@@ -1497,6 +1615,13 @@ void StratumServer::submitShare(const Share &share,
     *(uint32_t *)p = share.time_;
     p += 4;
   }
+
+  // nVersionMask
+  if (hasVersionMask) {
+    *(uint32_t *)p = share.versionMask_;
+    p += 4;
+  }
+
   assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
 
   // send buf
@@ -1575,4 +1700,8 @@ void StratumServer::unRegisterWorker(StratumSession *downSession) {
 
   UpStratumClient *up = upSessions_[downSession->upSessionIdx_];
   up->sendData(buf);
+}
+
+uint32_t StratumServer::getVersionMask(uint8_t upSessionIdx) {
+  return upSessions_[upSessionIdx]->getVersionMask();
 }
