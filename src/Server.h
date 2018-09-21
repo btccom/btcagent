@@ -32,13 +32,15 @@
 #include <set>
 
 
-#define CMD_MAGIC_NUMBER      0x7Fu
+#define CMD_MAGIC_NUMBER  0x7Fu
 // types
-#define CMD_REGISTER_WORKER   0x01u             // Agent -> Pool
-#define CMD_SUBMIT_SHARE      0x02u             // Agent -> Pool, without block time
-#define CMD_SUBMIT_SHARE_WITH_TIME  0x03u       // Agent -> Pool
-#define CMD_UNREGISTER_WORKER 0x04u             // Agent -> Pool
-#define CMD_MINING_SET_DIFF   0x05u             // Pool  -> Agent
+#define CMD_REGISTER_WORKER               0x01u    // Agent -> Pool
+#define CMD_SUBMIT_SHARE                  0x02u    // Agent -> Pool,  mining.submit(...)
+#define CMD_SUBMIT_SHARE_WITH_TIME        0x03u    // Agent -> Pool,  mining.submit(..., nTime)
+#define CMD_UNREGISTER_WORKER             0x04u    // Agent -> Pool
+#define CMD_MINING_SET_DIFF               0x05u    // Pool  -> Agent, mining.set_difficulty(diff)
+#define CMD_SUBMIT_SHARE_WITH_VER         0x12u    // Agent -> Pool,  mining.submit(..., nVersionMask)
+#define CMD_SUBMIT_SHARE_WITH_TIME_VER    0x13u    // Agent -> Pool,  mining.submit(..., nTime, nVersionMask)
 
 // agent, DO NOT CHANGE
 #define AGENT_MAX_SESSION_ID   0xFFFEu  // 0xFFFEu = 65534
@@ -104,13 +106,15 @@ public:
   uint32_t time_;
   uint32_t extraNonce2_;
   uint32_t nonce_;
+  uint32_t versionMask_;
 
-  Share(): jobId_(0), time_(0), extraNonce2_(0), nonce_(0) {}
+  Share(): jobId_(0), time_(0), extraNonce2_(0), nonce_(0), versionMask_(0) {}
   Share(const Share &r) {
     jobId_       = r.jobId_;
     time_        = r.time_;
     extraNonce2_ = r.extraNonce2_;
     nonce_       = r.nonce_;
+    versionMask_ = r.versionMask_;
   }
 };
 
@@ -153,6 +157,7 @@ class StratumMessage {
   string workerName_;   // mining.authorize
   string password_;
   uint32_t diff_;       // mining.set_difficulty
+  uint32_t versionMask_; // mining.set_version_mask
 
   string getJsonStr(const jsmntok_t *t) const;
   int jsoneq(const jsmntok_t *tok, const char *s) const;
@@ -164,8 +169,10 @@ class StratumMessage {
   void _parseMiningSubmit();
   void _parseMiningNotify();
   void _parseMiningSetDifficulty();
+  void _parseMiningSetVersionMask();
   void _parseMiningSubscribe();
   void _parseMiningAuthorize();
+  void _parseMiningConfigure();
 
 public:
   StratumMessage(const string &content);
@@ -182,6 +189,8 @@ public:
   bool parseMiningAuthorize(string &workerName) const;
   bool parseMiningNotify(StratumJob &sjob) const;
   bool parseMiningSetDifficulty(uint32_t *diff) const;
+  bool parseMiningSetVersionMask(uint32_t *versionMask) const;
+  bool parseMiningConfigure(uint32_t *versionMask) const;
 
   bool getExtraNonce1AndExtraNonce2Size(uint32_t *nonce1, int32_t *n2size) const;
 };
@@ -270,6 +279,8 @@ public:
   bool setup();
   void run();
   void stop();
+
+  uint32_t getVersionMask(uint8_t upSessionIdx);
 };
 
 
@@ -300,6 +311,7 @@ public:
 
   uint32_t poolDefaultDiff_;
   uint32_t extraNonce1_;  // session ID
+  uint32_t versionMask_; // for version rolling
 
   string   latestMiningNotifyStr_;
   // latest there job Id & time, use to check if send nTime
@@ -330,6 +342,10 @@ public:
 
   void submitShare();
   void submitWorkerInfo();
+
+  inline uint32_t getVersionMask() {
+    return versionMask_;
+  }
 };
 
 
@@ -355,6 +371,7 @@ class StratumSession {
   void handleRequest_Subscribe(const string &idStr, const StratumMessage &smsg);
   void handleRequest_Authorize(const string &idStr, const StratumMessage &smsg);
   void handleRequest_Submit   (const string &idStr, const StratumMessage &smsg);
+  void handleRequest_MiningConfigure(const string &idStr, const StratumMessage &smsg);
 
   void responseError(const string &idStr, int code);
   void responseTrue(const string &idStr);
