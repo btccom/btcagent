@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
                         std::istreambuf_iterator<char>());
     if (!parseConfJson(agentJsonStr, listenIP, listenPort, poolConfs)) {
       LOG(ERROR) << "parse json config file failure" << std::endl;
-      return false;
+      return 1;
     }
 
     gStratumServer = new StratumServer(listenIP, atoi(listenPort.c_str()));
