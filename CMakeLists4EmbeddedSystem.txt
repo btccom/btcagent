@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 3.1)
 
 project (PoolAgent)
 
@@ -24,8 +24,8 @@ ENDIF()
 set(CMAKE_CXX_COMPILER ${CROSS_PREFIX}g++)
 set(CMAKE_C_COMPILER   ${CROSS_PREFIX}gcc)
 
-set(CMAKE_CXX_COMPILER_ARG1 "-std=c++98")
-set(CMAKE_C_COMPILER_ARG1 "-std=c99")
+SET(CMAKE_CXX_STANDARD 11)
+SET(CMAKE_C_STANDARD 99)
 
 include_directories(src test ${SDK_DIR}/include)
 link_directories(${SDK_DIR}/lib)
