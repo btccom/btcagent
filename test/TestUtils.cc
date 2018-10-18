@@ -56,10 +56,11 @@ TEST(Utils, splitNotify) {
 
 TEST(Utils, Strings_parseConfJson) {
   {
-    string listenIP, listenPort;
+    string agentType, listenIP, listenPort;
     std::vector<PoolConf> poolConfs;
-    string line = "{\"agent_listen_ip\": \"0.0.0.0\",\"agent_listen_port\": 3333,\"pools\": [[\"cn.ss.btc.com\", 1800, \"kevin\"]]}";
-    ASSERT_EQ(parseConfJson(line, listenIP, listenPort, poolConfs), true);
+    string line = "{\"agent_type\": \"btc\",\"agent_listen_ip\": \"0.0.0.0\",\"agent_listen_port\": 3333,\"pools\": [[\"cn.ss.btc.com\", 1800, \"kevin\"]]}";
+    ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs), true);
+    ASSERT_EQ(agentType, "btc");
     ASSERT_EQ(listenIP, "0.0.0.0");
     ASSERT_EQ(listenPort, "3333");
     ASSERT_EQ(poolConfs.size(), 1u);
@@ -69,11 +70,12 @@ TEST(Utils, Strings_parseConfJson) {
   }
 
   {
-    string listenIP, listenPort;
+    string agentType, listenIP, listenPort;
     std::vector<PoolConf> poolConfs;
-    string line = "{\"agent_listen_ip\": \"127.0.0.1\",\"agent_listen_port\": 1800,\"pools\": [[\"cn.ss.btc.com\", 1800, \"kevin\"],[\"us.ss.btc.com\", 3333, \"kevinus\"]]}";
-    ASSERT_EQ(parseConfJson(line, listenIP, listenPort, poolConfs), true);
+    string line = "{\"agent_type\": \"btc\",\"agent_listen_ip\": \"127.0.0.1\",\"agent_listen_port\": 1800,\"pools\": [[\"cn.ss.btc.com\", 1800, \"kevin\"],[\"us.ss.btc.com\", 3333, \"kevinus\"]]}";
+    ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs), true);
 
+    ASSERT_EQ(agentType, "btc");
     ASSERT_EQ(listenIP, "127.0.0.1");
     ASSERT_EQ(listenPort, "1800");
     ASSERT_EQ(poolConfs.size(), 2u);

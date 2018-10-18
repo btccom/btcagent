@@ -22,7 +22,8 @@
 #include <streambuf>
 #include "Utils.h"
 
-#include "Server.h"
+#include "bitcoin/ServerBitcoin.h"
+#include "eth/ServerEth.h"
 
 #ifdef _WIN32
  #include "win32/getopt/getopt.h"
@@ -95,19 +96,23 @@ int main(int argc, char **argv) {
   signal(SIGINT,  handler);
 
   try {
-    string listenIP, listenPort;
+    string agentType, listenIP, listenPort;
     std::vector<PoolConf> poolConfs;
 
     // get conf json string
     std::ifstream agentConf(optConf);
     string agentJsonStr((std::istreambuf_iterator<char>(agentConf)),
                         std::istreambuf_iterator<char>());
-    if (!parseConfJson(agentJsonStr, listenIP, listenPort, poolConfs)) {
+    if (!parseConfJson(agentJsonStr, agentType, listenIP, listenPort, poolConfs)) {
       LOG(ERROR) << "parse json config file failure" << std::endl;
       return 1;
     }
 
-    gStratumServer = new StratumServer(listenIP, atoi(listenPort.c_str()));
+    if (agentType == "eth") {
+      gStratumServer = new StratumServerEth(listenIP, atoi(listenPort.c_str()));
+    } else {
+      gStratumServer = new StratumServerBitcoin(listenIP, atoi(listenPort.c_str()));
+    }
 
     // add pools
     for (size_t i = 0; i < poolConfs.size(); i++) {

@@ -41,6 +41,7 @@
 #include <string>
 #include <vector>
 #include <utility>
+#include <memory>
 
 #include "jsmn.h"
 
@@ -61,6 +62,21 @@
 
 using  std::string;
 using  std::vector;
+
+#if __cplusplus == 201103L
+
+namespace std {
+
+// note: this implementation does not disable this overload for array types
+template<typename T, typename... Args>
+unique_ptr<T> make_unique(Args&&... args)
+{
+    return unique_ptr<T>(new T(forward<Args>(args)...));
+}
+
+}
+
+#endif // #if __cplusplus == 201103L
 
 //
 // WARNING: DO NOT CHANGE THE NAME.
@@ -106,12 +122,13 @@ public:
 
 string getJsonStr(const char *c,const jsmntok_t *t);
 bool parseConfJson(const string &jsonStr,
-                   string &listenIP, string &listenPort,
+                   string &agentType, string &listenIP, string &listenPort,
                    std::vector<PoolConf> &poolConfs);
 
 // slite stratum 'mining.notify'
 const char *splitNotify(const string &line);
 
 string str2lower(const string &str);
+string getWorkerName(const string &fullName);
 
 #endif

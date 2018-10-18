@@ -106,7 +106,7 @@ int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
 }
 
 bool parseConfJson(const string &jsonStr,
-                   string &listenIP, string &listenPort,
+                   string &agentType, string &listenIP, string &listenPort,
                    std::vector<PoolConf> &poolConfs) {
   jsmn_parser p;
   jsmn_init(&p);
@@ -124,6 +124,10 @@ bool parseConfJson(const string &jsonStr,
   }
 
   for (int i = 1; i < r; i++) {
+    if (jsoneq(c, &t[i], "agent_type") == 0) {
+      agentType = getJsonStr(c, &t[i+1]);
+      i++;
+    }
     if (jsoneq(c, &t[i], "agent_listen_ip") == 0) {
       listenIP = getJsonStr(c, &t[i+1]);
       i++;
@@ -192,4 +196,12 @@ string str2lower(const string &str) {
   string data = str;
   std::transform(data.begin(), data.end(), data.begin(), ::tolower);
   return data;
+}
+
+string getWorkerName(const string &fullName) {
+  size_t pos = fullName.find(".");
+  if (pos == fullName.npos) {
+    return "";
+  }
+  return fullName.substr(pos + 1);  // not include '.'
 }

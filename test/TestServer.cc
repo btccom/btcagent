@@ -18,8 +18,7 @@
  */
 #include "gtest/gtest.h"
 #include "Utils.h"
-#include "Server.h"
-
+#include "bitcoin/ServerBitcoin.h"
 
 TEST(Server, SessionIDManager) {
   SessionIDManager m;
@@ -54,23 +53,23 @@ TEST(Server, SessionIDManager) {
   ASSERT_EQ(m.ifFull(), true);
 }
 
-TEST(Server, StratumMessage_isValid) {
+TEST(Server, StratumMessageBitcoin_isValid) {
   {
     string line;
-    StratumMessage smsg(line);
+    StratumMessageBitcoin smsg(line);
     ASSERT_EQ(smsg.isValid(), false);
   }
 
   {
     string line = "[]";  // shoud be objest: {}
-    StratumMessage smsg(line);
+    StratumMessageBitcoin smsg(line);
     ASSERT_EQ(smsg.isValid(), false);
   }
 }
 
-TEST(Server, StratumMessage_getExtraNonce1AndExtraNonce2Size) {
+TEST(Server, StratumMessageBitcoin_getExtraNonce1AndExtraNonce2Size) {
   string line = "{\"id\": 1, \"result\": [ [ [\"mining.set_difficulty\", \"b4b6693b72a50c7116db18d6497cac52\"], [\"mining.notify\", \"ae6812eb4cd7735a302a8a9dd95cf71f\"]], \"08000002\", 4], \"error\": null}";
-  StratumMessage smsg(line);
+  StratumMessageBitcoin smsg(line);
 
   ASSERT_EQ(smsg.isValid(), true);
   uint32_t nonce1 = 0u;
@@ -80,9 +79,9 @@ TEST(Server, StratumMessage_getExtraNonce1AndExtraNonce2Size) {
   ASSERT_EQ(n2Size, 4);
 }
 
-TEST(Server, StratumMessage_parseMiningAuthorize) {
+TEST(Server, StratumMessageBitcoin_parseMiningAuthorize) {
   string line = "{\"params\": [\"btccom.kevin\", \"password\"], \"id\": 2, \"method\": \"mining.authorize\"}";
-  StratumMessage smsg(line);
+  StratumMessageBitcoin smsg(line);
 
   ASSERT_EQ(smsg.isValid(), true);
   string workerName;
@@ -90,9 +89,9 @@ TEST(Server, StratumMessage_parseMiningAuthorize) {
   ASSERT_EQ(workerName, "btccom.kevin");
 }
 
-TEST(Server, StratumMessage_parseMiningSubscribe) {
+TEST(Server, StratumMessageBitcoin_parseMiningSubscribe) {
   string line = "{\"id\": 1, \"method\": \"mining.subscribe\", \"params\": [\"bfgminer/4.4.0-32-gac4e9b3\", \"01ad557d\"]}";
-  StratumMessage smsg(line);
+  StratumMessageBitcoin smsg(line);
 
   ASSERT_EQ(smsg.isValid(), true);
   string minerAgent;
@@ -100,9 +99,9 @@ TEST(Server, StratumMessage_parseMiningSubscribe) {
   ASSERT_EQ(minerAgent, "bfgminer/4.4.0-32-gac4e9b3");
 }
 
-TEST(Server, StratumMessage_parseMiningSetDifficulty) {
+TEST(Server, StratumMessageBitcoin_parseMiningSetDifficulty) {
   string line = "{ \"id\": null, \"method\": \"mining.set_difficulty\", \"params\": [2]}";
-  StratumMessage smsg(line);
+  StratumMessageBitcoin smsg(line);
 
   ASSERT_EQ(smsg.isValid(), true);
   uint32_t diff = 0u;
@@ -110,9 +109,9 @@ TEST(Server, StratumMessage_parseMiningSetDifficulty) {
   ASSERT_EQ(diff, 2u);
 }
 
-TEST(Server, StratumMessage_parseMiningSetVersionMask) {
+TEST(Server, StratumMessageBitcoin_parseMiningSetVersionMask) {
   string line = "{\"id\":null,\"method\":\"mining.set_version_mask\",\"params\":[\"1fffe000\"]}";
-  StratumMessage smsg(line);
+  StratumMessageBitcoin smsg(line);
 
   ASSERT_EQ(smsg.isValid(), true);
   uint32_t versionMask = 0u;
@@ -120,12 +119,12 @@ TEST(Server, StratumMessage_parseMiningSetVersionMask) {
   ASSERT_EQ(versionMask, 0x1fffe000u);
 }
 
-TEST(Server, StratumMessage_parseMiningConfigure) {
+TEST(Server, StratumMessageBitcoin_parseMiningConfigure) {
   string line = "{\"id\":3,\"method\":\"mining.configure\",\"params\":["
                     "[\"version-rolling\"],"
                     "{\"version-rolling.mask\":\"00ffee00\",\"version-rolling.min-bit-count\":2}"
                 "]}";
-  StratumMessage smsg(line);
+  StratumMessageBitcoin smsg(line);
 
   ASSERT_EQ(smsg.isValid(), true);
   uint32_t versionMask = 0u;
@@ -133,13 +132,13 @@ TEST(Server, StratumMessage_parseMiningConfigure) {
   ASSERT_EQ(versionMask, 0x00ffee00u);
 }
 
-TEST(Server, StratumMessage_parseMiningNotify) {
+TEST(Server, StratumMessageBitcoin_parseMiningNotify) {
   {
     string line = "{\"params\": [\"1\", \"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000\",\"01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff20020862062f503253482f04b8864e5008\",\"072f736c7573682f000000000100f2052a010000001976a914d23fcdf86f7e756a64a7a9688ef9903327048ed988ac00000000\", [\"008d29799d7a2951689ab6de901a8a2878966fb3cf375db417b411fed76b54a2\", \"942d192aa135fc4efdc09166877468d7d199753f35095b10fbce656f7c14561d\"],\"00000002\", \"1c2ac4af\", \"504e86b9\", false], \"id\": null, \"method\": \"mining.notify\"}";
-    StratumMessage smsg(line);
+    StratumMessageBitcoin smsg(line);
 
     ASSERT_EQ(smsg.isValid(), true);
-    StratumJob sjob;
+    StratumJobBitcoin sjob;
     ASSERT_EQ(smsg.parseMiningNotify(sjob), true);
 
     ASSERT_EQ(sjob.jobId_, 1u);
@@ -154,10 +153,10 @@ TEST(Server, StratumMessage_parseMiningNotify) {
     // empty merkle tree array
     //
     string line = "{\"params\": [\"0\", \"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000\",\"01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff20020862062f503253482f04b8864e5008\",\"072f736c7573682f000000000100f2052a010000001976a914d23fcdf86f7e756a64a7a9688ef9903327048ed988ac00000000\", [],\"02000000\", \"1c2ac4af\", \"504e86b9\", true], \"id\": null, \"method\": \"mining.notify\"}";
-    StratumMessage smsg(line);
+    StratumMessageBitcoin smsg(line);
 
     ASSERT_EQ(smsg.isValid(), true);
-    StratumJob sjob;
+    StratumJobBitcoin sjob;
     ASSERT_EQ(smsg.parseMiningNotify(sjob), true);
 
     ASSERT_EQ(sjob.jobId_, 0u);
@@ -168,13 +167,13 @@ TEST(Server, StratumMessage_parseMiningNotify) {
   }
 }
 
-TEST(Server, StratumMessage_parseMiningSubmit) {
+TEST(Server, StratumMessageBitcoin_parseMiningSubmit) {
   // [Worker Name, Job ID, ExtraNonce2(hex), nTime(hex), nonce(hex)]
   string line = "{\"params\": [\"slush.miner1\", \"9\", \"00000001\", \"504e86ed\", \"b2957c02\"], \"id\": 4, \"method\": \"mining.submit\"}";
-  StratumMessage smsg(line);
+  StratumMessageBitcoin smsg(line);
 
   ASSERT_EQ(smsg.isValid(), true);
-  Share share;
+  ShareBitcoin share;
   ASSERT_EQ(smsg.parseMiningSubmit(share), true);
   ASSERT_EQ(share.jobId_, 9u);
   ASSERT_EQ(share.time_, 0x504e86edu);
@@ -182,33 +181,33 @@ TEST(Server, StratumMessage_parseMiningSubmit) {
   ASSERT_EQ(share.nonce_, 0xb2957c02u);
 }
 
-TEST(Server, StratumMessage_getResultBoolean) {
+TEST(Server, StratumMessageBitcoin_getResultBoolean) {
   {
     string line = "{\"error\": null, \"id\": 4, \"result\": true}";
-    StratumMessage smsg(line);
+    StratumMessageBitcoin smsg(line);
     ASSERT_EQ(smsg.isValid(), true);
     ASSERT_EQ(smsg.getResultBoolean(), true);
   }
 
   {
     string line = "{\"error\": null, \"id\": 4, \"result\": false}";
-    StratumMessage smsg(line);
+    StratumMessageBitcoin smsg(line);
     ASSERT_EQ(smsg.isValid(), true);
     ASSERT_EQ(smsg.getResultBoolean(), false);
   }
 }
 
-TEST(Server, StratumMessage_getId_isStringId) {
+TEST(Server, StratumMessageBitcoin_getId_isStringId) {
   {
     string line = "{\"error\": null, \"id\": 4, \"result\": true}";
-    StratumMessage smsg(line);
+    StratumMessageBitcoin smsg(line);
     ASSERT_EQ(smsg.getId(), "4");
     ASSERT_EQ(smsg.isStringId(), false);
   }
 
   {
     string line = "{\"error\": null, \"id\": \"ksadsf\", \"result\": true}";
-    StratumMessage smsg(line);
+    StratumMessageBitcoin smsg(line);
     ASSERT_EQ(smsg.getId(), "ksadsf");
     ASSERT_EQ(smsg.isStringId(), true);
   }

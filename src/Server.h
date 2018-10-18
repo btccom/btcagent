@@ -29,8 +29,8 @@
 
 #include <bitset>
 #include <map>
+#include <memory>
 #include <set>
-
 
 #define CMD_MAGIC_NUMBER  0x7Fu
 // types
@@ -98,49 +98,9 @@ public:
   void freeSessionId(const uint16_t sessionId);
 };
 
-
-//////////////////////////////////// Share /////////////////////////////////////
-class Share {
-public:
-  uint32_t jobId_;
-  uint32_t time_;
-  uint32_t extraNonce2_;
-  uint32_t nonce_;
-  uint32_t versionMask_;
-
-  Share(): jobId_(0), time_(0), extraNonce2_(0), nonce_(0), versionMask_(0) {}
-  Share(const Share &r) {
-    jobId_       = r.jobId_;
-    time_        = r.time_;
-    extraNonce2_ = r.extraNonce2_;
-    nonce_       = r.nonce_;
-    versionMask_ = r.versionMask_;
-  }
-};
-
-
-///////////////////////////////// StratumJob ///////////////////////////////////
-class StratumJob {
-public:
-  uint32_t jobId_;
-  string prevHash_;
-  int32_t  version_;
-  uint32_t time_;      // block time or stratum job time
-  bool  isClean_;
-
-  StratumJob(): jobId_(0), version_(0), time_(0), isClean_(false) {}
-  StratumJob(const StratumJob &r) {
-    jobId_    = r.jobId_;
-    prevHash_ = r.prevHash_;
-    version_  = r.version_;
-    time_     = r.time_;
-    isClean_  = r.isClean_;
-  }
-};
-
-
 ///////////////////////////////// StratumMessage ///////////////////////////////
 class StratumMessage {
+protected:
   string content_;
 
   string method_;      // if it's invalid json string, you can't get the method
@@ -151,14 +111,6 @@ class StratumMessage {
   jsmntok_t t_[64];    // we expect no more than 64 tokens
   int r_;
 
-  Share      share_;    // mining.submit
-  StratumJob sjob_;     // mining.notify
-  string minerAgent_;   // mining.subscribe
-  string workerName_;   // mining.authorize
-  string password_;
-  uint32_t diff_;       // mining.set_difficulty
-  uint32_t versionMask_; // mining.set_version_mask
-
   string getJsonStr(const jsmntok_t *t) const;
   int jsoneq(const jsmntok_t *tok, const char *s) const;
 
@@ -166,33 +118,14 @@ class StratumMessage {
   string parseId();
   void parse();
 
-  void _parseMiningSubmit();
-  void _parseMiningNotify();
-  void _parseMiningSetDifficulty();
-  void _parseMiningSetVersionMask();
-  void _parseMiningSubscribe();
-  void _parseMiningAuthorize();
-  void _parseMiningConfigure();
+  explicit StratumMessage(const string &content);
 
 public:
-  StratumMessage(const string &content);
-  ~StratumMessage();
-
   bool isValid() const;
   string getMethod() const;
   bool getResultBoolean() const;
   string getId() const;
   bool isStringId() const;
-
-  bool parseMiningSubmit(Share &share) const;
-  bool parseMiningSubscribe(string &minerAgent) const;
-  bool parseMiningAuthorize(string &workerName) const;
-  bool parseMiningNotify(StratumJob &sjob) const;
-  bool parseMiningSetDifficulty(uint32_t *diff) const;
-  bool parseMiningSetVersionMask(uint32_t *versionMask) const;
-  bool parseMiningConfigure(uint32_t *versionMask) const;
-
-  bool getExtraNonce1AndExtraNonce2Size(uint32_t *nonce1, int32_t *n2size) const;
 };
 
 
@@ -215,9 +148,6 @@ class StratumServer {
   vector<uint16_t> upPoolPort_;
   vector<string>   upPoolUserName_;
 
-  // up stream connnections
-  vector<UpStratumClient *> upSessions_;
-  vector<int32_t> upSessionCount_;
   struct event *upEvTimer_;
 
   // down stream connections
@@ -231,13 +161,27 @@ class StratumServer {
   void checkUpSessions();
   void waitUtilAllUpSessionsAvailable();
 
+  virtual UpStratumClient *createUpClient(int8_t idx,
+                                          struct event_base *base,
+                                          const string &userName,
+                                          StratumServer *server) = 0;
+  virtual StratumSession *createDownConnection(int8_t upSessionIdx,
+                                               uint16_t sessionId,
+                                               struct bufferevent *bev,
+                                               StratumServer *server,
+                                               struct in_addr saddr) = 0;
+
+protected:
+  // up stream connnections
+  vector<UpStratumClient *> upSessions_;
+  vector<int32_t> upSessionCount_;
+
 public:
   SessionIDManager sessionIDManager_;
 
-
 public:
   StratumServer(const string &listenIP, const uint16_t listenPort);
-  ~StratumServer();
+  virtual ~StratumServer();
 
   UpStratumClient *createUpSession(const int8_t idx);
 
@@ -263,7 +207,7 @@ public:
   static void upWatcherCallback(evutil_socket_t fd, short events, void *ptr);
   static void upSesssionCheckCallback(evutil_socket_t fd, short events, void *ptr);
 
-  void sendMiningNotifyToAll(const int8_t idx, const string &notify);
+  void sendDataToAll(const int8_t idx, const string &data);
   void sendMiningNotify(StratumSession *downSession);
   void sendDefaultMiningDifficulty(StratumSession *downSession);
   void sendMiningDifficulty(UpStratumClient *upconn,
@@ -271,7 +215,6 @@ public:
 
   int8_t findUpSessionIdx();
 
-  void submitShare(const Share &share, StratumSession *downSession);
   void registerWorker  (StratumSession *downSession, const char *minerAgent,
                         const string &workerName);
   void unRegisterWorker(StratumSession *downSession);
@@ -279,8 +222,6 @@ public:
   bool setup();
   void run();
   void stop();
-
-  uint32_t getVersionMask(uint8_t upSessionIdx);
 };
 
 
@@ -295,14 +236,10 @@ enum UpStratumClientState {
 class UpStratumClient {
   struct bufferevent *bev_;
   struct evbuffer *inBuf_;
-  uint64_t extraNonce2_;
-  string userName_;
 
   bool handleMessage();
-  void handleStratumMessage(const string &line);
-  void handleExMessage_MiningSetDiff(const string *exMessage);
-
-  void convertMiningNotifyStr(const string &line);
+  virtual void handleStratumMessage(const string &line) = 0;
+  virtual void handleExMessage_MiningSetDiff(const string *exMessage) = 0;
 
 public:
   UpStratumClientState state_;
@@ -311,12 +248,9 @@ public:
 
   uint32_t poolDefaultDiff_;
   uint32_t extraNonce1_;  // session ID
-  uint32_t versionMask_; // for version rolling
 
+  string userName_;
   string   latestMiningNotifyStr_;
-  // latest there job Id & time, use to check if send nTime
-  uint8_t  latestJobId_[3];
-  uint32_t latestJobGbtTime_[3];
 
   // last stratum job received from pool
   uint32_t lastJobReceivedTime_;
@@ -325,7 +259,7 @@ public:
   UpStratumClient(const int8_t idx,
                   struct event_base *base, const string &userName,
                   StratumServer *server);
-  ~UpStratumClient();
+  virtual ~UpStratumClient();
 
   bool connect(struct sockaddr_in &sin);
 
@@ -335,17 +269,8 @@ public:
     sendData(str.data(), str.size());
   }
 
-  void sendMiningNotify(const string &line);
-
   // means auth success and got at least stratum job
   bool isAvailable();
-
-  void submitShare();
-  void submitWorkerInfo();
-
-  inline uint32_t getVersionMask() {
-    return versionMask_;
-  }
 };
 
 
@@ -357,6 +282,7 @@ enum StratumSessionState {
 };
 
 class StratumSession {
+protected:
   //----------------------
   struct evbuffer *inBuf_;
   static const int32_t kExtraNonce2Size_ = 4;
@@ -365,16 +291,7 @@ class StratumSession {
 
   void setReadTimeout(const int32_t timeout);
 
-  void handleStratumMessage(const string &line);
-
-  void handleRequest(const string &idStr, const StratumMessage &smsg);
-  void handleRequest_Subscribe(const string &idStr, const StratumMessage &smsg);
-  void handleRequest_Authorize(const string &idStr, const StratumMessage &smsg);
-  void handleRequest_Submit   (const string &idStr, const StratumMessage &smsg);
-  void handleRequest_MiningConfigure(const string &idStr, const StratumMessage &smsg);
-
-  void responseError(const string &idStr, int code);
-  void responseTrue(const string &idStr);
+  virtual void handleStratumMessage(const string &line) = 0;
 
 public:
   int8_t  upSessionIdx_;
@@ -383,12 +300,13 @@ public:
   StratumServer *server_;
   struct in_addr saddr_;
 
-
 public:
   StratumSession(const int8_t upSessionIdx, const uint16_t sessionId,
                  struct bufferevent *bev, StratumServer *server,
                  struct in_addr saddr);
-  ~StratumSession();
+  virtual ~StratumSession();
+  virtual void sendMiningNotify(const string &notifyStr) = 0;
+  virtual void sendMiningDifficulty(uint64_t diff) = 0;
 
   void recvData(struct evbuffer *buf);
   void sendData(const char *data, size_t len);
