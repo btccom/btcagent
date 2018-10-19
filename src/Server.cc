@@ -1033,10 +1033,12 @@ void StratumSession::handleRequest_Authorize(const string &idStr,
 
 void StratumSession::handleRequest_MiningConfigure(const string &idStr,
                                                    const StratumMessage &smsg) {
-  if (state_ != DOWN_AUTHENTICATED) {
+  // mining.configure can be called before mining.authorize and
+  // is usually called before it.
+  /*if (state_ != DOWN_AUTHENTICATED) {
     responseError(idStr, StratumError::UNAUTHORIZED);
     return;
-  }
+  }*/
 
   uint32_t versionMask = 0;
   if (!smsg.parseMiningConfigure(&versionMask)) {
