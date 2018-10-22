@@ -41,6 +41,8 @@
 #define CMD_MINING_SET_DIFF               0x05u    // Pool  -> Agent, mining.set_difficulty(diff)
 #define CMD_SUBMIT_SHARE_WITH_VER         0x12u    // Agent -> Pool,  mining.submit(..., nVersionMask)
 #define CMD_SUBMIT_SHARE_WITH_TIME_VER    0x13u    // Agent -> Pool,  mining.submit(..., nTime, nVersionMask)
+#define CMD_GET_NONCE_PREFIX              0x21u    // Agent -> Pool,  ask the pool to allocate nonce prefix
+#define CMD_SET_NONCE_PREFIX              0x22u    // Pool -> Agent,  pool nonce prefix allocation result
 
 // agent, DO NOT CHANGE
 #define AGENT_MAX_SESSION_ID   0xFFFEu  // 0xFFFEu = 65534
@@ -111,9 +113,6 @@ protected:
   jsmntok_t t_[64];    // we expect no more than 64 tokens
   int r_;
 
-  string getJsonStr(const jsmntok_t *t) const;
-  int jsoneq(const jsmntok_t *tok, const char *s) const;
-
   string findMethod() const;
   string parseId();
   void parse();
@@ -126,6 +125,9 @@ public:
   bool getResultBoolean() const;
   string getId() const;
   bool isStringId() const;
+
+  string getJsonStr(const jsmntok_t *t) const;
+  int jsoneq(const jsmntok_t *tok, const char *s) const;
 };
 
 
@@ -150,9 +152,6 @@ class StratumServer {
 
   struct event *upEvTimer_;
 
-  // down stream connections
-  vector<StratumSession *> downSessions_;
-
   // libevent2
   struct event_base *base_;
   struct event *signal_event_;
@@ -165,7 +164,7 @@ class StratumServer {
                                           struct event_base *base,
                                           const string &userName,
                                           StratumServer *server) = 0;
-  virtual StratumSession *createDownConnection(int8_t upSessionIdx,
+  virtual StratumSession *createDownConnection(UpStratumClient &upSession,
                                                uint16_t sessionId,
                                                struct bufferevent *bev,
                                                StratumServer *server,
@@ -175,6 +174,9 @@ protected:
   // up stream connnections
   vector<UpStratumClient *> upSessions_;
   vector<int32_t> upSessionCount_;
+
+  // down stream connections
+  vector<StratumSession *> downSessions_;
 
 public:
   SessionIDManager sessionIDManager_;
@@ -207,13 +209,10 @@ public:
   static void upWatcherCallback(evutil_socket_t fd, short events, void *ptr);
   static void upSesssionCheckCallback(evutil_socket_t fd, short events, void *ptr);
 
-  void sendDataToAll(const int8_t idx, const string &data);
-  void sendMiningNotify(StratumSession *downSession);
-  void sendDefaultMiningDifficulty(StratumSession *downSession);
-  void sendMiningDifficulty(UpStratumClient *upconn,
-                            uint16_t sessionId, uint64_t diff);
+  void sendMiningNotifyToAll(const UpStratumClient *conn);
+  void sendMiningDifficulty(uint16_t sessionId, uint64_t diff);
 
-  int8_t findUpSessionIdx();
+  UpStratumClient *findUpSession();
 
   void registerWorker  (StratumSession *downSession, const char *minerAgent,
                         const string &workerName);
@@ -239,18 +238,18 @@ class UpStratumClient {
 
   bool handleMessage();
   virtual void handleStratumMessage(const string &line) = 0;
-  virtual void handleExMessage_MiningSetDiff(const string *exMessage) = 0;
+  virtual void handleExMessage(const string *exMessage);
+  void handleExMessage_MiningSetDiff(const string *exMessage);
 
 public:
   UpStratumClientState state_;
   int8_t idx_;
   StratumServer *server_;
 
-  uint32_t poolDefaultDiff_;
+  uint64_t poolDefaultDiff_;
   uint32_t extraNonce1_;  // session ID
 
   string userName_;
-  string   latestMiningNotifyStr_;
 
   // last stratum job received from pool
   uint32_t lastJobReceivedTime_;
@@ -287,25 +286,25 @@ protected:
   struct evbuffer *inBuf_;
   static const int32_t kExtraNonce2Size_ = 4;
   StratumSessionState state_;
-  char *minerAgent_;
+  string minerAgent_;
 
   void setReadTimeout(const int32_t timeout);
 
   virtual void handleStratumMessage(const string &line) = 0;
 
 public:
-  int8_t  upSessionIdx_;
+  UpStratumClient & upSession_;
   uint16_t sessionId_;
   struct bufferevent *bev_;
   StratumServer *server_;
   struct in_addr saddr_;
 
 public:
-  StratumSession(const int8_t upSessionIdx, const uint16_t sessionId,
+  StratumSession(UpStratumClient & upSession, uint16_t sessionId,
                  struct bufferevent *bev, StratumServer *server,
                  struct in_addr saddr);
   virtual ~StratumSession();
-  virtual void sendMiningNotify(const string &notifyStr) = 0;
+  virtual void sendMiningNotify() = 0;
   virtual void sendMiningDifficulty(uint64_t diff) = 0;
 
   void recvData(struct evbuffer *buf);

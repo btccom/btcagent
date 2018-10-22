@@ -23,28 +23,135 @@
 #include "Server.h"
 
 class ShareEth {
+public:
+  uint8_t nonce_[8];
+  uint8_t header_[32];
 };
 
 class StratumJobEth {
+public:
+  string header_;
+  string seed_;
+  string target_;
+  string isClean_;
+
+  StratumJobEth() {}
+  StratumJobEth(const StratumJobEth &r) {
+    header_   = r.header_;
+    seed_     = r.seed_;
+    target_   = r.target_;
+    isClean_  = r.isClean_;
+  }
 };
 
 class StratumMessageEth : public StratumMessage {
-  void decode();
-
 public:
-  using StratumMessage::StratumMessage;
+  explicit StratumMessageEth(const string &line);
+  bool parseMiningSubscribe(string &agent, string &protocol) const;
+  bool parseMiningAuthorize(string &workerName) const;
+  bool parseMiningSetDifficulty(double &difficulty) const;
+  bool parseMiningNotify(StratumJobEth &sjob) const;
+  bool parseMiningSubmit(ShareEth &share) const;
+  bool parseMiningSubmitNiceHash(ShareEth &share) const;
+  bool parseSubmitLogin(string &workerName) const;
+  bool parseSubmitWork(ShareEth &share) const;
+  bool parseNoncePrefix(uint16_t &noncePrefix) const;
+};
+
+class StratumSessionEth;
+
+class EthProtocol {
+protected:
+  StratumSessionEth &session_;
+  explicit EthProtocol(StratumSessionEth &session) : session_{session} {}
+public:
+  virtual ~EthProtocol() = default;
+  virtual void handleRequest(const string &idStr, const StratumMessageEth &smsg) = 0;
+  virtual void responseError(const string &idStr, int code) = 0;
+  virtual void responseTrue(const string &idStr) = 0;
+  virtual void setNoncePrefix(uint32_t noncePrefix) = 0;
+  virtual void setDifficulty(uint64_t difficulty) = 0;
+  virtual void sendMiningNotify(const StratumJobEth &sjob) = 0;
+};
+
+class EthProtocolProxy : public EthProtocol {
+public:
+  EthProtocolProxy(StratumSessionEth &session);
+  void handleRequest(const string &idStr, const StratumMessageEth &smsg) override;
+  void responseError(const string &idStr, int code) override;
+  void responseTrue(const string &idStr) override;
+  void setNoncePrefix(uint32_t noncePrefix) override;
+  void setDifficulty(uint64_t difficulty) override;
+  void sendMiningNotify(const StratumJobEth &sjob) override;
+
+private:
+  void handleRequest_GetWork(const string &idStr, const StratumMessageEth &smsg);
+  void handleRequest_Submit(const string &idStr, const StratumMessageEth &smsg);
+  void handleRequest_Authorize(const string &idStr, const StratumMessageEth &smsg);
+
+  string idLogin_;
+  string workerName_;
+  string target_;
+  uint32_t noncePrefix_;
+};
+
+class EthProtocolStratum : public EthProtocol {
+protected:
+  explicit EthProtocolStratum(StratumSessionEth &session) : EthProtocol{session} {}
+public:
+  void handleRequest(const string &idStr, const StratumMessageEth &smsg) override;
+  void responseError(const string &idStr, int code) override;
+  void responseTrue(const string &idStr) override;
+
+private:
+  virtual void handleRequest_Subscribe(const string &idStr, const StratumMessageEth &smsg) = 0;
+  virtual void handleRequest_Submit(const string &idStr, const StratumMessageEth &smsg) = 0;
+  virtual void handleRequest_Authorize(const string &idStr, const StratumMessageEth &smsg) = 0;
+};
+
+class EthProtocolStandard : public EthProtocolStratum {
+public:
+  explicit EthProtocolStandard(StratumSessionEth &session) : EthProtocolStratum{session} {}
+  void setNoncePrefix(uint32_t noncePrefix) override {};
+  void setDifficulty(uint64_t difficulty) override;
+  void sendMiningNotify(const StratumJobEth &sjob) override;
+
+private:
+  void handleRequest_Subscribe(const string &idStr, const StratumMessageEth &smsg) override;
+  void handleRequest_Submit(const string &idStr, const StratumMessageEth &smsg) override;
+  void handleRequest_Authorize(const string &idStr, const StratumMessageEth &smsg) override;
+
+  string target_;
+};
+
+class EthProtocolNiceHash : public EthProtocolStratum {
+public:
+  explicit EthProtocolNiceHash(StratumSessionEth &session) : EthProtocolStratum{session}, lastDiff_{0}, noncePrefix_{0} {}
+  void setNoncePrefix(uint32_t noncePrefix) override;
+  void setDifficulty(uint64_t difficulty) override;
+  void sendMiningNotify(const StratumJobEth &sjob) override;
+
+private:
+  void handleRequest_Subscribe(const string &idStr, const StratumMessageEth &smsg) override;
+  void handleRequest_Submit(const string &idStr, const StratumMessageEth &smsg) override;
+  void handleRequest_Authorize(const string &idStr, const StratumMessageEth &smsg) override;
+
+  uint64_t lastDiff_;
+  string idSubscribe_;
+  uint32_t noncePrefix_;
 };
 
 class StratumServerEth : public StratumServer {
 public:
   using StratumServer::StratumServer;
+  void setNoncePrefix(uint16_t sessionId, uint32_t noncePrefix);
 
 private:
   UpStratumClient *createUpClient(int8_t idx,
                                   struct event_base *base,
                                   const string &userName,
                                   StratumServer *server) override;
-  StratumSession *createDownConnection(int8_t upSessionIdx,
+  StratumSession *createDownConnection(UpStratumClient &upSession,
                                        uint16_t sessionId,
                                        struct bufferevent *bev,
                                        StratumServer *server,
@@ -52,20 +159,45 @@ private:
 };
 
 class UpStratumClientEth : public UpStratumClient {
+  friend class StratumSessionEth;
 public:
   using UpStratumClient::UpStratumClient;
   void handleStratumMessage(const string &line) override;
-  void handleExMessage_MiningSetDiff(const string *exMessage) override;
+  void handleExMessage(const string *exMessage) override;
+
+private:
+  void handleExMessage_SetNoncePrefix(const string *exMessage);
+  void sendMiningAuthorize();
+
+  StratumJobEth latestJob_;
 };
 
 class StratumSessionEth : public StratumSession {
+  friend class EthProtocolProxy;
+  friend class EthProtocolStratum;
+  friend class EthProtocolStandard;
+  friend class EthProtocolNiceHash;
 public:
-  using StratumSession::StratumSession;
-  void sendMiningNotify(const string &notifyStr) override;
+  StratumSessionEth(UpStratumClient &upSession,
+                    uint16_t sessionId,
+                    struct bufferevent *bev,
+                    StratumServer *server,
+                    struct in_addr saddr);
+
+  void sendMiningNotify() override;
   void sendMiningDifficulty(uint64_t diff) override;
+  void getNoncePrefix();
+  void setNoncePrefix(uint32_t noncePrefix);
+  void submitShare(const ShareEth &share);
 
 private:
   void handleStratumMessage(const string &line) override;
+
+  void handleRequest(const string &idStr, const StratumMessageEth &smsg);
+  void handleRequest_Subscribe(const string &idStr, const StratumMessageEth &smsg);
+  void handleRequest_Authorize(const string &idStr, const string &fullName);
+
+  std::unique_ptr<EthProtocol> protocol_;
 };
 
 #endif // #ifndef SERVER_ETH_H_

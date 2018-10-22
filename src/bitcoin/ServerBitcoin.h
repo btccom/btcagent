@@ -95,7 +95,6 @@ class StratumSessionBitcoin;
 class StratumServerBitcoin : public StratumServer {
 public:
   using StratumServer::StratumServer;
-  uint32_t getVersionMask(uint8_t upSessionIdx) const;
   void submitShare(const ShareBitcoin &share, StratumSessionBitcoin *downSession);
 
 private:
@@ -103,7 +102,7 @@ private:
                                   struct event_base *base,
                                   const string &userName,
                                   StratumServer *server) override;
-  StratumSession *createDownConnection(int8_t upSessionIdx,
+  StratumSession *createDownConnection(UpStratumClient &upSession,
                                        uint16_t sessionId,
                                        struct bufferevent *bev,
                                        StratumServer *server,
@@ -112,28 +111,28 @@ private:
 
 class UpStratumClientBitcoin : public UpStratumClient {
   friend class StratumServerBitcoin;
+  friend class StratumSessionBitcoin;
 public:
   UpStratumClientBitcoin(int8_t idx, struct event_base *base, const string &userName, StratumServer *server);
 
 private:
   void handleStratumMessage(const string &line) override;
-  void handleExMessage_MiningSetDiff(const string *exMessage) override;
 
   void convertMiningNotifyStr(const string &line);
   void sendMiningAuthorize();
-  uint32_t getVersionMask() const { return versionMask_; }
 
   uint32_t versionMask_; // for version rolling
 
   // latest there job Id & time, use to check if send nTime
   uint8_t  latestJobId_[3];
   uint32_t latestJobGbtTime_[3];
+  string   latestMiningNotifyStr_;
 };
 
 class StratumSessionBitcoin : public StratumSession {
 public:
   using StratumSession::StratumSession;
-  void sendMiningNotify(const string &notifyStr) override;
+  void sendMiningNotify() override;
   void sendMiningDifficulty(uint64_t diff) override;
 
 private:

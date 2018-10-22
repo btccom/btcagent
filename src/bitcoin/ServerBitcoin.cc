@@ -340,19 +340,15 @@ bool StratumMessageBitcoin::getExtraNonce1AndExtraNonce2Size(uint32_t *nonce1,
   return r;
 }
 
-uint32_t StratumServerBitcoin::getVersionMask(uint8_t upSessionIdx) const {
-  return static_cast<UpStratumClientBitcoin *>(upSessions_[upSessionIdx])->getVersionMask();
-}
-
 void StratumServerBitcoin::submitShare(const ShareBitcoin &share,
                                        StratumSessionBitcoin *downSession) {
-  auto up = static_cast<UpStratumClientBitcoin *>(upSessions_[downSession->upSessionIdx_]);
+  auto &up = static_cast<UpStratumClientBitcoin &>(downSession->upSession_);
 
   bool hasVersionMask = share.versionMask_ != 0;
   bool isTimeChanged = true;
-  if ((share.jobId_ == up->latestJobId_[2] && share.time_ == up->latestJobGbtTime_[2]) ||
-      (share.jobId_ == up->latestJobId_[1] && share.time_ == up->latestJobGbtTime_[1]) ||
-      (share.jobId_ == up->latestJobId_[0] && share.time_ == up->latestJobGbtTime_[0])) {
+  if ((share.jobId_ == up.latestJobId_[2] && share.time_ == up.latestJobGbtTime_[2]) ||
+      (share.jobId_ == up.latestJobId_[1] && share.time_ == up.latestJobGbtTime_[1]) ||
+      (share.jobId_ == up.latestJobId_[0] && share.time_ == up.latestJobGbtTime_[0])) {
     isTimeChanged = false;
   }
 
@@ -411,7 +407,7 @@ void StratumServerBitcoin::submitShare(const ShareBitcoin &share,
   assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
 
   // send buf
-  up->sendData(buf);
+  up.sendData(buf);
 }
 
 UpStratumClient *StratumServerBitcoin::createUpClient(int8_t idx,
@@ -421,12 +417,12 @@ UpStratumClient *StratumServerBitcoin::createUpClient(int8_t idx,
   return new UpStratumClientBitcoin(idx, base, userName, server);
 }
 
-StratumSession *StratumServerBitcoin::createDownConnection(int8_t upSessionIdx,
+StratumSession *StratumServerBitcoin::createDownConnection(UpStratumClient &upSession,
                                                            uint16_t sessionId,
                                                            struct bufferevent *bev,
                                                            StratumServer *server,
                                                            struct in_addr saddr) {
-  return new StratumSessionBitcoin(upSessionIdx, sessionId, bev, server, saddr);
+  return new StratumSessionBitcoin(upSession, sessionId, bev, server, saddr);
 }
 
 UpStratumClientBitcoin::UpStratumClientBitcoin(int8_t idx,
@@ -458,7 +454,7 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
       // mining.notify
       //
       convertMiningNotifyStr(line);  // convert mining.notify string
-      server_->sendDataToAll(idx_, latestMiningNotifyStr_); // send to all down sessions
+      server_->sendMiningNotifyToAll(this); // send to all down sessions
 
       latestJobId_[0]      = latestJobId_[1];
       latestJobGbtTime_[0] = latestJobGbtTime_[1];
@@ -533,27 +529,6 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
   }
 }
 
-void UpStratumClientBitcoin::handleExMessage_MiningSetDiff(const string *exMessage) {
-  //
-  // CMD_MINING_SET_DIFF
-  // | magic_number(1) | cmd(1) | len (2) | diff_2_exp(1) | count(2) | session_id (2) ... |
-  //
-  const uint8_t *p = (uint8_t *)exMessage->data();
-  const uint8_t diff_2exp = *(p + 4);
-  const uint64_t diff = (uint64_t)exp2(diff_2exp);
-
-  const uint16_t count   = *(uint16_t *)(p + 5);
-  uint16_t *sessionIdPtr =  (uint16_t *)(p + 7);
-
-  for (size_t i = 0; i < count; i++) {
-    uint16_t sessionId = *sessionIdPtr++;
-    server_->sendMiningDifficulty(this, sessionId, diff);
-  }
-
-  LOG(INFO) << "up[" << (int32_t)idx_ << "] CMD_MINING_SET_DIFF, diff: "
-            << diff << ", sessions count: " << count << std::endl;
-}
-
 void UpStratumClientBitcoin::convertMiningNotifyStr(const string &line) {
   const char *pch = splitNotify(line);
   latestMiningNotifyStr_.clear();
@@ -572,8 +547,8 @@ void UpStratumClientBitcoin::sendMiningAuthorize() {
   sendData(s);
 }
 
-void StratumSessionBitcoin::sendMiningNotify(const string &notifyStr) {
-  sendData(notifyStr);
+void StratumSessionBitcoin::sendMiningNotify() {
+  sendData(static_cast<UpStratumClientBitcoin &>(upSession_).latestMiningNotifyStr_);
 }
 
 void StratumSessionBitcoin::sendMiningDifficulty(uint64_t diff) {
@@ -651,7 +626,7 @@ void StratumSessionBitcoin::handleRequest_Subscribe(const string &idStr,
   }
 
   // 30 is max length for miner agent
-  minerAgent_ = strdup(minerAgent.substr(0, 30).c_str());
+  minerAgent_ = minerAgent.substr(0, 30);
 
   //
   // Response:
@@ -698,19 +673,13 @@ void StratumSessionBitcoin::handleRequest_Authorize(const string &idStr,
   state_ = DOWN_AUTHENTICATED;
 
   // sent sessionId, minerAgent_, workerName to server_
-  server_->registerWorker(this, minerAgent_, workerName);
-
-  // minerAgent_ will not use anymore
-  if (minerAgent_) {
-    free(minerAgent_);
-    minerAgent_ = NULL;
-  }
+  server_->registerWorker(this, minerAgent_.c_str(), workerName);
 
   // send mining.set_difficulty
-  server_->sendDefaultMiningDifficulty(this);
+  sendMiningDifficulty(upSession_.poolDefaultDiff_);
 
   // send latest stratum job
-  server_->sendMiningNotify(this);
+  sendMiningNotify();
 }
 
 void StratumSessionBitcoin::handleRequest_MiningConfigure(const string &idStr,
@@ -729,7 +698,7 @@ void StratumSessionBitcoin::handleRequest_MiningConfigure(const string &idStr,
   }
 
   LOG(INFO) << "handleRequest_MiningConfigure";
-  const uint32_t allowedVersionMask = static_cast<StratumServerBitcoin *>(server_)->getVersionMask(upSessionIdx_);
+  const uint32_t allowedVersionMask = static_cast<UpStratumClientBitcoin &>(upSession_).versionMask_;
   versionMask = versionMask & allowedVersionMask;
 
   string s = Strings::Format("{\"id\":%s,\"result\":{\"version-rolling\":true,\"version-rolling.mask\":\"%08x\"},\"error\":null}\n"
