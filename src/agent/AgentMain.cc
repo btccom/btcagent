@@ -49,10 +49,6 @@ int main(int argc, char **argv) {
   char *optConf   = NULL;
   int c;
 
-  if (argc <= 1) {
-    usage();
-    return 1;
-  }
 #if defined(SUPPORT_GLOG)
   while ((c = getopt(argc, argv, "c:l:h")) != -1) {
 #else
@@ -71,10 +67,15 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (optConf == NULL) {
+    usage();
+    return 1;
+  }
+
 #if defined(SUPPORT_GLOG)
   // Initialize Google's logging library.
   google::InitGoogleLogging(argv[0]);
-  if (strcmp(optLogDir, "stderr") == 0) {
+  if (optLogDir == NULL || strcmp(optLogDir, "stderr") == 0) {
     FLAGS_logtostderr = 1;
   } else {
     FLAGS_log_dir = string(optLogDir);

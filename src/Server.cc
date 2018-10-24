@@ -23,6 +23,7 @@
 #endif
 
 #include <time.h>
+#include <numeric>
 
 #include <event2/event.h>
 #include <event2/buffer.h>
@@ -126,7 +127,7 @@ const char * StratumError::toString(int err) {
     case IP_BANNED:
       return "Ip banned";
     case INVALID_USERNAME:
-      return "Invliad username";
+      return "Invliad subaccount name";
     case INTERNAL_ERROR:
       return "Internal error";
     case TIME_TOO_OLD:
@@ -1136,7 +1137,7 @@ void StratumServer::addUpPool(const string &host, const uint16_t port,
   upPoolPort_    .push_back(port);
   upPoolUserName_.push_back(upPoolUserName);
 
-  LOG(INFO) << "add pool: " << host << ":" << port << ", username: " << upPoolUserName << std::endl;
+  LOG(INFO) << "add pool: " << host << ":" << port << ", subaccount name: " << upPoolUserName << std::endl;
 }
 
 UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
@@ -1155,7 +1156,7 @@ UpStratumClient *StratumServer::createUpSession(const int8_t idx) {
       continue;
     }
     LOG(INFO) << "success connect[" << (int32_t)up->idx_ << "]: " << upPoolHost_[i] << ":"
-    << upPoolPort_[i] << ", username: " << upPoolUserName_[i] << std::endl;
+    << upPoolPort_[i] << ", subaccount name: " << upPoolUserName_[i] << std::endl;
 
     return up;  // connect success
   }
@@ -1254,6 +1255,9 @@ bool StratumServer::setup() {
     LOG(ERROR) << "cannot create listener: " << listenIP_ << ":" << listenPort_ << std::endl;
     return false;
   }
+
+  LOG(INFO) << "startup is successful, subaccount name: " << upPoolUserName_[0]
+            << ", listening: " << listenIP_ << ":" << listenPort_ << std::endl;
   return true;
 }
 
@@ -1288,20 +1292,40 @@ void StratumServer::upWatcherCallback(evutil_socket_t fd,
 }
 
 void StratumServer::checkUpSessions() {
+  size_t aliveUpSessions = 0;
+
   // check up sessions
   for (int8_t i = 0; i < kUpSessionCount_; i++)
   {
     // if upsession's socket error, it'll be removed and set to NULL
     if (upSessions_[i] != NULL) {
-      if (upSessions_[i]->isAvailable() == true)
+      if (upSessions_[i]->isAvailable() == true) {
+        aliveUpSessions++;
         continue;
-      else
+      }
+      else {
         removeUpConnection(upSessions_[i]);
+      }
     }
 
     UpStratumClient *up = createUpSession(i);
-    if (up != NULL)
+    if (up != NULL) {
       addUpConnection(up);
+    }
+  }
+
+  // Print when the number of connections changes
+  static size_t lastDownSessions = 0;
+  static size_t lastUpSessions = 0;
+
+  size_t aliveDownSessions = std::accumulate(upSessionCount_.begin(), upSessionCount_.end(), 0);
+  
+  if (lastDownSessions != aliveDownSessions || lastUpSessions != aliveUpSessions) {
+    lastDownSessions = aliveDownSessions;
+    lastUpSessions = aliveUpSessions;
+
+    LOG(INFO) << "connection number changed, servers: " << aliveUpSessions
+              << ", miners: " << aliveDownSessions << std::endl;
   }
 }
 
