@@ -49,7 +49,7 @@ TEST(Utils, splitNotify) {
 
   const char *pch = splitNotify(line);
 
-  ASSERT_EQ(pch - line.c_str(), l1.length());
+  ASSERT_EQ(static_cast<size_t >(pch - line.c_str()), l1.length());
   ASSERT_EQ(strlen(pch), l2.length());
 }
 
@@ -62,7 +62,7 @@ TEST(Utils, Strings_parseConfJson) {
     ASSERT_EQ(parseConfJson(line, listenIP, listenPort, poolConfs), true);
     ASSERT_EQ(listenIP, "0.0.0.0");
     ASSERT_EQ(listenPort, "3333");
-    ASSERT_EQ(poolConfs.size(), 1);
+    ASSERT_EQ(poolConfs.size(), 1u);
     ASSERT_EQ(poolConfs[0].host_, "cn.ss.btc.com");
     ASSERT_EQ(poolConfs[0].port_, 1800);
     ASSERT_EQ(poolConfs[0].upPoolUserName_, "kevin");
@@ -76,7 +76,7 @@ TEST(Utils, Strings_parseConfJson) {
 
     ASSERT_EQ(listenIP, "127.0.0.1");
     ASSERT_EQ(listenPort, "1800");
-    ASSERT_EQ(poolConfs.size(), 2);
+    ASSERT_EQ(poolConfs.size(), 2u);
 
     ASSERT_EQ(poolConfs[0].host_, "cn.ss.btc.com");
     ASSERT_EQ(poolConfs[0].port_, 1800);
