@@ -302,6 +302,7 @@ void EthProtocolProxy::handleRequest_GetWork(const string &idStr, const StratumM
   // ["0x599fffbc07777d4b6455c0e7ca479c9edbceef6c3fec956fecaaf4f2c727a492",
   // "0x1261dfe17d0bf58cb2861ae84734488b1463d282b7ee88ccfa18b7a92a7b77f7",
   // "0x0112e0be826d694b2e62d01511f12a6061fbaec8bc02357593e70e52ba","0x4ec6f5"]}
+  sendMiningNotifyWithId(idStr, static_cast<UpStratumClientEth &>(session_.upSession_).latestJob_);
   session_.sendMiningNotify();
 }
 
@@ -357,16 +358,21 @@ void EthProtocolProxy::setDifficulty(uint64_t difficulty) {
 }
 
 void EthProtocolProxy::sendMiningNotify(const StratumJobEth &sjob) {
+  sendMiningNotifyWithId("0", sjob);
+}
+
+void EthProtocolProxy::sendMiningNotifyWithId(const string &idStr, const StratumJobEth &sjob) {
   // Claymore eth_getWork
   // {"id":3,"jsonrpc":"2.0","result":
   // ["0x599fffbc07777d4b6455c0e7ca479c9edbceef6c3fec956fecaaf4f2c727a492",
   // "0x1261dfe17d0bf58cb2861ae84734488b1463d282b7ee88ccfa18b7a92a7b77f7",
   // "0x0112e0be826d694b2e62d01511f12a6061fbaec8bc02357593e70e52ba","0x4ec6f5"]}
-  auto s = Strings::Format("{\"id\":0,\"jsonrpc\":\"2.0\","
+  auto s = Strings::Format("{\"id\":%s,\"jsonrpc\":\"2.0\","
                            "\"result\":[\"0x%s\",\"0x%s\",\"0x%s\","
                            // nonce cannot start with 0x because of
                            // a compatibility issue with AntMiner E3.
                            "\"%06x\"]}\n",
+                           idStr.c_str(),
                            sjob.header_.c_str(),
                            sjob.seed_.c_str(),
                            target_.c_str(),

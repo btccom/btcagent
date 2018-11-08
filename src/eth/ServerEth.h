@@ -83,6 +83,7 @@ public:
   void setNoncePrefix(uint32_t noncePrefix) override;
   void setDifficulty(uint64_t difficulty) override;
   void sendMiningNotify(const StratumJobEth &sjob) override;
+  void sendMiningNotifyWithId(const string &idStr, const StratumJobEth &sjob);
 
 private:
   void handleRequest_GetWork(const string &idStr, const StratumMessageEth &smsg);
@@ -160,6 +161,7 @@ private:
 
 class UpStratumClientEth : public UpStratumClient {
   friend class StratumSessionEth;
+  friend class EthProtocolProxy;
 public:
   using UpStratumClient::UpStratumClient;
   void handleStratumMessage(const string &line) override;
