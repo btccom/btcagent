@@ -173,6 +173,7 @@ class StratumMessage {
   string password_;
   uint32_t diff_;       // mining.set_difficulty
   uint32_t versionMask_; // mining.set_version_mask
+  bool hasVersionMask_;
 
   set<string> serverCapabilities_; // agent.get_capabilities
 
@@ -201,6 +202,7 @@ public:
   bool getResultBoolean() const;
   string getId() const;
   bool isStringId() const;
+  bool hasVersionMask() const { return hasVersionMask_; }
 
   bool parseMiningSubmit(Share &share) const;
   bool parseMiningSubscribe(string &minerAgent) const;
@@ -401,6 +403,8 @@ public:
   struct bufferevent *bev_;
   StratumServer *server_;
   struct in_addr saddr_;
+  size_t versionRollingShareCounter_; // Used to detect and prevent potential problems with version rolling
+  string fullWorkerName_;
 
 
 public:
