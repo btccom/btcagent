@@ -33,6 +33,11 @@
 
 using std::set;
 
+// In some cases this macro definition is missing under Windows
+#if defined(_WIN32) && !defined(INET_ADDRSTRLEN)
+  #define INET_ADDRSTRLEN 16
+#endif
+
 
 #define CMD_MAGIC_NUMBER  0x7Fu
 // types
