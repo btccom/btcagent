@@ -13,9 +13,7 @@ Add ```CmakeInstallDirectory\bin``` to ```PATH``` environment variable.
 
 ### libevent
 
-```libevent-2.0.x-stable``` is no cmake support. You have to build it by yourself if you want to stable version. It has a ```makefile.nmake``` but unfinished and not recommended by developers.
-
-And ```libevent-2.1.x-rc``` has good support for cmake. You can open a ```cmd``` and ```cd``` to the source code directory, then run these command:
+Use [libevent-2.1.9-beta](https://github.com/libevent/libevent/releases/tag/release-2.1.9-beta) to avoid dead lock: https://github.com/btccom/btcpool/issues/75
 
 ```cmd
 md build && cd build

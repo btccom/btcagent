@@ -16,13 +16,16 @@ tar zxvf PandoraBox-Toolchain-ralink-for-mipsel_24kec+dsp-gcc-4.8-linaro_uClibc-
 
 #
 # cross build libevent
+# use libevent-2.1.9-beta to avoid dead lock:
+# https://github.com/btccom/btcpool/issues/75
 #
-wget https://github.com/libevent/libevent/releases/download/release-2.0.22-stable/libevent-2.0.22-stable.tar.gz
-tar zxvf libevent-2.0.22-stable.tar.gz
-cd libevent-2.0.22-stable
+wget https://github.com/libevent/libevent/releases/download/release-2.1.9-beta/libevent-2.1.9-beta.tar.gz
+tar zxvf libevent-2.1.9-beta.tar.gz
+cd libevent-2.1.9-beta
 LIBS=-ldl ./configure --host=mipsel-openwrt-linux
 make
-copy include and libraries to toolchain
+# copy include and libraries to toolchain
+
 
 #
 # cross build agent

@@ -39,18 +39,20 @@ apt-get update
 apt-get install -y build-essential cmake git
 
 #
-# install libevent
+# 安装 libevent
+# 使用 libevent-2.1.9-beta 避免死锁:
+# https://github.com/btccom/btcpool/issues/75
 #
 mkdir -p /root/source && cd /root/source
-wget https://github.com/libevent/libevent/releases/download/release-2.0.22-stable/libevent-2.0.22-stable.tar.gz
-tar zxvf libevent-2.0.22-stable.tar.gz
-cd libevent-2.0.22-stable
+wget https://github.com/libevent/libevent/releases/download/release-2.1.9-beta/libevent-2.1.9-beta.tar.gz
+tar zxvf libevent-2.1.9-beta.tar.gz
+cd libevent-2.1.9-beta
 ./configure
 make
 make install
 
 #
-# install glog
+# 安装 glog
 #
 mkdir -p /root/source && cd /root/source
 wget https://github.com/google/glog/archive/v0.3.4.tar.gz
@@ -59,7 +61,7 @@ cd glog-0.3.4
 ./configure && make && make install
 
 #
-# build agent
+# 构建 agent
 #
 mkdir -p /work && cd /work
 git clone https://github.com/btccom/btcagent.git
