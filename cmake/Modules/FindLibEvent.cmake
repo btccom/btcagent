@@ -4,7 +4,7 @@
 # LIBEVENT_LIB, LibEvent libraries
 # LibEvent_FOUND, If false, do not try to use libevent
 
-set(LibEvent_EXTRA_PREFIXES /usr/local /opt/local "$ENV{HOME}")
+set(LibEvent_EXTRA_PREFIXES /usr/local /opt/local "$ENV{HOME}" "${LIBEVENT_ROOT_DIR}")
 foreach(prefix ${LibEvent_EXTRA_PREFIXES})
   list(APPEND LibEvent_INCLUDE_PATHS "${prefix}/include")
   list(APPEND LibEvent_LIB_PATHS "${prefix}/lib")

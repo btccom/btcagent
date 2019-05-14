@@ -3,6 +3,9 @@
 
 ## Build with Cmake & Visual Studio
 
+Please run all commands below in `x64 Native Tools Command Prompt for VS 20xx` (for 64bit building) or `x86 Native Tools Command Prompt for VS 20xx` (for 32bit building).
+
+Use `-A x86` instead of `-A x64` if you want a 32bit building.
 
 ### Cmake
 
@@ -13,40 +16,44 @@ Add ```CmakeInstallDirectory\bin``` to ```PATH``` environment variable.
 
 ### libevent
 
-```libevent-2.0.x-stable``` is no cmake support. You have to build it by yourself if you want to stable version. It has a ```makefile.nmake``` but unfinished and not recommended by developers.
-
-And ```libevent-2.1.x-rc``` has good support for cmake. You can open a ```cmd``` and ```cd``` to the source code directory, then run these command:
+Libevent [release-2.1.9-beta](https://github.com/libevent/libevent/releases/tag/release-2.1.9-beta) is recommended because the earlier versions have a deadlock issue: [btcpool#75](https://github.com/btccom/btcpool/issues/75).
 
 ```cmd
+wget https://github.com/libevent/libevent/releases/download/release-2.1.9-beta/libevent-2.1.9-beta.tar.gz
+tar xf libevent-2.1.9-beta.tar.gz
+cd libevent-2.1.9-beta
+
+# fix missing files
+cd WIN32-Code
+wget https://raw.githubusercontent.com/libevent/libevent/master/WIN32-Code/getopt_long.c https://raw.githubusercontent.com/libevent/libevent/master/WIN32-Code/getopt.h https://raw.githubusercontent.com/libevent/libevent/master/WIN32-Code/getopt.c
+
+cd ..
 md build && cd build
-cmake -DEVENT__DISABLE_OPENSSL=ON -G "Visual Studio 14 2015" ..
+cmake -DCMAKE_INSTALL_PREFIX="%appdata%\lib\libevent" -DEVENT__LIBRARY_TYPE=STATIC -DEVENT__DISABLE_OPENSSL=ON -A x64 ..
 start libevent.sln
 ```
 
-Use ```-DEVENT__DISABLE_OPENSSL=ON``` avoiding build ```openssl``` at first. You can choose another generator listed in ```cmake --help``` instead of ```Visual Studio 14 2015```.
+Then build the ```INSTALL``` project in Visual Studio, it will be installed to ```%appdata%\lib\glog```.
 
-Once you opened ```libevent.sln``` with Visual Studio, you can build all projects (with ```ALL_BUILD``` project) and install it (with ```INSTALL``` project, administrator permission needed).
-
-The ```INSTALL``` project will install libevent to ```C:\Program Files (x86)\libevent``` by default, copy its ```lib``` and ```include``` directory into ```X:\Program Files (x86)\Microsoft Visual Studio xx.0\VC``` directory and finished the install.
+Use ```-DEVENT__DISABLE_OPENSSL=ON``` to avoid finding ```openssl```.
 
 
 ### Glog
 
-Last release ```glog: 0.3.4``` has an issue for VS2015 that duplicate definition ```snprintf``` at src/windows/port.cc, comment needed if using VS2015. Even that, the test case crashed with an exception.
+Glog [0.3.5](https://github.com/google/glog/releases/tag/v0.3.5) is recommended.
 
-Recommended version is the master branch from github, it fix the issue. The build command with cmake is:
+Glog ```0.3.4``` has an issue for VS2015 or later that duplicate definition ```snprintf``` at src/windows/port.cc, comment needed. Even that, the test case crashed with an exception.
 
 ```cmd
-git clone https://github.com/google/glog.git
-mkdir glog/build
-cd glog/build
-cmake -G "Visual Studio 14 2015" ..
+wget https://github.com/google/glog/archive/v0.3.5.tar.gz
+tar xf v0.3.5.tar.gz
+cd glog-0.3.5
+md build && cd build
+cmake -DCMAKE_INSTALL_PREFIX="%appdata%\lib\glog" -A x64 ..
 start google-glog.sln
 ```
 
-Then build ```ALL_BUILD``` & ```INSTALL``` project with VS2015, then copy ```C:\Program Files (x86)\google-glog\include``` & ```C:\Program Files (x86)\google-glog\lib``` to ```VS_install_dir\VC\```.
-
-If you build with ```google-glog.sln``` in the project root directory, you have to copy ```libglog_static.lib``` to ```VS_install_dir\VC\lib``` and rename it to ```glog.lib``` so cmake can find it when build ```btcagent```. (It isn't recommended because of ```snprintf``` issue.)
+Then build the ```INSTALL``` project in Visual Studio, it will be installed to ```%appdata%\lib\glog```.
 
 
 ### btcagent
@@ -54,13 +61,14 @@ If you build with ```google-glog.sln``` in the project root directory, you have 
 You can build it with cmake and Visual Studio:
 
 ```cmd
-copy CMakeLists4Windows.txt CMakeLists.txt
+git clone https://github.com/btccom/btcagent.git
+cd btcagent
 md build && cd build
-cmake -G "Visual Studio 14 2015" ..
+cmake -DLIBEVENT_ROOT_DIR="%appdata%\lib\libevent" -DGLOG_ROOT_DIR="%appdata%\lib\glog" -A x64 ..
 start PoolAgent.sln
 ```
 
-Then build ```ALL_BUILD``` project in Visual Studio. ```build\Debug\agent.exe``` is the final product, it static linked with libevent. But by default, it dynamic linked with VC++ runtime library. You must install ```Visual C++ Redistributable for Visual Studio 20xx``` at another computers.
+Then build ```ALL_BUILD``` project in Visual Studio. ```build\Debug\btcagent.exe``` is the final product, it static linked with libevent. But by default, it dynamic linked with VC++ runtime library. You must install ```Visual C++ Redistributable for Visual Studio 20xx``` at another computers.
 
 There are ```btcagent``` specific Cmake variables (the values being the default):
 
@@ -80,7 +88,7 @@ POOLAGENT__GLOG_TO_STDOUT:BOOL=OFF
 
 ## Static linking with VC++ runtime library
 
-For static linking with VC++ runtime library, we use ```/MT``` in the project's ```Property Pages``` > ```C/C++``` > ```Code Generation``` > ```Runtime Library``` property instead of ```/MD``` by default. Using ```/MTd``` instead of ```/MDd``` for debug.
+For static linking with VC++ runtime library, we use ```/MT``` in the project's ```Property Pages``` > ```C/C++``` > ```Code Generation``` > ```Runtime Library``` property instead of ```/MD``` by default. Using ```/MTd``` instead of ```/MDd``` for debug build.
 
 All librarys the project reliant must linked with ```/MT``` or ```/MTd```, else some symbols will lost at the final linking.
 
@@ -93,23 +101,25 @@ You can add there codes to the end of ```CMakeLists.txt``` that modify the defau
 ###
 # static linking VC++ runtime library
 ###
-message("Static linking VC++ runtime library (/MT).")
-# debug mode
-set(CompilerFlags CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG)
-foreach(CompilerFlag ${CompilerFlags})
+macro(set_linking_vclib CompilerFlag LinkFlag)
   string(REPLACE "/MDd" "" ${CompilerFlag} "${${CompilerFlag}}")
   string(REPLACE "/MD" "" ${CompilerFlag} "${${CompilerFlag}}")
-  set(${CompilerFlag} "${${CompilerFlag}} /MTd")
+  string(REPLACE "/MTd" "" ${CompilerFlag} "${${CompilerFlag}}")
+  string(REPLACE "/MT" "" ${CompilerFlag} "${${CompilerFlag}}")
+  set(${CompilerFlag} "${${CompilerFlag}} ${LinkFlag}")
   message("${CompilerFlag}=${${CompilerFlag}}")
-endforeach()
-# release mode
-set(CompilerFlags CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELEASE)
-foreach(CompilerFlag ${CompilerFlags})
-  string(REPLACE "/MDd" "" ${CompilerFlag} "${${CompilerFlag}}")
-  string(REPLACE "/MD" "" ${CompilerFlag} "${${CompilerFlag}}")
-  set(${CompilerFlag} "${${CompilerFlag}} /MT")
-  message("${CompilerFlag}=${${CompilerFlag}}")
-endforeach()
+endmacro()
+
+message("-- Static linking VC++ runtime library (/MT)")
+
+set_linking_vclib(CMAKE_CXX_FLAGS_DEBUG          "/MTd")
+set_linking_vclib(CMAKE_C_FLAGS_DEBUG            "/MTd")
+set_linking_vclib(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/MTd")
+set_linking_vclib(CMAKE_C_FLAGS_RELWITHDEBINFO   "/MTd")
+set_linking_vclib(CMAKE_CXX_FLAGS_RELEASE        "/MT")
+set_linking_vclib(CMAKE_C_FLAGS_RELEASE          "/MT")
+set_linking_vclib(CMAKE_CXX_FLAGS_MINSIZEREL     "/MT")
+set_linking_vclib(CMAKE_C_FLAGS_MINSIZEREL       "/MT")
 ```
 
 Then build as normal.
@@ -120,18 +130,17 @@ Then build as normal.
 Use ```-DPOOLAGENT__STATIC_LINKING_VC_LIB=ON``` with cmake command:
 
 ```cmd
-copy CMakeLists4Windows.txt CMakeLists.txt
 md build && cd build
-cmake -DPOOLAGENT__STATIC_LINKING_VC_LIB=ON -G "Visual Studio 14 2015" ..
+cmake -DPOOLAGENT__STATIC_LINKING_VC_LIB=ON -DLIBEVENT_ROOT_DIR="%appdata%\lib\libevent" -DGLOG_ROOT_DIR="%appdata%\lib\glog" -A x64 ..
 start PoolAgent.sln
 ```
 
 ## Support Windows XP
 
-Simply add an arg ```-T v140_xp``` to Cmake if build with VS2015.
+Simply add an arg ```-T v140_xp``` to Cmake if build with Visual Studio.
 
 ```cmd
-cmake -G "Visual Studio 14 2015" -T v140_xp ..
+cmake -A x86 -T v141_xp ..
 ```
 
 Libevent and GLog need the arg too.
@@ -151,16 +160,12 @@ And rebuild with clear build dir.
 
 ## 32bit or 64bit
 
-Default is 32bit:
-
 ```cmd
-cmake -G "Visual Studio 14 2015" ..
-```
+# 32bit
+cmake -A x86 ..
 
-Append ```Win64``` at generator for 64bit:
-
-```cmd
-cmake -G "Visual Studio 14 2015 Win64" ..
+# 64bit
+cmake -A x64 ..
 ```
 
 ## Configure & Run
@@ -179,15 +184,15 @@ config json file example:
 
 run:
 ```cmd
-agent.exe -c agent_conf.json
+btcagent.exe -c agent_conf.json
 ```
 
 run without stdout:
 ```cmd
-agent.exe -c agent_conf.json > nul
+btcagent.exe -c agent_conf.json > nul
 ```
 
 run with GLog enabled:
 ```cmd
-agent.exe -c agent_conf.json -l log
+btcagent.exe -c agent_conf.json -l log
 ```

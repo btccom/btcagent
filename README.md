@@ -37,9 +37,9 @@ apt-get install -y build-essential cmake git
 # install libevent
 #
 mkdir -p /root/source && cd /root/source
-wget https://github.com/libevent/libevent/releases/download/release-2.0.22-stable/libevent-2.0.22-stable.tar.gz
-tar zxvf libevent-2.0.22-stable.tar.gz
-cd libevent-2.0.22-stable
+wget https://github.com/libevent/libevent/releases/download/release-2.1.9-beta/libevent-2.1.9-beta.tar.gz
+tar zxvf libevent-2.1.9-beta.tar.gz
+cd libevent-2.1.9-beta
 ./configure
 make
 make install
@@ -48,9 +48,9 @@ make install
 # install glog
 #
 mkdir -p /root/source && cd /root/source
-wget https://github.com/google/glog/archive/v0.3.4.tar.gz
-tar zxvf v0.3.4.tar.gz
-cd glog-0.3.4
+wget https://github.com/google/glog/archive/v0.3.5.tar.gz
+tar zxvf v0.3.5.tar.gz
+cd glog-0.3.5
 ./configure && make && make install
 
 #

@@ -140,11 +140,11 @@ TEST(Server, StratumMessageBitcoin_parseAgentGetCapabilities) {
   std::set<string> serverCaps;
   ASSERT_EQ(smsg.parseAgentGetCapabilities(serverCaps), true);
 
-  ASSERT_EQ(serverCaps.size(), 4);
-  ASSERT_EQ(serverCaps.count("aaa"), 1);
-  ASSERT_EQ(serverCaps.count("bbb"), 1);
-  ASSERT_EQ(serverCaps.count("verrol"), 1);
-  ASSERT_EQ(serverCaps.count("testing"), 1);
+  ASSERT_EQ(serverCaps.size(), 4u);
+  ASSERT_EQ(serverCaps.count("aaa"), 1u);
+  ASSERT_EQ(serverCaps.count("bbb"), 1u);
+  ASSERT_EQ(serverCaps.count("verrol"), 1u);
+  ASSERT_EQ(serverCaps.count("testing"), 1u);
 }
 
 TEST(Server, StratumMessageBitcoin_parseMiningNotify) {
