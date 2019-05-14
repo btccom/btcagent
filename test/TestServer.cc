@@ -132,6 +132,21 @@ TEST(Server, StratumMessageBitcoin_parseMiningConfigure) {
   ASSERT_EQ(versionMask, 0x00ffee00u);
 }
 
+TEST(Server, StratumMessageBitcoin_parseAgentGetCapabilities) {
+  string line = "{\"id\":\"" JSONRPC_GET_CAPS_REQ_ID "\",\"result\":{\"capabilities\":[\"aaa\", \"bbb\", \"verrol\", \"testing\"]}}";
+  StratumMessageBitcoin smsg(line);
+  ASSERT_EQ(smsg.isValid(), true);
+
+  std::set<string> serverCaps;
+  ASSERT_EQ(smsg.parseAgentGetCapabilities(serverCaps), true);
+
+  ASSERT_EQ(serverCaps.size(), 4);
+  ASSERT_EQ(serverCaps.count("aaa"), 1);
+  ASSERT_EQ(serverCaps.count("bbb"), 1);
+  ASSERT_EQ(serverCaps.count("verrol"), 1);
+  ASSERT_EQ(serverCaps.count("testing"), 1);
+}
+
 TEST(Server, StratumMessageBitcoin_parseMiningNotify) {
   {
     string line = "{\"params\": [\"1\", \"4d16b6f85af6e2198f44ae2a6de67f78487ae5611b77c6c0440b921e00000000\",\"01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff20020862062f503253482f04b8864e5008\",\"072f736c7573682f000000000100f2052a010000001976a914d23fcdf86f7e756a64a7a9688ef9903327048ed988ac00000000\", [\"008d29799d7a2951689ab6de901a8a2878966fb3cf375db417b411fed76b54a2\", \"942d192aa135fc4efdc09166877468d7d199753f35095b10fbce656f7c14561d\"],\"00000002\", \"1c2ac4af\", \"504e86b9\", false], \"id\": null, \"method\": \"mining.notify\"}";

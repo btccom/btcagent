@@ -26,10 +26,18 @@ StratumMessageBitcoin::StratumMessageBitcoin(const string &content) : StratumMes
 }
 
 void StratumMessageBitcoin::decode() {
+  // Processing JSONRPC response
+  if (id_ == JSONRPC_GET_CAPS_REQ_ID) {
+    _parseAgentGetCapabilities();
+    return;
+  }
+
+  // Processing JSONRPC request / notify
   // find method name
   const string method = findMethod();
-  if (method == "")
+  if (method == "") {
     return;
+  }
 
   if (method == "mining.submit") {
     _parseMiningSubmit();
@@ -243,6 +251,34 @@ void StratumMessageBitcoin::_parseMiningConfigure() {
   }
 }
 
+void StratumMessageBitcoin::_parseAgentGetCapabilities() {
+  serverCapabilities_.clear();
+
+  for (int i = 1; i < r_; i++) {
+    //
+    // {"id":"agent.caps","result":{"capabilities":["verrol","xxx",...]}}
+    //
+    if (jsoneq(&t_[i], "capabilities") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size >= 1) {
+      size_t size = t_[i+1].size;
+
+      i++;  // ptr move to capabilities
+      i++;  // ptr move to capabilities[0]
+
+      for (size_t j=0; j<size; j++) {
+        if (t_[i].type == JSMN_STRING) {
+          serverCapabilities_.insert(getJsonStr(&t_[i]).c_str());
+        }
+        i++;
+      }
+
+      break;
+    }
+  }
+
+  // set the method_
+  method_ = "agent.get_capabilities";
+}
+
 bool StratumMessageBitcoin::parseMiningSubmit(ShareBitcoin &share) const {
   if (method_ != "mining.submit")
     return false;
@@ -289,6 +325,13 @@ bool StratumMessageBitcoin::parseMiningConfigure(uint32_t *versionMask) const {
   if (method_ != "mining.configure")
     return false;
   *versionMask = versionMask_;
+  return true;
+}
+
+bool StratumMessageBitcoin::parseAgentGetCapabilities(std::set<string> &serverCapabilities) const {
+  if (method_ != "agent.get_capabilities")
+    return false;
+  serverCapabilities = serverCapabilities_;
   return true;
 }
 
@@ -447,6 +490,7 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
   StratumJobBitcoin sjob;
   uint32_t difficulty = 0u;
   uint32_t versionMask = 0u;
+  std::set<string> serverCapabilities;
 
   if (state_ == UP_AUTHENTICATED) {
     if (smsg.parseMiningNotify(sjob)) {
@@ -483,11 +527,24 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
         poolDefaultDiff_ = difficulty;
       }
     }
+    else if (smsg.parseAgentGetCapabilities(serverCapabilities)) {
+      // Check if the server supports BTCAgent's version rolling
+      if (serverCapabilities.count(BTCAGENT_PROTOCOL_CAP_VERROL) > 0) {
+        // do mining.configure (for version rolling)
+        string s = Strings::Format("{\"id\":1,\"method\":\"mining.configure\",\"params\":["
+                                       "[\"version-rolling\"],"
+                                       "{\"version-rolling.mask\":\"ffffffff\",\"version-rolling.min-bit-count\":0}"
+                                   "]}\n");
+        sendData(s);
+      }
+    }
     else if (smsg.parseMiningSetVersionMask(&versionMask)) {
       //
       // {"id":null,"method":"mining.set_version_mask","params":["1fffe000"]}
       //
       versionMask_ = versionMask;
+      LOG(INFO) << "AsicBoost via BTCAgent enabled, allowed version mask: "
+                << Strings::Format("%08x", versionMask) << std::endl;
     }
   }
 
@@ -525,6 +582,10 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
     state_ = UP_AUTHENTICATED;  // authorize successful
     LOG(INFO) << "auth success, name: \"" << userName_
               << "\", extraNonce1: " << extraNonce1_ << std::endl;
+    
+    // do agent.get_capabilities
+    string s = Strings::Format("{\"id\":\"" JSONRPC_GET_CAPS_REQ_ID "\",\"method\":\"agent.get_capabilities\",\"params\":[" BTCAGENT_PROTOCOL_CAPABILITIES "]}\n");
+    sendData(s);
     return;
   }
 }
@@ -539,11 +600,8 @@ void UpStratumClientBitcoin::convertMiningNotifyStr(const string &line) {
 }
 
 void UpStratumClientBitcoin::sendMiningAuthorize() {
-  // do mining.authorize and mining.configure (for version rolling)
-  string s = Strings::Format("{\"id\":1,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"\"]}\n"
-                             "{\"id\":2,\"method\":\"mining.configure\",\"params\":[[\"version-rolling\"],"
-                             "{\"version-rolling.mask\":\"ffffffff\",\"version-rolling.min-bit-count\":0}]}\n",
-                             userName_.c_str());
+  // do mining.authorize
+  string s = Strings::Format("{\"id\":1,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"\"]}\n", userName_.c_str());
   sendData(s);
 }
 
@@ -596,7 +654,6 @@ void StratumSessionBitcoin::handleRequest(const string &idStr,
     handleRequest_Authorize(idStr, smsg);
   }
   else if (method == "mining.configure") {
-    LOG(INFO) << "method: " << method;
     handleRequest_MiningConfigure(idStr, smsg);
   } else {
     // unrecognised method, just ignore it
@@ -691,15 +748,21 @@ void StratumSessionBitcoin::handleRequest_MiningConfigure(const string &idStr,
     return;	    return;
   }	  }*/
 
-  uint32_t versionMask = 0;
-  if (!smsg.parseMiningConfigure(&versionMask)) {
+  uint32_t minerVersionMask  = 0;
+  if (!smsg.parseMiningConfigure(&minerVersionMask )) {
     responseError(idStr, StratumError::ILLEGAL_PARARMS);
     return;
   }
 
-  LOG(INFO) << "handleRequest_MiningConfigure";
   const uint32_t allowedVersionMask = static_cast<UpStratumClientBitcoin &>(upSession_).versionMask_;
-  versionMask = versionMask & allowedVersionMask;
+  const uint32_t versionMask = minerVersionMask & allowedVersionMask;
+
+  if (allowedVersionMask == 0) {
+    LOG(WARNING) << Strings::Format("The server doesn't support AsicBoost! Version mask of server: %08x, miner: %08x", allowedVersionMask, minerVersionMask) << std::endl;
+  }
+  else if (versionMask == 0) {
+    LOG(WARNING) << Strings::Format("Incompatible AsicBoost version mask detected, server: %08x, miner: %08x", allowedVersionMask, minerVersionMask) << std::endl;
+  }
 
   string s = Strings::Format("{\"id\":%s,\"result\":{\"version-rolling\":true,\"version-rolling.mask\":\"%08x\"},\"error\":null}\n"
                              "{\"id\":null,\"method\":\"mining.set_version_mask\",\"params\":[\"%08x\"]}\n",

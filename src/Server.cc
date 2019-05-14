@@ -214,6 +214,7 @@ string StratumMessage::parseId() {
 
       isStringId_ = (t_[i].type == JSMN_STRING) ? true : false;
       id_ = getJsonStr(&t_[i]);
+      return id_;
     }
   }
   return "";

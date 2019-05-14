@@ -22,6 +22,14 @@
 
 #include "Server.h"
 
+// Supported BTCAgent features / capabilities, a JSON array.
+// Sent within the request / response of agent.get_capabilities for protocol negotiation.
+// Known capabilities:
+//     verrol: version rolling (shares with a version mask can be submitted through a BTCAgent session).
+#define BTCAGENT_PROTOCOL_CAPABILITIES "[\"verrol\"]"
+#define BTCAGENT_PROTOCOL_CAP_VERROL "verrol"
+#define JSONRPC_GET_CAPS_REQ_ID "agent.caps"
+
 class ShareBitcoin {
 public:
   uint32_t jobId_;
@@ -65,6 +73,7 @@ class StratumMessageBitcoin : public StratumMessage {
   string workerName_; // mining.authorize
   uint32_t diff_; // mining.set_difficulty
   uint32_t versionMask_; // mining.set_version_mask
+  std::set<string> serverCapabilities_; // agent.get_capabilities
 
   void decode();
 
@@ -75,6 +84,7 @@ class StratumMessageBitcoin : public StratumMessage {
   void _parseMiningSubscribe();
   void _parseMiningAuthorize();
   void _parseMiningConfigure();
+  void _parseAgentGetCapabilities();
 
 public:
   explicit StratumMessageBitcoin(const string &content);
@@ -86,6 +96,7 @@ public:
   bool parseMiningSetDifficulty(uint32_t *diff) const;
   bool parseMiningSetVersionMask(uint32_t *versionMask) const;
   bool parseMiningConfigure(uint32_t *versionMask) const;
+  bool parseAgentGetCapabilities(std::set<string> &serverCapabilities) const;
 
   bool getExtraNonce1AndExtraNonce2Size(uint32_t *nonce1, int32_t *n2size) const;
 };
