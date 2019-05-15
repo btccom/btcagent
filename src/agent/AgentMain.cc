@@ -96,15 +96,22 @@ int main(int argc, char **argv) {
   signal(SIGTERM, handler);
   signal(SIGINT,  handler);
 
+// Windows will not trigger SIGPIPE when 
+// sending data to a disconnected socket.
+#ifndef _WIN32
+  signal(SIGPIPE, SIG_IGN);
+#endif
+
   try {
     string agentType, listenIP, listenPort;
     std::vector<PoolConf> poolConfs;
+    bool alwaysKeepDownconn = false;
 
     // get conf json string
     std::ifstream agentConf(optConf);
     string agentJsonStr((std::istreambuf_iterator<char>(agentConf)),
                         std::istreambuf_iterator<char>());
-    if (!parseConfJson(agentJsonStr, agentType, listenIP, listenPort, poolConfs)) {
+    if (!parseConfJson(agentJsonStr, agentType, listenIP, listenPort, poolConfs, alwaysKeepDownconn)) {
       LOG(ERROR) << "parse json config file failure" << std::endl;
       return 1;
     }
@@ -122,7 +129,7 @@ int main(int argc, char **argv) {
                                 poolConfs[i].upPoolUserName_);
     }
 
-    if (!gStratumServer->setup()) {
+    if (!gStratumServer->setup(alwaysKeepDownconn)) {
       LOG(ERROR) << "setup failure" << std::endl;
     } else {
       gStratumServer->run();
