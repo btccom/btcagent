@@ -32,20 +32,15 @@
 
 class ShareBitcoin {
 public:
-  uint32_t jobId_;
-  uint32_t time_;
-  uint32_t extraNonce2_;
-  uint32_t nonce_;
-  uint32_t versionMask_;
+  uint32_t jobId_ = 0;
+  uint32_t time_ = 0;
+  uint32_t extraNonce2_ = 0;
+  uint32_t nonce_ = 0;
+  uint32_t versionMask_ = 0;
+  bool isFakeJob_ = false;
 
-  ShareBitcoin(): jobId_(0), time_(0), extraNonce2_(0), nonce_(0), versionMask_(0) {}
-  ShareBitcoin(const ShareBitcoin &r) {
-    jobId_       = r.jobId_;
-    time_        = r.time_;
-    extraNonce2_ = r.extraNonce2_;
-    nonce_       = r.nonce_;
-    versionMask_ = r.versionMask_;
-  }
+  ShareBitcoin() = default;
+  ShareBitcoin(const ShareBitcoin &r) = default;
 };
 
 class StratumJobBitcoin {
@@ -142,6 +137,7 @@ class StratumSessionBitcoin : public StratumSession {
 public:
   using StratumSession::StratumSession;
   void sendMiningNotify() override;
+  void sendFakeMiningNotify() override;
   void sendMiningDifficulty(uint64_t diff) override;
 
 private:

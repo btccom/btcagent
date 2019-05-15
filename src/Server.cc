@@ -288,7 +288,8 @@ bool UpStratumClient::connect() {
 }
 
 bool UpStratumClient::reconnect() {
-  if (time(nullptr) - lastConnectTime_ < 5) {
+  time_t now = time(nullptr);
+  if (now - lastConnectTime_ < 5) {
     // Too fast reconnecting.
     // StratumServer::checkUpSessions() will do the reconnect again().
     server_->resetUpWatcherTime(5);
@@ -296,6 +297,12 @@ bool UpStratumClient::reconnect() {
   }
 
   disconnect();
+
+  if (now - lastJobReceivedTime_ > 30) {
+    lastJobReceivedTime_ = now;
+    server_->sendFakeMiningNotifyToAll(this);
+  }
+
   initConnection();
   return connect();
 }
@@ -655,8 +662,7 @@ void StratumServer::resetUpWatcherTime(time_t seconds) {
     // setup up sessions watcher
     upEvTimer_ = event_new(base_, -1, EV_PERSIST,
       StratumServer::upWatcherCallback, this);
-  }
-  else {
+  } else {
     event_del(upEvTimer_);
   }
 
@@ -928,6 +934,22 @@ void StratumServer::sendMiningNotifyToAll(const UpStratumClient *conn) {
       continue;
 
     s->sendMiningNotify();
+  }
+}
+
+void StratumServer::sendFakeMiningNotifyToAll(const UpStratumClient *conn) {
+  size_t counter = 0;
+  for (size_t i = 0; i < downSessions_.size(); i++) {
+    StratumSession *s = downSessions_[i];
+    if (s == NULL || &s->upSession_ != conn)
+      continue;
+
+    s->sendFakeMiningNotify();
+    counter++;
+  }
+
+  if (counter > 0) {
+    LOG(INFO) << "Send fake job to " << counter << " miners";
   }
 }
 

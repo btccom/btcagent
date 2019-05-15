@@ -185,6 +185,7 @@ public:
                     struct in_addr saddr);
 
   void sendMiningNotify() override;
+  void sendFakeMiningNotify() override;
   void sendMiningDifficulty(uint64_t diff) override;
   void getNoncePrefix();
   void setNoncePrefix(uint32_t noncePrefix);

@@ -61,8 +61,8 @@ TEST(Utils, Strings_parseConfJson) {
     std::vector<PoolConf> poolConfs;
 
     string line = R"EOF({
-      "agent_listen_ip": "127.0.0.1",
-      "agent_listen_port": 1800,
+      "agent_listen_ip": "0.0.0.0",
+      "agent_listen_port": 3333,
       "pools": [
         ["cn.ss.btc.com", 1800, "kevin"]
       ]

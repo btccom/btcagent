@@ -90,7 +90,14 @@ void StratumMessageBitcoin::_parseMiningSubmit() {
       i++;  // ptr move to params[0]
 
       // Job ID
-      share_.jobId_       = (uint8_t) strtoul(getJsonStr(&t_[i+1]).c_str(), NULL, 10);
+      string idStr = getJsonStr(&t_[i+1]);
+      // start with 'f' means a fake job
+      if (idStr.size() < 1 || idStr[0] == 'f') {
+        share_.isFakeJob_ = true;
+      } else {
+        share_.jobId_       = (uint8_t) strtoul(idStr.c_str(), NULL, 10);
+      }
+
       // ExtraNonce2(hex)
       share_.extraNonce2_ = (uint32_t)strtoul(getJsonStr(&t_[i+2]).c_str(), NULL, 16);
       // nTime(hex)
@@ -387,6 +394,12 @@ void StratumServerBitcoin::submitShare(const ShareBitcoin &share,
                                        StratumSessionBitcoin *downSession) {
   auto &up = static_cast<UpStratumClientBitcoin &>(downSession->upSession_);
 
+  // ignore fake job shares
+  if (share.isFakeJob_) {
+    DLOG(INFO) << "ignore a fake job";
+    return;
+  }
+
   bool hasVersionMask = share.versionMask_ != 0;
   bool isTimeChanged = true;
   if ((share.jobId_ == up.latestJobId_[2] && share.time_ == up.latestJobGbtTime_[2]) ||
@@ -608,6 +621,27 @@ void UpStratumClientBitcoin::sendMiningAuthorize() {
 
 void StratumSessionBitcoin::sendMiningNotify() {
   sendData(static_cast<UpStratumClientBitcoin &>(upSession_).latestMiningNotifyStr_);
+}
+
+void StratumSessionBitcoin::sendFakeMiningNotify() {
+  const string &notify = static_cast<UpStratumClientBitcoin &>(upSession_).latestMiningNotifyStr_;
+  string fakeNotify;
+  time_t now = time(nullptr);
+
+  const char *idPosition = splitNotify(notify, 9);
+  const char *pch = splitNotify(notify);
+
+  if (idPosition != nullptr && pch != nullptr && ++idPosition < pch) {
+    fakeNotify.append(notify.c_str(), idPosition - notify.c_str());
+    fakeNotify.append(Strings::Format("f%04" PRIx16, (uint16_t)now));
+    fakeNotify.append(idPosition, pch - idPosition);
+    fakeNotify.append(Strings::Format("%016" PRIx64, (uint64_t)now));
+    fakeNotify.append(pch);
+  } else {
+    fakeNotify = notify;
+  }
+
+  sendData(fakeNotify);
 }
 
 void StratumSessionBitcoin::sendMiningDifficulty(uint64_t diff) {

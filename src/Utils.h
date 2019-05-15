@@ -127,7 +127,8 @@ bool parseConfJson(const string &jsonStr,
                    bool &alwaysKeepDownconn);
 
 // slite stratum 'mining.notify'
-const char *splitNotify(const string &line);
+// 14: the end of coinbase1
+const char *splitNotify(const string &line, int number = 14);
 
 string str2lower(const string &str);
 string getWorkerName(const string &fullName);

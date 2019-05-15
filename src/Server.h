@@ -219,6 +219,7 @@ public:
   static void upSesssionCheckCallback(evutil_socket_t fd, short events, void *ptr);
 
   void sendMiningNotifyToAll(const UpStratumClient *conn);
+  void sendFakeMiningNotifyToAll(const UpStratumClient *conn);
   void sendMiningDifficulty(UpStratumClient *upSession, uint64_t diff);
   void sendMiningDifficulty(uint16_t sessionId, uint64_t diff);
 
@@ -328,6 +329,7 @@ public:
                  struct in_addr saddr);
   virtual ~StratumSession();
   virtual void sendMiningNotify() = 0;
+  virtual void sendFakeMiningNotify() = 0;
   virtual void sendMiningDifficulty(uint64_t diff) = 0;
 
   void recvData(struct evbuffer *buf);

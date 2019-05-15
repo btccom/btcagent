@@ -697,6 +697,15 @@ void StratumSessionEth::sendMiningNotify() {
   protocol_->sendMiningNotify(static_cast<UpStratumClientEth &>(upSession_).latestJob_);
 }
 
+void StratumSessionEth::sendFakeMiningNotify() {
+  StratumJobEth fakeJob = static_cast<UpStratumClientEth &>(upSession_).latestJob_;
+  if (fakeJob.header_.size() > 16) {
+    fakeJob.header_.resize(fakeJob.header_.size() - 16);
+    fakeJob.header_ += Strings::Format("%016" PRIx64, (uint64_t)time(nullptr));
+  }
+  protocol_->sendMiningNotify(fakeJob);
+}
+
 void StratumSessionEth::sendMiningDifficulty(uint64_t diff) {
   protocol_->setDifficulty(diff);
 }

@@ -182,13 +182,13 @@ bool parseConfJson(const string &jsonStr,
   return false;
 }
 
-const char *splitNotify(const string &line) {
+const char *splitNotify(const string &line, int number) {
   const char *pch = strchr(line.c_str(), '"');
   int i = 1;
   while (pch != NULL) {
     pch = strchr(pch + 1, '"');
     i++;
-    if (pch != NULL && i == 14) {
+    if (pch != NULL && i == number) {
       break;
     }
   }
