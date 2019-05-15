@@ -479,6 +479,16 @@ StratumSession *StratumServerBitcoin::createDownConnection(UpStratumClient &upSe
   return new StratumSessionBitcoin(upSession, sessionId, bev, server, saddr);
 }
 
+void StratumServerBitcoin::sendVersionMaskToAll(const UpStratumClient *conn) {
+  for (size_t i = 0; i < downSessions_.size(); i++) {
+    StratumSessionBitcoin *s = static_cast<StratumSessionBitcoin *>(downSessions_[i]);
+    if (s == NULL || &s->upSession_ != conn) {
+      continue;
+    }
+    s->sendVersionMask();
+  }
+}
+
 UpStratumClientBitcoin::UpStratumClientBitcoin(int8_t idx,
                                                StratumServer *server)
     : UpStratumClient{idx, server}
@@ -553,7 +563,14 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
       //
       // {"id":null,"method":"mining.set_version_mask","params":["1fffe000"]}
       //
+
+      bool sendVersionMask = (versionMask_ != versionMask);
       versionMask_ = versionMask;
+
+      if (sendVersionMask) {
+        static_cast<StratumServerBitcoin *>(server_)->sendVersionMaskToAll(this);
+      }
+
       LOG(INFO) << "AsicBoost via BTCAgent enabled, allowed version mask: "
                 << Strings::Format("%08x", versionMask) << std::endl;
     }
@@ -647,6 +664,25 @@ void StratumSessionBitcoin::sendFakeMiningNotify() {
 
 void StratumSessionBitcoin::sendMiningDifficulty(uint64_t diff) {
   sendData(Strings::Format("{\"id\":null,\"method\":\"mining.set_difficulty\",\"params\":[%" PRIu64"]}\n", diff));
+}
+
+void StratumSessionBitcoin::sendVersionMask() {
+  if (wantedVersionMask_ == 0) {
+    return;
+  }
+
+  const uint32_t allowedVersionMask = static_cast<UpStratumClientBitcoin &>(upSession_).allowedVersionMask();
+  const uint32_t versionMask = wantedVersionMask_ & allowedVersionMask;
+
+  if (allowedVersionMask == 0) {
+    LOG(WARNING) << Strings::Format("The server doesn't support AsicBoost! Version mask of server: %08x, miner: %08x", allowedVersionMask, wantedVersionMask_) << std::endl;
+  }
+  else if (versionMask == 0) {
+    LOG(WARNING) << Strings::Format("Incompatible AsicBoost version mask detected, server: %08x, miner: %08x", allowedVersionMask, wantedVersionMask_) << std::endl;
+  }
+
+  string s = Strings::Format("{\"id\":null,\"method\":\"mining.set_version_mask\",\"params\":[\"%08x\"]}\n", versionMask);
+  sendData(s);
 }
 
 void StratumSessionBitcoin::handleStratumMessage(const string &line) {
@@ -784,20 +820,19 @@ void StratumSessionBitcoin::handleRequest_MiningConfigure(const string &idStr,
     return;	    return;
   }	  }*/
 
-  uint32_t minerVersionMask  = 0;
-  if (!smsg.parseMiningConfigure(&minerVersionMask )) {
+  if (!smsg.parseMiningConfigure(&wantedVersionMask_ )) {
     responseError(idStr, StratumError::ILLEGAL_PARARMS);
     return;
   }
 
-  const uint32_t allowedVersionMask = static_cast<UpStratumClientBitcoin &>(upSession_).versionMask_;
-  const uint32_t versionMask = minerVersionMask & allowedVersionMask;
+  const uint32_t allowedVersionMask = static_cast<UpStratumClientBitcoin &>(upSession_).allowedVersionMask();
+  const uint32_t versionMask = wantedVersionMask_ & allowedVersionMask;
 
   if (allowedVersionMask == 0) {
-    LOG(WARNING) << Strings::Format("The server doesn't support AsicBoost! Version mask of server: %08x, miner: %08x", allowedVersionMask, minerVersionMask) << std::endl;
+    LOG(WARNING) << Strings::Format("The server doesn't support AsicBoost! Version mask of server: %08x, miner: %08x", allowedVersionMask, wantedVersionMask_) << std::endl;
   }
   else if (versionMask == 0) {
-    LOG(WARNING) << Strings::Format("Incompatible AsicBoost version mask detected, server: %08x, miner: %08x", allowedVersionMask, minerVersionMask) << std::endl;
+    LOG(WARNING) << Strings::Format("Incompatible AsicBoost version mask detected, server: %08x, miner: %08x", allowedVersionMask, wantedVersionMask_) << std::endl;
   }
 
   string s = Strings::Format("{\"id\":%s,\"result\":{\"version-rolling\":true,\"version-rolling.mask\":\"%08x\"},\"error\":null}\n"

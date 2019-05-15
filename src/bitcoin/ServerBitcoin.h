@@ -102,6 +102,7 @@ class StratumServerBitcoin : public StratumServer {
 public:
   using StratumServer::StratumServer;
   void submitShare(const ShareBitcoin &share, StratumSessionBitcoin *downSession);
+  void sendVersionMaskToAll(const UpStratumClient *conn);
 
 private:
   UpStratumClient *createUpClient(int8_t idx,
@@ -118,6 +119,8 @@ class UpStratumClientBitcoin : public UpStratumClient {
   friend class StratumSessionBitcoin;
 public:
   UpStratumClientBitcoin(int8_t idx, StratumServer *server);
+
+  inline uint32_t allowedVersionMask() const { return versionMask_; }
 
 private:
   void handleStratumMessage(const string &line) override;
@@ -139,6 +142,7 @@ public:
   void sendMiningNotify() override;
   void sendFakeMiningNotify() override;
   void sendMiningDifficulty(uint64_t diff) override;
+  void sendVersionMask();
 
 private:
   void handleStratumMessage(const string &line) override;
@@ -151,6 +155,8 @@ private:
 
   void responseError(const string &idStr, int code);
   void responseTrue(const string &idStr);
+
+  uint32_t wantedVersionMask_ = 0;
 };
 
 #endif // #ifndef SERVER_BITCOIN_H_
