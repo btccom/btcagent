@@ -260,6 +260,7 @@ public:
   int8_t idx_ = 0;
   StratumServer *server_ = nullptr;
 
+  bool poolDiffNeedUpdate_ = true;
   uint64_t poolDefaultDiff_ = 0;
   uint32_t extraNonce1_ = 0;  // session ID
 

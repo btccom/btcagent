@@ -532,8 +532,9 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
       // mining.set_difficulty
       //
       // just set the default pool diff, than ignore
-      if (poolDefaultDiff_ != difficulty) {
+      if (poolDiffNeedUpdate_) {
         poolDefaultDiff_ = difficulty;
+        poolDiffNeedUpdate_ = false;
         server_->sendMiningDifficulty(this, poolDefaultDiff_);
       }
     }

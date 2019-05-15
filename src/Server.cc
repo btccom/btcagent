@@ -276,9 +276,10 @@ bool UpStratumClient::connect() {
     int res = bufferevent_socket_connect_hostname(bev_, evdnsBase_, AF_INET, pools[i].host_.c_str(), (int)pools[i].port_);
     if (res == 0) {
       state_ = UP_CONNECTED;
+      poolDiffNeedUpdate_ = true;
       lastConnectTime_ = time(nullptr);
 
-      LOG(INFO) << "success connect[" << (int32_t)idx_ << "]: " << pools[i].host_ << ":"
+      LOG(INFO) << "pool connection [" << (int32_t)idx_ << "]: try connect to " << pools[i].host_ << ":"
                 << pools[i].port_ << ", subaccount name: " << userName_ << std::endl;
       return true;
     }
@@ -949,7 +950,7 @@ void StratumServer::sendFakeMiningNotifyToAll(const UpStratumClient *conn) {
   }
 
   if (counter > 0) {
-    LOG(INFO) << "Send fake job to " << counter << " miners";
+    LOG(INFO) << "pool connection [" << (int32_t)conn->idx_ << "]: Send fake job to " << counter << " miners";
   }
 }
 

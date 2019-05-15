@@ -612,8 +612,10 @@ void UpStratumClientEth::handleStratumMessage(const string &line) {
       // mining.set_difficulty
       //
       // just set the default pool diff, than ignore
-      if (poolDefaultDiff_ == 0) {
+      if (poolDiffNeedUpdate_) {
         poolDefaultDiff_ = difficulty * 4294967296.0;
+        poolDiffNeedUpdate_ = false;
+        server_->sendMiningDifficulty(this, poolDefaultDiff_);
       }
     }
   }
@@ -849,8 +851,8 @@ void StratumSessionEth::handleRequest_Authorize(const string &idStr, const strin
   server_->registerWorker(this);
 
   // send mining.set_difficulty
-   sendMiningDifficulty(upSession_.poolDefaultDiff_);
+  sendMiningDifficulty(upSession_.poolDefaultDiff_);
 
   // send latest stratum job
-   sendMiningNotify();
+  sendMiningNotify();
 }
