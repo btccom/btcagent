@@ -149,8 +149,6 @@ public:
 
 private:
   UpStratumClient *createUpClient(int8_t idx,
-                                  struct event_base *base,
-                                  const string &userName,
                                   StratumServer *server) override;
   StratumSession *createDownConnection(UpStratumClient &upSession,
                                        uint16_t sessionId,

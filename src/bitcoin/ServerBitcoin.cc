@@ -450,14 +450,12 @@ void StratumServerBitcoin::submitShare(const ShareBitcoin &share,
   assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
 
   // send buf
-  up.sendData(buf);
+  up.sendRequest(buf);
 }
 
 UpStratumClient *StratumServerBitcoin::createUpClient(int8_t idx,
-                                                      struct event_base *base,
-                                                      const string &userName,
                                                       StratumServer *server) {
-  return new UpStratumClientBitcoin(idx, base, userName, server);
+  return new UpStratumClientBitcoin(idx, server);
 }
 
 StratumSession *StratumServerBitcoin::createDownConnection(UpStratumClient &upSession,
@@ -469,10 +467,8 @@ StratumSession *StratumServerBitcoin::createDownConnection(UpStratumClient &upSe
 }
 
 UpStratumClientBitcoin::UpStratumClientBitcoin(int8_t idx,
-                                               struct event_base *base,
-                                               const string &userName,
                                                StratumServer *server)
-    : UpStratumClient{idx, base, userName, server}
+    : UpStratumClient{idx, server}
     , versionMask_(0)
     , latestJobId_{0, 0, 0}
     , latestJobGbtTime_{0, 0, 0} {
@@ -523,8 +519,9 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
       // mining.set_difficulty
       //
       // just set the default pool diff, than ignore
-      if (poolDefaultDiff_ == 0) {
+      if (poolDefaultDiff_ != difficulty) {
         poolDefaultDiff_ = difficulty;
+        server_->sendMiningDifficulty(this, poolDefaultDiff_);
       }
     }
     else if (smsg.parseAgentGetCapabilities(serverCapabilities)) {
@@ -586,6 +583,10 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
     // do agent.get_capabilities
     string s = Strings::Format("{\"id\":\"" JSONRPC_GET_CAPS_REQ_ID "\",\"method\":\"agent.get_capabilities\",\"params\":[" BTCAGENT_PROTOCOL_CAPABILITIES "]}\n");
     sendData(s);
+
+    // Register existing miners
+    server_->registerWorker(this);
+
     return;
   }
 }
@@ -715,22 +716,22 @@ void StratumSessionBitcoin::handleRequest_Authorize(const string &idStr,
   //  eg. {"params": ["slush.miner1", "password"], "id": 2, "method": "mining.authorize"}
   //
 
-  string workerName, fullWorkerName;
+  string fullWorkerName;
   if (!smsg.parseMiningAuthorize(fullWorkerName)) {
     responseError(idStr, StratumError::INVALID_USERNAME);
     return;
   }
 
-  workerName = getWorkerName(fullWorkerName);  // split by '.'
-  if (workerName.empty())
-    workerName = DEFAULT_WORKER_NAME;
+  workerName_ = getWorkerName(fullWorkerName);  // split by '.'
+  if (workerName_.empty())
+    workerName_ = DEFAULT_WORKER_NAME;
 
   // auth success
   responseTrue(idStr);
   state_ = DOWN_AUTHENTICATED;
 
   // sent sessionId, minerAgent_, workerName to server_
-  server_->registerWorker(this, minerAgent_.c_str(), workerName);
+  server_->registerWorker(this);
 
   // send mining.set_difficulty
   sendMiningDifficulty(upSession_.poolDefaultDiff_);

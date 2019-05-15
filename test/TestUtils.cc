@@ -57,12 +57,25 @@ TEST(Utils, splitNotify) {
 TEST(Utils, Strings_parseConfJson) {
   {
     string agentType, listenIP, listenPort;
+    bool alwaysKeepDownconn = false;
     std::vector<PoolConf> poolConfs;
-    string line = "{\"agent_type\": \"btc\",\"agent_listen_ip\": \"0.0.0.0\",\"agent_listen_port\": 3333,\"pools\": [[\"cn.ss.btc.com\", 1800, \"kevin\"]]}";
-    ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs), true);
-    ASSERT_EQ(agentType, "btc");
+
+    string line = R"EOF({
+      "agent_listen_ip": "127.0.0.1",
+      "agent_listen_port": 1800,
+      "pools": [
+        ["cn.ss.btc.com", 1800, "kevin"]
+      ]
+    })EOF";
+
+    ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs, alwaysKeepDownconn), true);
+
+    ASSERT_EQ(agentType, "");
+    ASSERT_EQ(alwaysKeepDownconn, false);
+
     ASSERT_EQ(listenIP, "0.0.0.0");
     ASSERT_EQ(listenPort, "3333");
+    
     ASSERT_EQ(poolConfs.size(), 1u);
     ASSERT_EQ(poolConfs[0].host_, "cn.ss.btc.com");
     ASSERT_EQ(poolConfs[0].port_, 1800);
@@ -71,13 +84,26 @@ TEST(Utils, Strings_parseConfJson) {
 
   {
     string agentType, listenIP, listenPort;
+    bool alwaysKeepDownconn = false;
+
     std::vector<PoolConf> poolConfs;
-    string line = "{\"agent_type\": \"btc\",\"agent_listen_ip\": \"127.0.0.1\",\"agent_listen_port\": 1800,\"pools\": [[\"cn.ss.btc.com\", 1800, \"kevin\"],[\"us.ss.btc.com\", 3333, \"kevinus\"]]}";
-    ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs), true);
+    string line = R"EOF({
+      "always_keep_downconn": true,
+      "agent_type": "btc",
+      "agent_listen_ip": "127.0.0.1",
+      "agent_listen_port": 1800,
+      "pools": [
+        ["cn.ss.btc.com", 1800, "kevin"],
+        ["us.ss.btc.com", 3333, "kevinus"]
+      ]
+    })EOF";
+    ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs, alwaysKeepDownconn), true);
 
     ASSERT_EQ(agentType, "btc");
+    ASSERT_EQ(alwaysKeepDownconn, true);
     ASSERT_EQ(listenIP, "127.0.0.1");
     ASSERT_EQ(listenPort, "1800");
+
     ASSERT_EQ(poolConfs.size(), 2u);
 
     ASSERT_EQ(poolConfs[0].host_, "cn.ss.btc.com");

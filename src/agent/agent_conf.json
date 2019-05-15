@@ -1,5 +1,6 @@
 {
     "agent_type": "btc",
+    "always_keep_downconn": false,
     "agent_listen_ip": "0.0.0.0",
     "agent_listen_port": 3333,
     "pools": [

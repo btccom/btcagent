@@ -108,10 +108,10 @@ public:
 class PoolConf {
 public:
   string host_;
-  uint16_t port_;
+  uint16_t port_ = 0;
   string upPoolUserName_;
 
-  PoolConf(): port_(0u) {}
+  PoolConf() = default;
 
   PoolConf(const PoolConf &r) {
     host_ = r.host_;
@@ -123,7 +123,8 @@ public:
 string getJsonStr(const char *c,const jsmntok_t *t);
 bool parseConfJson(const string &jsonStr,
                    string &agentType, string &listenIP, string &listenPort,
-                   std::vector<PoolConf> &poolConfs);
+                   std::vector<PoolConf> &poolConfs,
+                   bool &alwaysKeepDownconn);
 
 // slite stratum 'mining.notify'
 const char *splitNotify(const string &line);

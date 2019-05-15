@@ -570,10 +570,8 @@ void StratumServerEth::setNoncePrefix(uint16_t sessionId, uint32_t noncePrefix) 
 }
 
 UpStratumClient *StratumServerEth::createUpClient(int8_t idx,
-                                                  struct event_base *base,
-                                                  const string &userName,
                                                   StratumServer *server) {
-  return new UpStratumClientEth(idx, base, userName, server);
+  return new UpStratumClientEth(idx, server);
 }
 
 StratumSession *StratumServerEth::createDownConnection(UpStratumClient &upSession,
@@ -643,6 +641,10 @@ void UpStratumClientEth::handleStratumMessage(const string &line) {
     state_ = UP_AUTHENTICATED;  // authorize successful
     LOG(INFO) << "auth success, name: \"" << userName_
               << "\", extraNonce1: " << extraNonce1_ << std::endl;
+
+    // Register existing miners
+    server_->registerWorker(this);
+
     return;
   }
 }
@@ -723,7 +725,7 @@ void StratumSessionEth::getNoncePrefix() {
   *(uint16_t *)p = sessionId_;
   p += 2;
 
-  upSession_.sendData(buf);
+  upSession_.sendRequest(buf);
 }
 
 void StratumSessionEth::setNoncePrefix(uint32_t noncePrefix) {
@@ -767,7 +769,7 @@ void StratumSessionEth::submitShare(const ShareEth &share) {
   assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
 
   // send buf
-  upSession_.sendData(buf);
+  upSession_.sendRequest(buf);
 }
 
 void StratumSessionEth::handleStratumMessage(const string &line) {
@@ -826,16 +828,16 @@ void StratumSessionEth::handleRequest_Subscribe(const string &idStr, const Strat
 }
 
 void StratumSessionEth::handleRequest_Authorize(const string &idStr, const string &fullName) {
-  auto workerName = getWorkerName(fullName);
-  if (workerName.empty())
-    workerName = DEFAULT_WORKER_NAME;
+  workerName_ = getWorkerName(fullName);
+  if (workerName_.empty())
+    workerName_ = DEFAULT_WORKER_NAME;
 
   // auth success
   protocol_->responseTrue(idStr);
   state_ = DOWN_AUTHENTICATED;
 
   // sent sessionId, minerAgent_, workerName to server_
-  server_->registerWorker(this, minerAgent_.c_str(), workerName);
+  server_->registerWorker(this);
 
   // send mining.set_difficulty
    sendMiningDifficulty(upSession_.poolDefaultDiff_);

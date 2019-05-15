@@ -107,7 +107,8 @@ int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
 
 bool parseConfJson(const string &jsonStr,
                    string &agentType, string &listenIP, string &listenPort,
-                   std::vector<PoolConf> &poolConfs) {
+                   std::vector<PoolConf> &poolConfs,
+                   bool &alwaysKeepDownconn) {
   jsmn_parser p;
   jsmn_init(&p);
   jsmntok_t t[64]; // we expect no more than 64 tokens
@@ -164,6 +165,12 @@ bool parseConfJson(const string &jsonStr,
         poolConfs.push_back(conf);
       }
       i += poolCount * 4;
+    }
+    else if (jsoneq(c, &t[i], "always_keep_downconn") == 0) {
+      string opt = getJsonStr(c, &t[i+1]);
+      std::transform(opt.begin(), opt.end(), opt.begin(), ::tolower);
+      alwaysKeepDownconn = (opt == "true");
+      i++;
     }
   }
 
