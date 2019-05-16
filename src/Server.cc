@@ -515,14 +515,6 @@ void StratumServer::addUpPool(const std::vector<PoolConf> &poolConfs) {
   }
 }
 
-const vector<PoolConf> & StratumServer::getUpPools() {
-  return upPools_;
-}
-
-struct event_base * StratumServer::getEventBase() {
-  return base_;
-}
-
 UpStratumClient * StratumServer::createUpSession(int8_t idx) {
   UpStratumClient *up = createUpClient(idx, this);
   if (!up->connect()) {
@@ -531,8 +523,9 @@ UpStratumClient * StratumServer::createUpSession(int8_t idx) {
   return up;
 }
 
-bool StratumServer::run(bool alwaysKeepDownconn) {
+bool StratumServer::run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost) {
   alwaysKeepDownconn_ = alwaysKeepDownconn;
+  disconnectWhenLostAsicBoost_ = disconnectWhenLostAsicBoost;
 
   if (running_) {
     return false;

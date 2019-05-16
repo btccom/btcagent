@@ -108,7 +108,7 @@ int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
 bool parseConfJson(const string &jsonStr,
                    string &agentType, string &listenIP, string &listenPort,
                    std::vector<PoolConf> &poolConfs,
-                   bool &alwaysKeepDownconn) {
+                   bool &alwaysKeepDownconn, bool &disconnectWhenLostAsicBoost) {
   jsmn_parser p;
   jsmn_init(&p);
   jsmntok_t t[64]; // we expect no more than 64 tokens
@@ -172,6 +172,12 @@ bool parseConfJson(const string &jsonStr,
       alwaysKeepDownconn = (opt == "true");
       i++;
     }
+	else if (jsoneq(c, &t[i], "disconnect_when_lost_asicboost") == 0) {
+		string opt = getJsonStr(c, &t[i + 1]);
+		std::transform(opt.begin(), opt.end(), opt.begin(), ::tolower);
+		disconnectWhenLostAsicBoost = (opt == "true");
+		i++;
+	}
   }
 
   // check parametes

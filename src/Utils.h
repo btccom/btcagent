@@ -124,7 +124,7 @@ string getJsonStr(const char *c,const jsmntok_t *t);
 bool parseConfJson(const string &jsonStr,
                    string &agentType, string &listenIP, string &listenPort,
                    std::vector<PoolConf> &poolConfs,
-                   bool &alwaysKeepDownconn);
+                   bool &alwaysKeepDownconn, bool &disconnectWhenLostAsicBoost);
 
 // slite stratum 'mining.notify'
 // 14: the end of coinbase1

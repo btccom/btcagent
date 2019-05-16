@@ -183,6 +183,7 @@ protected:
   // down stream connections
   vector<StratumSession *> downSessions_;
   bool alwaysKeepDownconn_ = false;
+  bool disconnectWhenLostAsicBoost_ = false;
 
 public:
   SessionIDManager sessionIDManager_;
@@ -194,8 +195,10 @@ public:
   UpStratumClient *createUpSession(const int8_t idx);
 
   void addUpPool(const std::vector<PoolConf> &poolConfs);
-  const vector<PoolConf> & getUpPools();
-  struct event_base * getEventBase();
+
+  inline const vector<PoolConf>& getUpPools() { return upPools_; }
+  inline struct event_base* getEventBase() { return base_; }
+  inline bool disconnectWhenLostAsicBoost() { return disconnectWhenLostAsicBoost_; }
 
   void addDownConnection   (StratumSession *conn);
   void removeDownConnection(StratumSession *conn);
@@ -229,7 +232,7 @@ public:
   void registerWorker  (StratumSession *downSession);
   void unRegisterWorker(StratumSession *downSession);
 
-  bool run(bool alwaysKeepDownconn);
+  bool run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost);
   void stop();
 };
 

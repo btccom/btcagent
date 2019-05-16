@@ -37,6 +37,7 @@ public:
   uint32_t extraNonce2_ = 0;
   uint32_t nonce_ = 0;
   uint32_t versionMask_ = 0;
+  bool hasVersionMask_ = false;
   bool isFakeJob_ = false;
 
   ShareBitcoin() = default;
@@ -157,6 +158,7 @@ private:
   void responseTrue(const string &idStr);
 
   uint32_t wantedVersionMask_ = 0;
+  size_t versionRollingShareCounter_ = 0; // Used to detect and prevent potential problems with version rolling
 };
 
 #endif // #ifndef SERVER_BITCOIN_H_

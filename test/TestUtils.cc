@@ -58,6 +58,7 @@ TEST(Utils, Strings_parseConfJson) {
   {
     string agentType, listenIP, listenPort;
     bool alwaysKeepDownconn = false;
+	bool disconnectWhenLostAsicBoost = false;
     std::vector<PoolConf> poolConfs;
 
     string line = R"EOF({
@@ -68,10 +69,11 @@ TEST(Utils, Strings_parseConfJson) {
       ]
     })EOF";
 
-    ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs, alwaysKeepDownconn), true);
+    ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs, alwaysKeepDownconn, disconnectWhenLostAsicBoost), true);
 
     ASSERT_EQ(agentType, "");
     ASSERT_EQ(alwaysKeepDownconn, false);
+	ASSERT_EQ(disconnectWhenLostAsicBoost, false);
 
     ASSERT_EQ(listenIP, "0.0.0.0");
     ASSERT_EQ(listenPort, "3333");
@@ -85,10 +87,12 @@ TEST(Utils, Strings_parseConfJson) {
   {
     string agentType, listenIP, listenPort;
     bool alwaysKeepDownconn = false;
+	bool disconnectWhenLostAsicBoost = false;
 
     std::vector<PoolConf> poolConfs;
     string line = R"EOF({
       "always_keep_downconn": true,
+      "disconnect_when_lost_asicboost": true,
       "agent_type": "btc",
       "agent_listen_ip": "127.0.0.1",
       "agent_listen_port": 1800,
@@ -97,10 +101,11 @@ TEST(Utils, Strings_parseConfJson) {
         ["us.ss.btc.com", 3333, "kevinus"]
       ]
     })EOF";
-    ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs, alwaysKeepDownconn), true);
+    ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs, alwaysKeepDownconn, disconnectWhenLostAsicBoost), true);
 
     ASSERT_EQ(agentType, "btc");
     ASSERT_EQ(alwaysKeepDownconn, true);
+	ASSERT_EQ(disconnectWhenLostAsicBoost, true);
     ASSERT_EQ(listenIP, "127.0.0.1");
     ASSERT_EQ(listenPort, "1800");
 

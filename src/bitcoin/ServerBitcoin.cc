@@ -84,7 +84,7 @@ void StratumMessageBitcoin::_parseMiningSubmit() {
     // [Worker Name, Job ID, ExtraNonce2(hex), nTime(hex), nonce(hex)]
     //
     if (jsoneq(&t_[i], "params") == 0 && t_[i+1].type == JSMN_ARRAY && t_[i+1].size >= 5) {
-      bool hasVersionMask = t_[i+1].size >= 6;
+	  share_.hasVersionMask_ = t_[i+1].size >= 6;
 
       i++;  // ptr move to params
       i++;  // ptr move to params[0]
@@ -105,7 +105,7 @@ void StratumMessageBitcoin::_parseMiningSubmit() {
       // nonce(hex)
       share_.nonce_       = (uint32_t)strtoul(getJsonStr(&t_[i+4]).c_str(), NULL, 16);
 
-      if (hasVersionMask) {
+      if (share_.hasVersionMask_) {
         // versionMask(hex)
         share_.versionMask_ = (uint32_t)strtoul(getJsonStr(&t_[i+5]).c_str(), NULL, 16);
       }
@@ -860,6 +860,26 @@ void StratumSessionBitcoin::handleRequest_Submit(const string &idStr,
   if (!smsg.parseMiningSubmit(share)) {
     responseError(idStr, StratumError::ILLEGAL_PARARMS);
     return;
+  }
+
+  if (share.hasVersionMask_) {
+    versionRollingShareCounter_++;
+  }
+  else if (versionRollingShareCounter_ > 100 && server_->disconnectWhenLostAsicBoost()) {
+    // Version rolling disabled mid-way, it may be a firmware issue.
+    // Reconnect to avoid loss of hashrate.
+    const string s =
+        "{\"id\":null,\"method\":\"client.reconnect\",\"params\":[]}\n";
+    sendData(s);
+
+    // get source IP address
+    char saddrBuffer[INET_ADDRSTRLEN];
+    evutil_inet_ntop(AF_INET, &saddr_, saddrBuffer, INET_ADDRSTRLEN);
+
+    LOG(INFO) << "AsicBoost disabled mid-way, send client.reconnect. "
+              << "worker: " << workerName_ << ", ip: " << saddrBuffer
+              << ", version rolling shares: " << versionRollingShareCounter_
+              << std::endl;
   }
 
   // submit share
