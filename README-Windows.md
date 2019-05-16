@@ -5,7 +5,7 @@
 
 Please run all commands below in `x64 Native Tools Command Prompt for VS 20xx` (for 64bit building) or `x86 Native Tools Command Prompt for VS 20xx` (for 32bit building).
 
-Use `-A x86` instead of `-A x64` if you want a 32bit building.
+Use `-A win32` instead of `-A x64` if you want a 32bit building.
 
 ### Cmake
 
@@ -140,7 +140,7 @@ start PoolAgent.sln
 Simply add an arg ```-T v140_xp``` to Cmake if build with Visual Studio.
 
 ```cmd
-cmake -A x86 -T v141_xp ..
+cmake -A win32 -T v141_xp ..
 ```
 
 Libevent and GLog need the arg too.
@@ -162,7 +162,7 @@ And rebuild with clear build dir.
 
 ```cmd
 # 32bit
-cmake -A x86 ..
+cmake -A win32 ..
 
 # 64bit
 cmake -A x64 ..

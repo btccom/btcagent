@@ -120,9 +120,15 @@ int main(int argc, char **argv) {
       return 1;
     }
 
+    LOG(INFO) << "[OPTION] Always keep down connections even if pool disconnected: "
+              << (alwaysKeepDownconn ? "Enabled" : "Disabled");
+
     if (agentType == "eth") {
       gStratumServer = new StratumServerEth(listenIP, atoi(listenPort.c_str()));
     } else {
+      LOG(INFO) << "[OPTION] Disconnect if a miner lost its AsicBoost mid-way: "
+                << (disconnectWhenLostAsicBoost ? "Enabled" : "Disabled");
+
       gStratumServer = new StratumServerBitcoin(listenIP, atoi(listenPort.c_str()));
     }
 
