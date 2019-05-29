@@ -1,6 +1,7 @@
 {
     "agent_type": "btc",
     "always_keep_downconn": false,
+    "disconnect_when_lost_asicboost": true,
     "agent_listen_ip": "0.0.0.0",
     "agent_listen_port": 3333,
     "pools": [
