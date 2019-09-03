@@ -108,7 +108,8 @@ int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
 bool parseConfJson(const string &jsonStr,
                    string &agentType, string &listenIP, string &listenPort,
                    std::vector<PoolConf> &poolConfs,
-                   bool &alwaysKeepDownconn, bool &disconnectWhenLostAsicBoost) {
+                   bool &alwaysKeepDownconn, bool &disconnectWhenLostAsicBoost,
+                   bool &useIpAsWorkerName) {
   jsmn_parser p;
   jsmn_init(&p);
   jsmntok_t t[64]; // we expect no more than 64 tokens
@@ -172,12 +173,18 @@ bool parseConfJson(const string &jsonStr,
       alwaysKeepDownconn = (opt == "true");
       i++;
     }
-	else if (jsoneq(c, &t[i], "disconnect_when_lost_asicboost") == 0) {
-		string opt = getJsonStr(c, &t[i + 1]);
-		std::transform(opt.begin(), opt.end(), opt.begin(), ::tolower);
-		disconnectWhenLostAsicBoost = (opt == "true");
-		i++;
-	}
+    else if (jsoneq(c, &t[i], "disconnect_when_lost_asicboost") == 0) {
+      string opt = getJsonStr(c, &t[i + 1]);
+      std::transform(opt.begin(), opt.end(), opt.begin(), ::tolower);
+      disconnectWhenLostAsicBoost = (opt == "true");
+      i++;
+    }
+    else if (jsoneq(c, &t[i], "use_ip_as_worker_name") == 0) {
+      string opt = getJsonStr(c, &t[i + 1]);
+      std::transform(opt.begin(), opt.end(), opt.begin(), ::tolower);
+      useIpAsWorkerName = (opt == "true");
+      i++;
+    }
   }
 
   // check parametes
@@ -209,12 +216,4 @@ string str2lower(const string &str) {
   string data = str;
   std::transform(data.begin(), data.end(), data.begin(), ::tolower);
   return data;
-}
-
-string getWorkerName(const string &fullName) {
-  size_t pos = fullName.find(".");
-  if (pos == fullName.npos) {
-    return "";
-  }
-  return fullName.substr(pos + 1);  // not include '.'
 }

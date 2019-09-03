@@ -124,13 +124,13 @@ string getJsonStr(const char *c,const jsmntok_t *t);
 bool parseConfJson(const string &jsonStr,
                    string &agentType, string &listenIP, string &listenPort,
                    std::vector<PoolConf> &poolConfs,
-                   bool &alwaysKeepDownconn, bool &disconnectWhenLostAsicBoost);
+                   bool &alwaysKeepDownconn, bool &disconnectWhenLostAsicBoost,
+                   bool &useIpAsWorkerName);
 
 // slite stratum 'mining.notify'
 // 14: the end of coinbase1
 const char *splitNotify(const string &line, int number = 14);
 
 string str2lower(const string &str);
-string getWorkerName(const string &fullName);
 
 #endif

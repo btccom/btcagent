@@ -839,9 +839,7 @@ void StratumSessionEth::handleRequest_Subscribe(const string &idStr, const Strat
 }
 
 void StratumSessionEth::handleRequest_Authorize(const string &idStr, const string &fullName) {
-  workerName_ = getWorkerName(fullName);
-  if (workerName_.empty())
-    workerName_ = DEFAULT_WORKER_NAME;
+  setWorkerName(fullName);
 
   // auth success
   protocol_->responseTrue(idStr);

@@ -436,6 +436,27 @@ StratumSession::~StratumSession() {
   bufferevent_free(bev_);
 }
 
+void StratumSession::setWorkerName(const string &fullName) {
+  if (server_->useIpAsWorkerName()) {
+    // get source IP address
+    char saddrBuffer[INET_ADDRSTRLEN];
+    evutil_inet_ntop(AF_INET, &saddr_, saddrBuffer, INET_ADDRSTRLEN);
+
+    workerName_ = saddrBuffer;
+    return;
+  }
+
+  size_t pos = fullName.find("."); // split by '.'
+  if (pos == fullName.npos) {
+    workerName_ = "";
+  } else {
+    workerName_ = fullName.substr(pos + 1);  // not include '.'
+  }
+  if (workerName_.empty()) {
+    workerName_ = DEFAULT_WORKER_NAME;
+  }
+}
+
 void StratumSession::setReadTimeout(const int32_t timeout) {
   // clear it
   bufferevent_set_timeouts(bev_, NULL, NULL);
@@ -523,9 +544,10 @@ UpStratumClient * StratumServer::createUpSession(int8_t idx) {
   return up;
 }
 
-bool StratumServer::run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost) {
+bool StratumServer::run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost, bool useIpAsWorkerName) {
   alwaysKeepDownconn_ = alwaysKeepDownconn;
   disconnectWhenLostAsicBoost_ = disconnectWhenLostAsicBoost;
+  useIpAsWorkerName_ = useIpAsWorkerName;
 
   if (running_) {
     return false;

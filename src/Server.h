@@ -184,6 +184,7 @@ protected:
   vector<StratumSession *> downSessions_;
   bool alwaysKeepDownconn_ = false;
   bool disconnectWhenLostAsicBoost_ = false;
+  bool useIpAsWorkerName_ = false;
 
 public:
   SessionIDManager sessionIDManager_;
@@ -199,6 +200,7 @@ public:
   inline const vector<PoolConf>& getUpPools() { return upPools_; }
   inline struct event_base* getEventBase() { return base_; }
   inline bool disconnectWhenLostAsicBoost() { return disconnectWhenLostAsicBoost_; }
+  inline bool useIpAsWorkerName() { return useIpAsWorkerName_; }
 
   void addDownConnection   (StratumSession *conn);
   void removeDownConnection(StratumSession *conn);
@@ -232,7 +234,7 @@ public:
   void registerWorker  (StratumSession *downSession);
   void unRegisterWorker(StratumSession *downSession);
 
-  bool run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost);
+  bool run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost, bool useIpAsWorkerName);
   void stop();
 };
 
@@ -319,6 +321,8 @@ protected:
   void setReadTimeout(const int32_t timeout);
 
   virtual void handleStratumMessage(const string &line) = 0;
+
+  void setWorkerName(const string &fullName);
 
 public:
   UpStratumClient &upSession_;

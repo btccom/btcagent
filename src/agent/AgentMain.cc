@@ -109,13 +109,14 @@ int main(int argc, char **argv) {
   std::vector<PoolConf> poolConfs;
   bool alwaysKeepDownconn = false;
 	bool disconnectWhenLostAsicBoost = true;
+  bool useIpAsWorkerName = false;
 
     // get conf json string
     std::ifstream agentConf(optConf);
     string agentJsonStr((std::istreambuf_iterator<char>(agentConf)),
                         std::istreambuf_iterator<char>());
     if (!parseConfJson(agentJsonStr, agentType, listenIP, listenPort, poolConfs,
-                       alwaysKeepDownconn, disconnectWhenLostAsicBoost)) {
+                       alwaysKeepDownconn, disconnectWhenLostAsicBoost, useIpAsWorkerName)) {
       LOG(ERROR) << "parse json config file failure" << std::endl;
       return 1;
     }
@@ -135,7 +136,7 @@ int main(int argc, char **argv) {
     // add pools
     gStratumServer->addUpPool(poolConfs);
 
-    if (!gStratumServer->run(alwaysKeepDownconn, disconnectWhenLostAsicBoost)) {
+    if (!gStratumServer->run(alwaysKeepDownconn, disconnectWhenLostAsicBoost, useIpAsWorkerName)) {
       LOG(ERROR) << "setup failure" << std::endl;
     }
     delete gStratumServer;

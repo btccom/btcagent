@@ -793,9 +793,7 @@ void StratumSessionBitcoin::handleRequest_Authorize(const string &idStr,
     return;
   }
 
-  workerName_ = getWorkerName(fullWorkerName);  // split by '.'
-  if (workerName_.empty())
-    workerName_ = DEFAULT_WORKER_NAME;
+  setWorkerName(fullWorkerName);
 
   // auth success
   responseTrue(idStr);
