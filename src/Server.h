@@ -244,6 +244,7 @@ protected:
   bool disconnectWhenLostAsicBoost_ = false;
   bool useIpAsWorkerName_ = false;
   bool submitResponseFromServer_ = false;
+  string fixedWorkerName_;
 
 public:
   SessionIDManager sessionIDManager_;
@@ -261,6 +262,7 @@ public:
   inline bool disconnectWhenLostAsicBoost() { return disconnectWhenLostAsicBoost_; }
   inline bool useIpAsWorkerName() { return useIpAsWorkerName_; }
   inline bool submitResponseFromServer() { return submitResponseFromServer_; }
+  inline const string &fixedWorkerName() { return fixedWorkerName_; }
 
   void addDownConnection   (StratumSession *conn);
   void removeDownConnection(StratumSession *conn);
@@ -295,7 +297,9 @@ public:
   void registerWorker  (StratumSession *downSession);
   void unRegisterWorker(StratumSession *downSession);
 
-  bool run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost, bool useIpAsWorkerName, bool submitResponseFromServer);
+  bool run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost,
+    bool useIpAsWorkerName, bool submitResponseFromServer,
+    const string &fixedWorkerName);
   void stop();
 };
 

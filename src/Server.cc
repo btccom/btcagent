@@ -599,11 +599,18 @@ UpStratumClient * StratumServer::createUpSession(int8_t idx) {
   return up;
 }
 
-bool StratumServer::run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost, bool useIpAsWorkerName, bool submitResponseFromServer) {
+bool StratumServer::run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost,
+  bool useIpAsWorkerName, bool submitResponseFromServer,
+  const string &fixedWorkerName) {
   alwaysKeepDownconn_ = alwaysKeepDownconn;
   disconnectWhenLostAsicBoost_ = disconnectWhenLostAsicBoost;
   useIpAsWorkerName_ = useIpAsWorkerName;
   submitResponseFromServer_ = submitResponseFromServer;
+  fixedWorkerName_ = fixedWorkerName;
+
+  if (!fixedWorkerName_.empty()) {
+    LOG(INFO) << "[OPTION] Fixed worker name enabled, all worker name will be replaced to " << fixedWorkerName_ << " on the server.";
+  }
 
   if (running_) {
     return false;
@@ -1091,11 +1098,13 @@ void StratumServer::registerWorker(StratumSession *downSession) {
   //
   // | magic_number(1) | cmd(1) | len (2) | session_id(2) | clientAgent | worker_name |
   //
+  string workerName = fixedWorkerName_.empty() ? downSession->workerName() : fixedWorkerName_;
+
   uint16_t len = 0;
   len += (1+1+2+2); // magic_num, cmd, len, session_id
   // client agent
   len += downSession->minerAgent().size() + 1; // miner agent and '\0'
-  len += downSession->workerName().size() + 1;  // worker name and '\0'
+  len += workerName.size() + 1;  // worker name and '\0'
 
   string buf;
   buf.resize(len, 0);
@@ -1118,8 +1127,8 @@ void StratumServer::registerWorker(StratumSession *downSession) {
   p += downSession->minerAgent().size() + 1;
 
   // worker name
-  strcpy((char *)p, downSession->workerName().c_str());
-  p += downSession->workerName().size() + 1;
+  strcpy((char *)p, workerName.c_str());
+  p += workerName.size() + 1;
   assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
 
   downSession->upSession_.sendRequest(buf);

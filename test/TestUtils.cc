@@ -61,6 +61,7 @@ TEST(Utils, Strings_parseConfJson) {
     bool disconnectWhenLostAsicBoost = false;
     bool useIpAsWorkerName = false;
     bool submitResponseFromServer = false;
+    string fixedWorkerName;
     std::vector<PoolConf> poolConfs;
 
     string line = R"EOF({
@@ -73,7 +74,7 @@ TEST(Utils, Strings_parseConfJson) {
 
     ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs,
       alwaysKeepDownconn, disconnectWhenLostAsicBoost,
-      useIpAsWorkerName, submitResponseFromServer), true);
+      useIpAsWorkerName, submitResponseFromServer, fixedWorkerName), true);
 
     ASSERT_EQ(agentType, "");
     ASSERT_EQ(alwaysKeepDownconn, false);
@@ -83,6 +84,7 @@ TEST(Utils, Strings_parseConfJson) {
 
     ASSERT_EQ(listenIP, "0.0.0.0");
     ASSERT_EQ(listenPort, "3333");
+    ASSERT_EQ(fixedWorkerName, "");
     
     ASSERT_EQ(poolConfs.size(), 1u);
     ASSERT_EQ(poolConfs[0].host_, "cn.ss.btc.com");
@@ -96,6 +98,7 @@ TEST(Utils, Strings_parseConfJson) {
     bool disconnectWhenLostAsicBoost = false;
     bool useIpAsWorkerName = false;
     bool submitResponseFromServer = false;
+    string fixedWorkerName;
 
     std::vector<PoolConf> poolConfs;
     string line = R"EOF({
@@ -106,6 +109,7 @@ TEST(Utils, Strings_parseConfJson) {
       "agent_type": "btc",
       "agent_listen_ip": "127.0.0.1",
       "agent_listen_port": 1800,
+      "fixed_worker_name": "myworker",
       "pools": [
         ["cn.ss.btc.com", 1800, "kevin"],
         ["us.ss.btc.com", 3333, "kevinus"]
@@ -113,7 +117,7 @@ TEST(Utils, Strings_parseConfJson) {
     })EOF";
     ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs,
       alwaysKeepDownconn, disconnectWhenLostAsicBoost,
-      useIpAsWorkerName, submitResponseFromServer), true);
+      useIpAsWorkerName, submitResponseFromServer, fixedWorkerName), true);
 
     ASSERT_EQ(agentType, "btc");
     ASSERT_EQ(alwaysKeepDownconn, true);
@@ -122,6 +126,7 @@ TEST(Utils, Strings_parseConfJson) {
     ASSERT_EQ(submitResponseFromServer, true);
     ASSERT_EQ(listenIP, "127.0.0.1");
     ASSERT_EQ(listenPort, "1800");
+    ASSERT_EQ(fixedWorkerName, "myworker");
 
     ASSERT_EQ(poolConfs.size(), 2u);
 
