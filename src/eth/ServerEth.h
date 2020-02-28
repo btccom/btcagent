@@ -187,6 +187,7 @@ public:
   void sendMiningNotify() override;
   void sendFakeMiningNotify() override;
   void sendMiningDifficulty(uint64_t diff) override;
+  void sendSubmitResponse(const string &idStr, int status) override;
   void getNoncePrefix();
   void setNoncePrefix(uint32_t noncePrefix);
   void submitShare(const ShareEth &share);

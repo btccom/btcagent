@@ -391,7 +391,8 @@ bool StratumMessageBitcoin::getExtraNonce1AndExtraNonce2Size(uint32_t *nonce1,
 }
 
 void StratumServerBitcoin::submitShare(const ShareBitcoin &share,
-                                       StratumSessionBitcoin *downSession) {
+                                       StratumSessionBitcoin *downSession,
+                                       const string &idStr) {
   auto &up = static_cast<UpStratumClientBitcoin &>(downSession->upSession_);
 
   // ignore fake job shares
@@ -463,7 +464,7 @@ void StratumServerBitcoin::submitShare(const ShareBitcoin &share,
   assert(p - (uint8_t *)buf.data() == (int64_t)buf.size());
 
   // send buf
-  up.sendRequest(buf);
+  up.submitShare(buf, downSession->sessionId_, idStr);
 }
 
 UpStratumClient *StratumServerBitcoin::createUpClient(int8_t idx,
@@ -558,6 +559,16 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
                                    "]}\n");
         sendData(s);
       }
+
+      if (submitResponseFromServer_) {
+        // Check if the server can response of the submit
+        if (serverCapabilities.count(BTCAGENT_PROTOCOL_CAP_SUBRES) == 0) {
+          submitResponseFromServer_ = false;
+          LOG(WARNING) << "Pool server [" << (int32_t)idx_ << "] cannot send response of the submit!";
+        } else {
+          LOG(INFO) << "Pool server [" << (int32_t)idx_ << "] will send response of the submit.";
+        }
+      }
     }
     else if (smsg.parseMiningSetVersionMask(&versionMask)) {
       //
@@ -612,7 +623,11 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
               << "\", extraNonce1: " << extraNonce1_ << std::endl;
     
     // do agent.get_capabilities
-    string s = Strings::Format("{\"id\":\"" JSONRPC_GET_CAPS_REQ_ID "\",\"method\":\"agent.get_capabilities\",\"params\":[" BTCAGENT_PROTOCOL_CAPABILITIES "]}\n");
+    string caps = "\"" BTCAGENT_PROTOCOL_CAP_VERROL "\"";
+    if (submitResponseFromServer_) {
+      caps += ",\"" BTCAGENT_PROTOCOL_CAP_SUBRES "\"";
+    }
+    string s = "{\"id\":\"" JSONRPC_GET_CAPS_REQ_ID "\",\"method\":\"agent.get_capabilities\",\"params\":[[" + caps + "]]}\n";
     sendData(s);
 
     // Register existing miners
@@ -664,6 +679,14 @@ void StratumSessionBitcoin::sendFakeMiningNotify() {
 
 void StratumSessionBitcoin::sendMiningDifficulty(uint64_t diff) {
   sendData(Strings::Format("{\"id\":null,\"method\":\"mining.set_difficulty\",\"params\":[%" PRIu64"]}\n", diff));
+}
+
+void StratumSessionBitcoin::sendSubmitResponse(const string &idStr, int status) {
+  if (status == StratumError::NO_ERROR) {
+    responseTrue(idStr);
+  } else {
+    responseError(idStr, status);
+  }
 }
 
 void StratumSessionBitcoin::sendVersionMask() {
@@ -881,9 +904,11 @@ void StratumSessionBitcoin::handleRequest_Submit(const string &idStr,
   }
 
   // submit share
-  static_cast<StratumServerBitcoin *>(server_)->submitShare(share, this);
+  static_cast<StratumServerBitcoin *>(server_)->submitShare(share, this, idStr);
 
-  responseTrue(idStr);  // we assume shares are valid
+  if (!upSession_.submitResponseFromServer_ || share.isFakeJob_) {
+    responseTrue(idStr);  // we assume shares are valid
+  }
 }
 
 void StratumSessionBitcoin::responseError(const string &idStr, int errCode) {

@@ -712,6 +712,10 @@ void StratumSessionEth::sendMiningDifficulty(uint64_t diff) {
   protocol_->setDifficulty(diff);
 }
 
+void StratumSessionEth::sendSubmitResponse(const string &idStr, int status) {
+  // TODO: implement it
+}
+
 void StratumSessionEth::getNoncePrefix() {
   //
   // | magic_number(1) | cmd(1) | len (2) | session_id (uint16_t) |

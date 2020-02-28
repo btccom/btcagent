@@ -61,7 +61,7 @@ const char * StratumError::toString(int err) {
     case NO_ERROR:
       return "no error";
 
-    case JOB_NOT_FOUND:
+    case JOB_NOT_FOUND_OR_STALE:
       return "Job not found (=stale)";
     case DUPLICATE_SHARE:
       return "Duplicate share";
@@ -86,6 +86,18 @@ const char * StratumError::toString(int err) {
       return "Time too old";
     case TIME_TOO_NEW:
       return "Time too new";
+    case ILLEGAL_VERMASK:
+      return "Invalid version mask";
+
+    case INVALID_SOLUTION:
+      return "Invalid Solution";
+    case WRONG_NONCE_PREFIX:
+      return "Wrong Nonce Prefix";
+
+    case JOB_NOT_FOUND:
+      return "Job not found";
+    case STALE_SHARE:
+      return "Stale share";
 
     case UNKNOWN: default:
       return "Unknown";
@@ -228,7 +240,11 @@ bool StratumMessage::isValid() const {
 UpStratumClient::UpStratumClient(const int8_t idx,
                                  StratumServer *server)
 : idx_(idx), server_(server)
+, submitResponseFromServer_(server->submitResponseFromServer())
 {
+  if (submitResponseFromServer_) {
+    submitIds_.resize(65536); // submitIndex_ is uint16_t (0-65535).
+  }
   initConnection();
   DLOG(INFO) << "idx_: " << (int32_t)idx_ << std::endl;
 }
@@ -344,6 +360,10 @@ bool UpStratumClient::handleMessage() {
         handleExMessage_MiningSetDiff(&exMessage);
         break;
 
+      case CMD_SUBMIT_RESPONSE:
+        handleExMessage_SubmitResponse(&exMessage);
+        break;
+
       default:
         handleExMessage(&exMessage);
         break;
@@ -387,6 +407,19 @@ void UpStratumClient::handleExMessage_MiningSetDiff(const string *exMessage) {
             << diff << ", sessions count: " << count << std::endl;
 }
 
+void UpStratumClient::handleExMessage_SubmitResponse(const string *exMessage) {
+  //
+  // CMD_SUBMIT_RESPONSE
+  // | magic_number(1) | cmd(1) | len(2) | index(2) | status(4) |
+  //
+  const uint8_t *p = (uint8_t *)exMessage->data();
+  const uint16_t index = *(uint16_t *)(p + 4);
+  const int32_t status = *(int32_t *)(p + 6);
+  const auto &id = submitIds_[index];
+
+  server_->sendSubmitResponse(id, status);
+}
+
 void UpStratumClient::sendData(const char *data, size_t len) {
   if (state_ == UP_INIT) {
     DLOG(INFO) << "UpStratumClient unavailable, skip(" << len << ")" << std::endl;
@@ -405,6 +438,16 @@ bool UpStratumClient::sendRequest(const string &str) {
  } 
  sendData(str);
  return true;
+}
+
+bool UpStratumClient::submitShare(const string &json, uint16_t sessionId, const string &idStr) {
+  if (sendRequest(json)) {
+    if (submitResponseFromServer_) {
+      submitIds_[submitIndex_++] = {sessionId, idStr};
+    }
+    return true;
+  }
+  return false;
 }
 
 bool UpStratumClient::isAvailable() {
@@ -544,10 +587,11 @@ UpStratumClient * StratumServer::createUpSession(int8_t idx) {
   return up;
 }
 
-bool StratumServer::run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost, bool useIpAsWorkerName) {
+bool StratumServer::run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost, bool useIpAsWorkerName, bool submitResponseFromServer) {
   alwaysKeepDownconn_ = alwaysKeepDownconn;
   disconnectWhenLostAsicBoost_ = disconnectWhenLostAsicBoost;
   useIpAsWorkerName_ = useIpAsWorkerName;
+  submitResponseFromServer_ = submitResponseFromServer;
 
   if (running_) {
     return false;
@@ -983,6 +1027,14 @@ void StratumServer::sendMiningDifficulty(uint16_t sessionId, uint64_t diff) {
     return;
 
   downSession->sendMiningDifficulty(diff);
+}
+
+void StratumServer::sendSubmitResponse(const SubmitId &id, int status) {
+  StratumSession *downSession = downSessions_[id.sessionId_];
+  if (downSession == NULL)
+    return;
+
+  downSession->sendSubmitResponse(id.idStr_, status);
 }
 
 UpStratumClient *StratumServer::findUpSession() {

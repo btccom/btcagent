@@ -48,10 +48,11 @@
 #define CMD_SUBMIT_SHARE_WITH_TIME        0x03u    // Agent -> Pool,  mining.submit(..., nTime)
 #define CMD_UNREGISTER_WORKER             0x04u    // Agent -> Pool
 #define CMD_MINING_SET_DIFF               0x05u    // Pool  -> Agent, mining.set_difficulty(diff)
+#define CMD_SUBMIT_RESPONSE               0x10u    // Pool  -> Agent, response of the submit (optional)
 #define CMD_SUBMIT_SHARE_WITH_VER         0x12u    // Agent -> Pool,  mining.submit(..., nVersionMask)
 #define CMD_SUBMIT_SHARE_WITH_TIME_VER    0x13u    // Agent -> Pool,  mining.submit(..., nTime, nVersionMask)
 #define CMD_GET_NONCE_PREFIX              0x21u    // Agent -> Pool,  ask the pool to allocate nonce prefix
-#define CMD_SET_NONCE_PREFIX              0x22u    // Pool -> Agent,  pool nonce prefix allocation result
+#define CMD_SET_NONCE_PREFIX              0x22u    // Pool  -> Agent, pool nonce prefix allocation result
 
 // agent, DO NOT CHANGE
 #define AGENT_MAX_SESSION_ID   0xFFFEu  // 0xFFFEu = 65534
@@ -77,7 +78,7 @@ public:
     NO_ERROR        = 0,
 
     UNKNOWN         = 20,
-    JOB_NOT_FOUND   = 21,
+    JOB_NOT_FOUND_OR_STALE = 21,
     DUPLICATE_SHARE = 22,
     LOW_DIFFICULTY  = 23,
     UNAUTHORIZED    = 24,
@@ -89,9 +90,23 @@ public:
     INVALID_USERNAME = 29,
     INTERNAL_ERROR   = 30,
     TIME_TOO_OLD     = 31,
-    TIME_TOO_NEW     = 32
+    TIME_TOO_NEW     = 32,
+    ILLEGAL_VERMASK = 33,
+
+    INVALID_SOLUTION = 34,
+    WRONG_NONCE_PREFIX = 35,
+
+    JOB_NOT_FOUND = 36,
+    STALE_SHARE = 37,
   };
   static const char * toString(int err);
+};
+
+
+//////////////////////////////// SubmitId //////////////////////////////
+struct SubmitId {
+  uint16_t sessionId_;
+  string idStr_;
 };
 
 
@@ -185,6 +200,7 @@ protected:
   bool alwaysKeepDownconn_ = false;
   bool disconnectWhenLostAsicBoost_ = false;
   bool useIpAsWorkerName_ = false;
+  bool submitResponseFromServer_ = false;
 
 public:
   SessionIDManager sessionIDManager_;
@@ -201,6 +217,7 @@ public:
   inline struct event_base* getEventBase() { return base_; }
   inline bool disconnectWhenLostAsicBoost() { return disconnectWhenLostAsicBoost_; }
   inline bool useIpAsWorkerName() { return useIpAsWorkerName_; }
+  inline bool submitResponseFromServer() { return submitResponseFromServer_; }
 
   void addDownConnection   (StratumSession *conn);
   void removeDownConnection(StratumSession *conn);
@@ -227,6 +244,7 @@ public:
   void sendFakeMiningNotifyToAll(const UpStratumClient *conn);
   void sendMiningDifficulty(UpStratumClient *upSession, uint64_t diff);
   void sendMiningDifficulty(uint16_t sessionId, uint64_t diff);
+  void sendSubmitResponse(const SubmitId &id, int status);
 
   UpStratumClient *findUpSession();
 
@@ -234,7 +252,7 @@ public:
   void registerWorker  (StratumSession *downSession);
   void unRegisterWorker(StratumSession *downSession);
 
-  bool run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost, bool useIpAsWorkerName);
+  bool run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost, bool useIpAsWorkerName, bool submitResponseFromServer);
   void stop();
 };
 
@@ -256,6 +274,7 @@ class UpStratumClient {
   virtual void handleStratumMessage(const string &line) = 0;
   virtual void handleExMessage(const string *exMessage);
   void handleExMessage_MiningSetDiff(const string *exMessage);
+  void handleExMessage_SubmitResponse(const string *exMessage);
 
   void initConnection();
   void disconnect();
@@ -264,6 +283,10 @@ public:
   UpStratumClientState state_ = UP_INIT;
   int8_t idx_ = 0;
   StratumServer *server_ = nullptr;
+
+  bool submitResponseFromServer_ = false;
+  uint16_t submitIndex_ = 0;
+  vector<SubmitId> submitIds_;
 
   bool poolDiffNeedUpdate_ = true;
   uint64_t poolDefaultDiff_ = 0;
@@ -294,6 +317,7 @@ public:
   
   // return false before authorized
   bool sendRequest(const string &str);
+  bool submitShare(const string &json, uint16_t sessionId, const string &idStr);
 
   // means auth success and got at least stratum job
   bool isAvailable();
@@ -339,6 +363,7 @@ public:
   virtual void sendMiningNotify() = 0;
   virtual void sendFakeMiningNotify() = 0;
   virtual void sendMiningDifficulty(uint64_t diff) = 0;
+  virtual void sendSubmitResponse(const string &idStr, int status) = 0;
 
   void recvData(struct evbuffer *buf);
   void sendData(const char *data, size_t len);

@@ -26,8 +26,9 @@
 // Sent within the request / response of agent.get_capabilities for protocol negotiation.
 // Known capabilities:
 //     verrol: version rolling (shares with a version mask can be submitted through a BTCAgent session).
-#define BTCAGENT_PROTOCOL_CAPABILITIES "[\"verrol\"]"
+//     subres: submit response (the server will send a response to the submission).
 #define BTCAGENT_PROTOCOL_CAP_VERROL "verrol"
+#define BTCAGENT_PROTOCOL_CAP_SUBRES "subres"
 #define JSONRPC_GET_CAPS_REQ_ID "agent.caps"
 
 class ShareBitcoin {
@@ -102,7 +103,7 @@ class StratumSessionBitcoin;
 class StratumServerBitcoin : public StratumServer {
 public:
   using StratumServer::StratumServer;
-  void submitShare(const ShareBitcoin &share, StratumSessionBitcoin *downSession);
+  void submitShare(const ShareBitcoin &share, StratumSessionBitcoin *downSession, const string &idStr);
   void sendVersionMaskToAll(const UpStratumClient *conn);
 
 private:
@@ -143,6 +144,7 @@ public:
   void sendMiningNotify() override;
   void sendFakeMiningNotify() override;
   void sendMiningDifficulty(uint64_t diff) override;
+  void sendSubmitResponse(const string &idStr, int status) override;
   void sendVersionMask();
 
 private:

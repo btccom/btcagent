@@ -3,6 +3,7 @@
     "always_keep_downconn": false,
     "disconnect_when_lost_asicboost": true,
     "use_ip_as_worker_name": false,
+    "submit_response_from_server": false,
     "agent_listen_ip": "0.0.0.0",
     "agent_listen_port": 3333,
     "pools": [
