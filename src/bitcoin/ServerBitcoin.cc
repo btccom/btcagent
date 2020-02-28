@@ -682,7 +682,7 @@ void StratumSessionBitcoin::sendMiningDifficulty(uint64_t diff) {
 }
 
 void StratumSessionBitcoin::sendSubmitResponse(const string &idStr, int status) {
-  if (status == StratumError::NO_ERROR) {
+  if (StratumStatus::isAccepted(status)) {
     responseTrue(idStr);
   } else {
     responseError(idStr, status);
@@ -733,7 +733,7 @@ void StratumSessionBitcoin::handleStratumMessage(const string &line) {
   }
 
   // invalid params
-  responseError(idStr, StratumError::ILLEGAL_PARARMS);
+  responseError(idStr, StratumStatus::ILLEGAL_PARARMS);
 }
 
 void StratumSessionBitcoin::handleRequest(const string &idStr,
@@ -759,7 +759,7 @@ void StratumSessionBitcoin::handleRequest(const string &idStr,
 void StratumSessionBitcoin::handleRequest_Subscribe(const string &idStr,
                                                     const StratumMessageBitcoin &smsg) {
   if (state_ != DOWN_CONNECTED) {
-    responseError(idStr, StratumError::UNKNOWN);
+    responseError(idStr, StratumStatus::UNKNOWN);
     return;
   }
   state_ = DOWN_SUBSCRIBED;
@@ -800,7 +800,7 @@ void StratumSessionBitcoin::handleRequest_Subscribe(const string &idStr,
 void StratumSessionBitcoin::handleRequest_Authorize(const string &idStr,
                                                     const StratumMessageBitcoin &smsg) {
   if (state_ != DOWN_SUBSCRIBED) {
-    responseError(idStr, StratumError::NOT_SUBSCRIBED);
+    responseError(idStr, StratumStatus::NOT_SUBSCRIBED);
     return;
   }
 
@@ -812,7 +812,7 @@ void StratumSessionBitcoin::handleRequest_Authorize(const string &idStr,
 
   string fullWorkerName;
   if (!smsg.parseMiningAuthorize(fullWorkerName)) {
-    responseError(idStr, StratumError::INVALID_USERNAME);
+    responseError(idStr, StratumStatus::INVALID_USERNAME);
     return;
   }
 
@@ -837,12 +837,12 @@ void StratumSessionBitcoin::handleRequest_MiningConfigure(const string &idStr,
   // mining.configure can be called before mining.authorize and
   // is usually called before it.
   /*if (state_ != DOWN_AUTHENTICATED) {
-    responseError(idStr, StratumError::UNAUTHORIZED);	    responseError(idStr, StratumError::UNAUTHORIZED);
+    responseError(idStr, StratumStatus::UNAUTHORIZED);	    responseError(idStr, StratumStatus::UNAUTHORIZED);
     return;	    return;
   }	  }*/
 
   if (!smsg.parseMiningConfigure(&wantedVersionMask_ )) {
-    responseError(idStr, StratumError::ILLEGAL_PARARMS);
+    responseError(idStr, StratumStatus::ILLEGAL_PARARMS);
     return;
   }
 
@@ -865,7 +865,7 @@ void StratumSessionBitcoin::handleRequest_MiningConfigure(const string &idStr,
 void StratumSessionBitcoin::handleRequest_Submit(const string &idStr,
                                                  const StratumMessageBitcoin &smsg) {
   if (state_ != DOWN_AUTHENTICATED) {
-    responseError(idStr, StratumError::UNAUTHORIZED);
+    responseError(idStr, StratumStatus::UNAUTHORIZED);
     // there must be something wrong, send reconnect command
     const string s = "{\"id\":null,\"method\":\"client.reconnect\",\"params\":[]}\n";
     sendData(s);
@@ -879,7 +879,7 @@ void StratumSessionBitcoin::handleRequest_Submit(const string &idStr,
   //  params[4] = nonce
   ShareBitcoin share;
   if (!smsg.parseMiningSubmit(share)) {
-    responseError(idStr, StratumError::ILLEGAL_PARARMS);
+    responseError(idStr, StratumStatus::ILLEGAL_PARARMS);
     return;
   }
 
@@ -919,7 +919,7 @@ void StratumSessionBitcoin::responseError(const string &idStr, int errCode) {
   int len = snprintf(buf, sizeof(buf),
                      "{\"id\":%s,\"result\":null,\"error\":[%d,\"%s\",null]}\n",
                      idStr.empty() ? "null" : idStr.c_str(),
-                     errCode, StratumError::toString(errCode));
+                     errCode, StratumStatus::toString(errCode));
   sendData(buf, len);
 }
 

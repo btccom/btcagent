@@ -55,52 +55,64 @@ bool tryReadLine(string &line, struct evbuffer *inBuf) {
 }
 
 
-//////////////////////////////// StratumError ////////////////////////////////
-const char * StratumError::toString(int err) {
+//////////////////////////////// StratumStatus ////////////////////////////////
+const char *StratumStatus::toString(int err) {
   switch (err) {
-    case NO_ERROR:
-      return "no error";
+  case ACCEPT:
+    return "Share accepted";
+  case ACCEPT_STALE:
+    return "Share accepted (stale)";
+  case SOLVED:
+    return "Share accepted and solved";
+  case SOLVED_STALE:
+    return "Share accepted and solved (stale)";
+  case REJECT_NO_REASON:
+    return "Share rejected";
 
-    case JOB_NOT_FOUND_OR_STALE:
-      return "Job not found (=stale)";
-    case DUPLICATE_SHARE:
-      return "Duplicate share";
-    case LOW_DIFFICULTY:
-      return "Low difficulty";
-    case UNAUTHORIZED:
-      return "Unauthorized worker";
-    case NOT_SUBSCRIBED:
-      return "Not subscribed";
+  case JOB_NOT_FOUND_OR_STALE:
+    return "Job not found (=stale)";
+  case DUPLICATE_SHARE:
+    return "Duplicate share";
+  case LOW_DIFFICULTY:
+    return "Low difficulty";
+  case UNAUTHORIZED:
+    return "Unauthorized worker";
+  case NOT_SUBSCRIBED:
+    return "Not subscribed";
 
-    case ILLEGAL_METHOD:
-      return "Illegal method";
-    case ILLEGAL_PARARMS:
-      return "Illegal params";
-    case IP_BANNED:
-      return "Ip banned";
-    case INVALID_USERNAME:
-      return "Invliad subaccount name";
-    case INTERNAL_ERROR:
-      return "Internal error";
-    case TIME_TOO_OLD:
-      return "Time too old";
-    case TIME_TOO_NEW:
-      return "Time too new";
-    case ILLEGAL_VERMASK:
-      return "Invalid version mask";
+  case ILLEGAL_METHOD:
+    return "Illegal method";
+  case ILLEGAL_PARARMS:
+    return "Illegal params";
+  case IP_BANNED:
+    return "Ip banned";
+  case INVALID_USERNAME:
+    return "Invalid username";
+  case INTERNAL_ERROR:
+    return "Internal error";
+  case TIME_TOO_OLD:
+    return "Time too old";
+  case TIME_TOO_NEW:
+    return "Time too new";
+  case ILLEGAL_VERMASK:
+    return "Invalid version mask";
 
-    case INVALID_SOLUTION:
-      return "Invalid Solution";
-    case WRONG_NONCE_PREFIX:
-      return "Wrong Nonce Prefix";
+  case INVALID_SOLUTION:
+    return "Invalid Solution";
+  case WRONG_NONCE_PREFIX:
+    return "Wrong Nonce Prefix";
 
-    case JOB_NOT_FOUND:
-      return "Job not found";
-    case STALE_SHARE:
-      return "Stale share";
+  case JOB_NOT_FOUND:
+    return "Job not found";
+  case STALE_SHARE:
+    return "Stale share";
 
-    case UNKNOWN: default:
-      return "Unknown";
+  case CLIENT_IS_NOT_SWITCHER:
+    return "Client is not a stratum switcher";
+
+  case UNKNOWN:
+  default:
+    return "Unknown";
   }
 }
 

@@ -274,19 +274,19 @@ void EthProtocolProxy::handleRequest(const string &idStr, const StratumMessageEt
     if (session_.state_ == DOWN_AUTHENTICATED) {
       handleRequest_GetWork(idStr, smsg);
     } else {
-      responseError(idStr, StratumError::UNAUTHORIZED);
+      responseError(idStr, StratumStatus::UNAUTHORIZED);
     }
   } else if (method == "eth_submitWork") {
     if (session_.state_ == DOWN_AUTHENTICATED) {
       handleRequest_Submit(idStr, smsg);
     } else {
-      responseError(idStr, StratumError::UNAUTHORIZED);
+      responseError(idStr, StratumStatus::UNAUTHORIZED);
     }
   } else if (method == "eth_submitLogin") {
     if (session_.state_ == DOWN_CONNECTED) {
       handleRequest_Authorize(idStr, smsg);
     } else {
-      responseError(idStr, StratumError::UNKNOWN);
+      responseError(idStr, StratumStatus::UNKNOWN);
     }
   } else if (method == "eth_submitHashrate") {
     responseTrue(idStr);
@@ -311,7 +311,7 @@ void EthProtocolProxy::handleRequest_Authorize(const string &idStr, const Stratu
     idLogin_ = idStr;
     session_.getNoncePrefix();
   } else {
-    responseError(idStr, StratumError::ILLEGAL_PARARMS);
+    responseError(idStr, StratumStatus::ILLEGAL_PARARMS);
   }
 }
 
@@ -321,7 +321,7 @@ void EthProtocolProxy::handleRequest_Submit(const string &idStr, const StratumMe
     session_.submitShare(share);
     responseTrue(idStr);  // we assume shares are valid
   } else {
-    responseError(idStr, StratumError::ILLEGAL_PARARMS);
+    responseError(idStr, StratumStatus::ILLEGAL_PARARMS);
   }
 }
 
@@ -329,7 +329,7 @@ void EthProtocolProxy::responseError(const string &idStr, int code) {
   auto s = Strings::Format("{\"id\":%s,\"jsonrpc\":\"2.0\",\"error\":{\"code\":%d,\"message\":\"%s\"}}\n",
                            idStr.empty() ? "null" : idStr.c_str(),
                            code,
-                           StratumError::toString(code));
+                           StratumStatus::toString(code));
   session_.sendData(s);
 }
 
@@ -339,12 +339,12 @@ void EthProtocolProxy::responseTrue(const string &idStr) {
 
 void EthProtocolProxy::setNoncePrefix(uint32_t noncePrefix) {
   if (noncePrefix > MAX_NONCE_PREFIX) {
-    responseError(idLogin_, StratumError::INTERNAL_ERROR);
+    responseError(idLogin_, StratumStatus::INTERNAL_ERROR);
     return;
   }
 
   if (session_.state_ != DOWN_CONNECTED) {
-    responseError(idLogin_, StratumError::UNKNOWN);
+    responseError(idLogin_, StratumStatus::UNKNOWN);
     return;
   }
 
@@ -386,7 +386,7 @@ void EthProtocolStratum::handleRequest(const string &idStr, const StratumMessage
     if (session_.state_ == DOWN_AUTHENTICATED) {
       handleRequest_Submit(idStr, smsg);
     } else {
-      responseError(idStr, StratumError::UNAUTHORIZED);
+      responseError(idStr, StratumStatus::UNAUTHORIZED);
       // there must be something wrong, send reconnect command
       session_.sendData("{\"id\":null,\"method\":\"client.reconnect\",\"params\":[]}\n");
     }
@@ -396,7 +396,7 @@ void EthProtocolStratum::handleRequest(const string &idStr, const StratumMessage
     if (session_.state_ == DOWN_SUBSCRIBED) {
       handleRequest_Authorize(idStr, smsg);
     } else {
-      responseError(idStr, StratumError::NOT_SUBSCRIBED);
+      responseError(idStr, StratumStatus::NOT_SUBSCRIBED);
     }
   } else {
     // unrecognised method, just ignore it
@@ -408,7 +408,7 @@ void EthProtocolStratum::responseError(const string &idStr, int code) {
   auto s = Strings::Format("{\"id\":%s,\"result\":null,\"error\":[%d,\"%s\",null]}\n",
                            idStr.empty() ? "null" : idStr.c_str(),
                            code,
-                           StratumError::toString(code));
+                           StratumStatus::toString(code));
   session_.sendData(s);
 }
 
@@ -428,7 +428,7 @@ void EthProtocolStandard::handleRequest_Submit(const string &idStr, const Stratu
     session_.submitShare(share);
     responseTrue(idStr);  // we assume shares are valid
   } else {
-    responseError(idStr, StratumError::ILLEGAL_PARARMS);
+    responseError(idStr, StratumStatus::ILLEGAL_PARARMS);
   }
 }
 
@@ -437,7 +437,7 @@ void EthProtocolStandard::handleRequest_Authorize(const string &idStr, const Str
   if (smsg.parseMiningAuthorize(workerName)) {
     session_.handleRequest_Authorize(idStr, workerName);
   } else {
-    responseError(idStr, StratumError::ILLEGAL_PARARMS);
+    responseError(idStr, StratumStatus::ILLEGAL_PARARMS);
   }
 }
 
@@ -464,12 +464,12 @@ void EthProtocolStandard::sendMiningNotify(const StratumJobEth &sjob) {
 
 void EthProtocolNiceHash::setNoncePrefix(uint32_t noncePrefix) {
   if (noncePrefix > MAX_NONCE_PREFIX) {
-    responseError(idSubscribe_, StratumError::INTERNAL_ERROR);
+    responseError(idSubscribe_, StratumStatus::INTERNAL_ERROR);
     return;
   }
 
   if (session_.state_ != DOWN_CONNECTED) {
-    responseError(idSubscribe_, StratumError::UNKNOWN);
+    responseError(idSubscribe_, StratumStatus::UNKNOWN);
     return;
   }
 
@@ -527,7 +527,7 @@ void EthProtocolNiceHash::handleRequest_Submit(const string &idStr, const Stratu
     session_.submitShare(share);
     responseTrue(idStr);  // we assume shares are valid
   } else {
-    responseError(idStr, StratumError::ILLEGAL_PARARMS);
+    responseError(idStr, StratumStatus::ILLEGAL_PARARMS);
   }
 }
 
@@ -536,7 +536,7 @@ void EthProtocolNiceHash::handleRequest_Authorize(const string &idStr, const Str
   if (smsg.parseMiningAuthorize(workerName)) {
     session_.handleRequest_Authorize(idStr, workerName);
   } else {
-    responseError(idStr, StratumError::ILLEGAL_PARARMS);
+    responseError(idStr, StratumStatus::ILLEGAL_PARARMS);
   }
 }
 
@@ -812,7 +812,7 @@ void StratumSessionEth::handleStratumMessage(const string &line) {
   }
 
   // invalid params
-  protocol_->responseError(idStr, StratumError::ILLEGAL_PARARMS);
+  protocol_->responseError(idStr, StratumStatus::ILLEGAL_PARARMS);
 }
 
 void StratumSessionEth::handleRequest(const string &idStr, const StratumMessageEth &smsg) {
@@ -821,7 +821,7 @@ void StratumSessionEth::handleRequest(const string &idStr, const StratumMessageE
     if (state_ == DOWN_CONNECTED) {
       handleRequest_Subscribe(idStr, smsg);
     } else {
-      protocol_->responseError(idStr, StratumError::UNKNOWN);
+      protocol_->responseError(idStr, StratumStatus::UNKNOWN);
       return;
     }
   }
