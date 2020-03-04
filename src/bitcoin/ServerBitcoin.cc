@@ -549,42 +549,6 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
         server_->sendMiningDifficulty(this, poolDefaultDiff_);
       }
     }
-    else if (smsg.parseAgentGetCapabilities(serverCapabilities)) {
-      // Check if the server supports BTCAgent's version rolling
-      if (serverCapabilities.count(BTCAGENT_PROTOCOL_CAP_VERROL) > 0) {
-        // do mining.configure (for version rolling)
-        string s = Strings::Format("{\"id\":1,\"method\":\"mining.configure\",\"params\":["
-                                       "[\"version-rolling\"],"
-                                       "{\"version-rolling.mask\":\"ffffffff\",\"version-rolling.min-bit-count\":0}"
-                                   "]}\n");
-        sendData(s);
-      }
-
-      if (submitResponseFromServer_) {
-        // Check if the server can response of the submit
-        if (serverCapabilities.count(BTCAGENT_PROTOCOL_CAP_SUBRES) == 0) {
-          submitResponseFromServer_ = false;
-          LOG(WARNING) << "Pool server [" << (int32_t)idx_ << "] cannot send response of the submit!";
-        } else {
-          LOG(INFO) << "Pool server [" << (int32_t)idx_ << "] will send response of the submit.";
-        }
-      }
-    }
-    else if (smsg.parseMiningSetVersionMask(&versionMask)) {
-      //
-      // {"id":null,"method":"mining.set_version_mask","params":["1fffe000"]}
-      //
-
-      bool sendVersionMask = (versionMask_ != versionMask);
-      versionMask_ = versionMask;
-
-      if (sendVersionMask) {
-        static_cast<StratumServerBitcoin *>(server_)->sendVersionMaskToAll(this);
-      }
-
-      LOG(INFO) << "AsicBoost via BTCAgent enabled, allowed version mask: "
-                << Strings::Format("%08x", versionMask) << std::endl;
-    }
   }
 
   if (state_ == UP_CONNECTED) {
@@ -613,27 +577,50 @@ void UpStratumClientBitcoin::handleStratumMessage(const string &line) {
     return;
   }
 
-  if (state_ == UP_SUBSCRIBED && smsg.getResultBoolean() == true) {
-    //
-    // check authenticated result
-    // {"error": null, "id": 2, "result": true}
-    //
-    state_ = UP_AUTHENTICATED;  // authorize successful
-    LOG(INFO) << "auth success, name: \"" << userName_
-              << "\", extraNonce1: " << extraNonce1_ << std::endl;
-    
-    // do agent.get_capabilities
-    string caps = "\"" BTCAGENT_PROTOCOL_CAP_VERROL "\"";
-    if (submitResponseFromServer_) {
-      caps += ",\"" BTCAGENT_PROTOCOL_CAP_SUBRES "\"";
+  if (state_ == UP_SUBSCRIBED) {
+    if (smsg.getResultBoolean() == true) {
+      //
+      // check authenticated result
+      // {"error": null, "id": 2, "result": true}
+      //
+      state_ = UP_AUTHENTICATED;  // authorize successful
+      LOG(INFO) << "auth success, name: \"" << userName_
+                << "\", extraNonce1: " << extraNonce1_ << std::endl;
+
+      // Register existing miners
+      server_->registerWorker(this);
+
+      return;
     }
-    string s = "{\"id\":\"" JSONRPC_GET_CAPS_REQ_ID "\",\"method\":\"agent.get_capabilities\",\"params\":[[" + caps + "]]}\n";
-    sendData(s);
+    else if (smsg.parseMiningSetVersionMask(&versionMask)) {
+      //
+      // {"id":null,"method":"mining.set_version_mask","params":["1fffe000"]}
+      //
 
-    // Register existing miners
-    server_->registerWorker(this);
+      bool sendVersionMask = (versionMask_ != versionMask);
+      versionMask_ = versionMask;
 
-    return;
+      if (sendVersionMask) {
+        static_cast<StratumServerBitcoin *>(server_)->sendVersionMaskToAll(this);
+      }
+    }
+    else if (smsg.parseAgentGetCapabilities(serverCapabilities)) {
+      // Check if the server supports BTCAgent's version rolling
+      if (serverCapabilities.count(BTCAGENT_PROTOCOL_CAP_VERROL) > 0) {
+         LOG(INFO) << "AsicBoost via BTCAgent enabled, allowed version mask: "
+                << Strings::Format("%08x", versionMask_) << std::endl;
+      }
+
+      if (submitResponseFromServer_) {
+        // Check if the server can response of the submit
+        if (serverCapabilities.count(BTCAGENT_PROTOCOL_CAP_SUBRES) == 0) {
+          submitResponseFromServer_ = false;
+          LOG(WARNING) << "Pool server [" << (int32_t)idx_ << "] cannot send response of the submit!";
+        } else {
+          LOG(INFO) << "Pool server [" << (int32_t)idx_ << "] will send response of the submit.";
+        }
+      }
+    }
   }
 }
 
@@ -647,8 +634,23 @@ void UpStratumClientBitcoin::convertMiningNotifyStr(const string &line) {
 }
 
 void UpStratumClientBitcoin::sendMiningAuthorize() {
+  // do mining.configure (for version rolling)
+  string s = Strings::Format("{\"id\":1,\"method\":\"mining.configure\",\"params\":["
+                          "[\"version-rolling\"],"
+                          "{\"version-rolling.mask\":\"ffffffff\",\"version-rolling.min-bit-count\":0}"
+                      "]}\n");
+  sendData(s);
+
+  // do agent.get_capabilities
+  string caps = "\"" BTCAGENT_PROTOCOL_CAP_VERROL "\"";
+  if (submitResponseFromServer_) {
+    caps += ",\"" BTCAGENT_PROTOCOL_CAP_SUBRES "\"";
+  }
+  s = "{\"id\":\"" JSONRPC_GET_CAPS_REQ_ID "\",\"method\":\"agent.get_capabilities\",\"params\":[[" + caps + "]]}\n";
+  sendData(s);
+
   // do mining.authorize
-  string s = Strings::Format("{\"id\":1,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"\"]}\n", userName_.c_str());
+  s = Strings::Format("{\"id\":1,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"\"]}\n", userName_.c_str());
   sendData(s);
 }
 
