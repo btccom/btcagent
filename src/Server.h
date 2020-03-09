@@ -329,6 +329,8 @@ class UpStratumClient {
 public:
   UpStratumClientState state_ = UP_INIT;
   int8_t idx_ = 0;
+  uint8_t poolIndex_ = 0;
+  uint8_t reconnectCount_ = 0;
   StratumServer *server_ = nullptr;
 
   bool submitResponseFromServer_ = false;
