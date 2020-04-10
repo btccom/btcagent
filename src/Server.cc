@@ -696,7 +696,7 @@ bool StratumServer::run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoos
   listener_ = evconnlistener_new_bind(base_,
                                       StratumServer::listenerCallback,
                                       (void*)this,
-                                      LEV_OPT_REUSEABLE|LEV_OPT_CLOSE_ON_FREE,
+                                      LEV_OPT_REUSEABLE|LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE_PORT,
                                       // backlog, Set to -1 for a reasonable default
                                       -1,
                                       (struct sockaddr*)&sin, sizeof(sin));
