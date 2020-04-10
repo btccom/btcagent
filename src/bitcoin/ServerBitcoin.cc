@@ -646,12 +646,16 @@ void UpStratumClientBitcoin::sendMiningAuthorize() {
   if (submitResponseFromServer_) {
     caps += ",\"" BTCAGENT_PROTOCOL_CAP_SUBRES "\"";
   }
-  s = "{\"id\":\"" JSONRPC_GET_CAPS_REQ_ID "\",\"method\":\"agent.get_capabilities\",\"params\":[[" + caps + "]]}\n";
-  sendData(s);
+  string getCaps = "{\"id\":\"" JSONRPC_GET_CAPS_REQ_ID "\",\"method\":\"agent.get_capabilities\",\"params\":[[" + caps + "]]}\n";
+  sendData(getCaps);
 
   // do mining.authorize
   s = Strings::Format("{\"id\":1,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"\"]}\n", userName_.c_str());
   sendData(s);
+
+  // fix subres (submit_response_from_server)
+  // Subres negotiation must be sent after authentication, or sserver will not send the response.
+  sendData(getCaps);
 }
 
 void StratumSessionBitcoin::sendMiningNotify() {
