@@ -228,3 +228,7 @@ string str2lower(const string &str) {
   std::transform(data.begin(), data.end(), data.begin(), ::tolower);
   return data;
 }
+
+bool strEmpty(const string &str) {
+  return str.find_last_not_of(" \t\f\v\n\r") == str.npos;
+}

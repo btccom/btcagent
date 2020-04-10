@@ -587,7 +587,9 @@ void UpStratumClientEth::handleStratumMessage(const string &line) {
 
   StratumMessageEth smsg(line);
   if (!smsg.isValid()) {
-    LOG(ERROR) << "decode line fail, not a json string" << std::endl;
+    if (!strEmpty(line)) {
+      LOG(ERROR) << "decode line fail, not a json string: " << line << std::endl;
+    }
     return;
   }
 
@@ -792,7 +794,9 @@ void StratumSessionEth::handleStratumMessage(const string &line) {
 
   StratumMessageEth smsg(line);
   if (!smsg.isValid()) {
-    LOG(ERROR) << "decode line fail, not a json string" << std::endl;
+    if (!strEmpty(line)) {
+      LOG(ERROR) << "decode line fail, not a json string: " << line << std::endl;
+    }
     return;
   }
 

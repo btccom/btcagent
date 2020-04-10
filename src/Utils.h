@@ -133,5 +133,6 @@ bool parseConfJson(const string &jsonStr,
 const char *splitNotify(const string &line, int number = 14);
 
 string str2lower(const string &str);
+bool strEmpty(const string &str);
 
 #endif
