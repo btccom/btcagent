@@ -298,7 +298,13 @@ void UpStratumClient::disconnect() {
 
 bool UpStratumClient::connect() {
   auto &pools = server_->getUpPools();
-  for (size_t i=0; i < pools.size(); i++) {
+  for (size_t s=0; s < pools.size(); s++) {
+    if (poolIndex_ >= pools.size()) {
+      poolIndex_ = 0;
+    }
+    // Use poolIndex_ so that second and subsequent mining pools have a chance to be tried.
+    // As long as there is a valid DNS, bufferevent_socket_connect_hostname() will always return 0.
+    size_t i = poolIndex_++;
     userName_ = pools[i].upPoolUserName_;
 
     int res = bufferevent_socket_connect_hostname(bev_, evdnsBase_, AF_INET, pools[i].host_.c_str(), (int)pools[i].port_);
@@ -311,6 +317,7 @@ bool UpStratumClient::connect() {
                 << pools[i].port_ << ", subaccount name: " << userName_ << std::endl;
       return true;
     }
+    reconnectCount_++;
   }
 
   return false;
@@ -320,11 +327,12 @@ bool UpStratumClient::reconnect() {
   time_t now = time(nullptr);
   if (now - lastConnectTime_ < 5) {
     // Too fast reconnecting.
-    // StratumServer::checkUpSessions() will do the reconnect again().
+    // StratumServer::checkUpSessions() will do the reconnect after 5 seconds.
     server_->resetUpWatcherTime(5);
     return false;
   }
 
+  reconnectCount_++;
   disconnect();
 
   if (now - lastJobReceivedTime_ > 30) {
@@ -768,7 +776,7 @@ void StratumServer::checkUpSessions() {
         continue;
       }
 
-      if (alwaysKeepDownconn_) {
+      if (alwaysKeepDownconn_ || upSessions_[i]->reconnectCount_ < upPools_.size()) {
         upSessions_[i]->reconnect();
         continue;
       }
@@ -976,6 +984,8 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
 
   if (events & BEV_EVENT_CONNECTED) {
     up->state_ = UP_CONNECTED;
+    up->reconnectCount_ = 0;
+    up->poolIndex_ = 0;
 
     // do subscribe
     string s = Strings::Format("{\"id\":1,\"method\":\"mining.subscribe\""
@@ -998,11 +1008,11 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
     LOG(ERROR) << "unhandled events from pool server: " << events << std::endl;
   }
 
-  if (server->alwaysKeepDownconn_) {
+  if (server->alwaysKeepDownconn_ || up->reconnectCount_ < server->upPools_.size()) {
     up->reconnect();
     return;
   }
-  
+
   server->removeUpConnection(up);
 }
 
