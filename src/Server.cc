@@ -433,9 +433,9 @@ void UpStratumClient::handleExMessage_SubmitResponse(const string *exMessage) {
   // | magic_number(1) | cmd(1) | len(2) | index(2) | status(4) |
   //
   const uint8_t *p = (uint8_t *)exMessage->data();
-  const uint16_t index = *(uint16_t *)(p + 4);
+  // const uint16_t index = *(uint16_t *)(p + 4); can not found session id from index
   const int32_t status = *(int32_t *)(p + 6);
-  const auto &id = submitIds_[index];
+  const auto &id = submitIds_[submitResponseIndex_++];
 
   server_->sendSubmitResponse(id, status);
 }

@@ -335,6 +335,7 @@ public:
 
   bool submitResponseFromServer_ = false;
   uint16_t submitIndex_ = 0;
+  uint16_t submitResponseIndex_ = 0;
   vector<SubmitId> submitIds_;
 
   bool poolDiffNeedUpdate_ = true;
