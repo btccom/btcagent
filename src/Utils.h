@@ -103,30 +103,31 @@ class Strings {
 public:
   static string Format(const char * fmt, ...);
   static void Append(string & dest, const char * fmt, ...);
+  static string ReplaceAll(std::string str, const std::string& from, const std::string& to);
+  static string FormatIP(uint32_t ipv4Int, string format);
 };
 
-class PoolConf {
-public:
+struct PoolConf {
   string host_;
   uint16_t port_ = 0;
   string upPoolUserName_;
+};
 
-  PoolConf() = default;
-
-  PoolConf(const PoolConf &r) {
-    host_ = r.host_;
-    port_ = r.port_;
-    upPoolUserName_ = r.upPoolUserName_;
-  }
+struct AgentConf {
+  string agentType_ = "btc";
+	string listenIP_ = "0.0.0.0";
+  uint16_t listenPort_ = 3333;
+  std::vector<PoolConf> pools_;
+  bool alwaysKeepDownconn_ = false;
+	bool disconnectWhenLostAsicBoost_ = true;
+  bool submitResponseFromServer_ = false;
+  bool useIpAsWorkerName_ = false;
+  string ipWorkerNameFormat_ = "{1}x{2}x{3}x{4}";
+  string fixedWorkerName_;
 };
 
 string getJsonStr(const char *c,const jsmntok_t *t);
-bool parseConfJson(const string &jsonStr,
-                   string &agentType, string &listenIP, string &listenPort,
-                   std::vector<PoolConf> &poolConfs,
-                   bool &alwaysKeepDownconn, bool &disconnectWhenLostAsicBoost,
-                   bool &useIpAsWorkerName, bool &submitResponseFromServer,
-                   string &fixedWorkerName);
+bool parseConfJson(const string &jsonStr, AgentConf &conf);
 
 // slite stratum 'mining.notify'
 // 14: the end of coinbase1

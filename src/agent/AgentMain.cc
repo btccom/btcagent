@@ -103,44 +103,30 @@ int main(int argc, char **argv) {
 #endif
 
   try {
-	string agentType = "btc";
-	string listenIP = "0.0.0.0";
-  string listenPort = "3333";
-  std::vector<PoolConf> poolConfs;
-  bool alwaysKeepDownconn = false;
-	bool disconnectWhenLostAsicBoost = true;
-  bool useIpAsWorkerName = false;
-  bool submitResponseFromServer = false;
-  string fixedWorkerName;
+    AgentConf conf;
 
     // get conf json string
-    std::ifstream agentConf(optConf);
-    string agentJsonStr((std::istreambuf_iterator<char>(agentConf)),
+    std::ifstream confStream(optConf);
+    string agentJsonStr((std::istreambuf_iterator<char>(confStream)),
                         std::istreambuf_iterator<char>());
-    if (!parseConfJson(agentJsonStr, agentType, listenIP, listenPort, poolConfs,
-                       alwaysKeepDownconn, disconnectWhenLostAsicBoost, useIpAsWorkerName,
-                       submitResponseFromServer, fixedWorkerName)) {
+    if (!parseConfJson(agentJsonStr, conf)) {
       LOG(ERROR) << "parse json config file failure" << std::endl;
       return 1;
     }
 
     LOG(INFO) << "[OPTION] Always keep down connections even if pool disconnected: "
-              << (alwaysKeepDownconn ? "Enabled" : "Disabled");
+              << (conf.alwaysKeepDownconn_ ? "Enabled" : "Disabled");
 
-    if (agentType == "eth") {
-      gStratumServer = new StratumServerEth(listenIP, atoi(listenPort.c_str()));
+    if (conf.agentType_ == "eth") {
+      gStratumServer = new StratumServerEth(conf);
     } else {
       LOG(INFO) << "[OPTION] Disconnect if a miner lost its AsicBoost mid-way: "
-                << (disconnectWhenLostAsicBoost ? "Enabled" : "Disabled");
+                << (conf.disconnectWhenLostAsicBoost_ ? "Enabled" : "Disabled");
 
-      gStratumServer = new StratumServerBitcoin(listenIP, atoi(listenPort.c_str()));
+      gStratumServer = new StratumServerBitcoin(conf);
     }
 
-    // add pools
-    gStratumServer->addUpPool(poolConfs);
-
-    if (!gStratumServer->run(alwaysKeepDownconn, disconnectWhenLostAsicBoost,
-      useIpAsWorkerName, submitResponseFromServer, fixedWorkerName)) {
+    if (!gStratumServer->run()) {
       LOG(ERROR) << "setup failure" << std::endl;
     }
     delete gStratumServer;

@@ -211,10 +211,6 @@ private:
   static const int8_t kUpSessionCount_ = 5;  // MAX is 127
   bool running_ = false;
 
-  string   listenIP_;
-  uint16_t listenPort_ = 0;
-  vector<PoolConf> upPools_;
-
   struct event *upEvTimer_ = nullptr;
 
   // libevent2
@@ -240,29 +236,25 @@ protected:
 
   // down stream connections
   vector<StratumSession *> downSessions_;
-  bool alwaysKeepDownconn_ = false;
-  bool disconnectWhenLostAsicBoost_ = false;
-  bool useIpAsWorkerName_ = false;
-  bool submitResponseFromServer_ = false;
-  string fixedWorkerName_;
+
+  AgentConf conf_;
 
 public:
   SessionIDManager sessionIDManager_;
 
 public:
-  StratumServer(const string &listenIP, const uint16_t listenPort);
+  StratumServer(const AgentConf &conf);
   virtual ~StratumServer();
 
   UpStratumClient *createUpSession(const int8_t idx);
 
-  void addUpPool(const std::vector<PoolConf> &poolConfs);
-
-  inline const vector<PoolConf>& getUpPools() { return upPools_; }
+  inline const vector<PoolConf>& getUpPools() { return conf_.pools_; }
   inline struct event_base* getEventBase() { return base_; }
-  inline bool disconnectWhenLostAsicBoost() { return disconnectWhenLostAsicBoost_; }
-  inline bool useIpAsWorkerName() { return useIpAsWorkerName_; }
-  inline bool submitResponseFromServer() { return submitResponseFromServer_; }
-  inline const string &fixedWorkerName() { return fixedWorkerName_; }
+  inline bool disconnectWhenLostAsicBoost() { return conf_.disconnectWhenLostAsicBoost_; }
+  inline bool useIpAsWorkerName() { return conf_.useIpAsWorkerName_; }
+  inline string ipWorkerNameFormat() { return conf_.ipWorkerNameFormat_; }
+  inline bool submitResponseFromServer() { return conf_.submitResponseFromServer_; }
+  inline const string &fixedWorkerName() { return conf_.fixedWorkerName_; }
 
   void addDownConnection   (StratumSession *conn);
   void removeDownConnection(StratumSession *conn);
@@ -296,10 +288,8 @@ public:
   void registerWorker  (UpStratumClient *upSession);
   void registerWorker  (StratumSession *downSession);
   void unRegisterWorker(StratumSession *downSession);
-
-  bool run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost,
-    bool useIpAsWorkerName, bool submitResponseFromServer,
-    const string &fixedWorkerName);
+  
+  bool run();
   void stop();
 };
 

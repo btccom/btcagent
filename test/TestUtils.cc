@@ -16,6 +16,8 @@
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include <event2/util.h>
+
 #include "gtest/gtest.h"
 #include "Utils.h"
 
@@ -28,6 +30,14 @@ TEST(Utils, Strings_Format) {
     string s1 = Strings::Format("%s", s.c_str());
     ASSERT_EQ(s1, s);
   }
+}
+
+TEST(Utils, Strings_FormatIP) {
+  in_addr addr;
+  string ip = "123.45.67.89";
+  
+  ASSERT_EQ(evutil_inet_pton(AF_INET, ip.c_str(), &addr), 1);
+  ASSERT_EQ(Strings::FormatIP(addr.s_addr, "{1}x{2}x{3}x{4}"), "123x45x67x89");
 }
 
 TEST(Utils, Strings_Append) {
@@ -56,13 +66,7 @@ TEST(Utils, splitNotify) {
 
 TEST(Utils, Strings_parseConfJson) {
   {
-    string agentType, listenIP, listenPort;
-    bool alwaysKeepDownconn = false;
-    bool disconnectWhenLostAsicBoost = false;
-    bool useIpAsWorkerName = false;
-    bool submitResponseFromServer = false;
-    string fixedWorkerName;
-    std::vector<PoolConf> poolConfs;
+    AgentConf conf;
 
     string line = R"EOF({
       "agent_listen_ip": "0.0.0.0",
@@ -72,39 +76,33 @@ TEST(Utils, Strings_parseConfJson) {
       ]
     })EOF";
 
-    ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs,
-      alwaysKeepDownconn, disconnectWhenLostAsicBoost,
-      useIpAsWorkerName, submitResponseFromServer, fixedWorkerName), true);
+    ASSERT_EQ(parseConfJson(line, conf), true);
 
-    ASSERT_EQ(agentType, "");
-    ASSERT_EQ(alwaysKeepDownconn, false);
-    ASSERT_EQ(disconnectWhenLostAsicBoost, false);
-    ASSERT_EQ(useIpAsWorkerName, false);
-    ASSERT_EQ(submitResponseFromServer, false);
+    ASSERT_EQ(conf.agentType_, "btc");
+    ASSERT_EQ(conf.alwaysKeepDownconn_, false);
+    ASSERT_EQ(conf.disconnectWhenLostAsicBoost_, true);
+    ASSERT_EQ(conf.useIpAsWorkerName_, false);
+    ASSERT_EQ(conf.ipWorkerNameFormat_, "{1}x{2}x{3}x{4}");
+    ASSERT_EQ(conf.submitResponseFromServer_, false);
 
-    ASSERT_EQ(listenIP, "0.0.0.0");
-    ASSERT_EQ(listenPort, "3333");
-    ASSERT_EQ(fixedWorkerName, "");
+    ASSERT_EQ(conf.listenIP_, "0.0.0.0");
+    ASSERT_EQ(conf.listenPort_, 3333u);
+    ASSERT_EQ(conf.fixedWorkerName_, "");
     
-    ASSERT_EQ(poolConfs.size(), 1u);
-    ASSERT_EQ(poolConfs[0].host_, "cn.ss.btc.com");
-    ASSERT_EQ(poolConfs[0].port_, 1800);
-    ASSERT_EQ(poolConfs[0].upPoolUserName_, "kevin");
+    ASSERT_EQ(conf.pools_.size(), 1u);
+    ASSERT_EQ(conf.pools_[0].host_, "cn.ss.btc.com");
+    ASSERT_EQ(conf.pools_[0].port_, 1800);
+    ASSERT_EQ(conf.pools_[0].upPoolUserName_, "kevin");
   }
 
   {
-    string agentType, listenIP, listenPort;
-    bool alwaysKeepDownconn = false;
-    bool disconnectWhenLostAsicBoost = false;
-    bool useIpAsWorkerName = false;
-    bool submitResponseFromServer = false;
-    string fixedWorkerName;
+    AgentConf conf;
 
-    std::vector<PoolConf> poolConfs;
     string line = R"EOF({
       "always_keep_downconn": true,
-      "disconnect_when_lost_asicboost": true,
+      "disconnect_when_lost_asicboost": false,
       "use_ip_as_worker_name": true,
+      "ip_worker_name_format": "{1}.{2}.{3}.{4}",
       "submit_response_from_server": true,
       "agent_type": "btc",
       "agent_listen_ip": "127.0.0.1",
@@ -115,27 +113,26 @@ TEST(Utils, Strings_parseConfJson) {
         ["us.ss.btc.com", 3333, "kevinus"]
       ]
     })EOF";
-    ASSERT_EQ(parseConfJson(line, agentType, listenIP, listenPort, poolConfs,
-      alwaysKeepDownconn, disconnectWhenLostAsicBoost,
-      useIpAsWorkerName, submitResponseFromServer, fixedWorkerName), true);
+    ASSERT_EQ(parseConfJson(line, conf), true);
 
-    ASSERT_EQ(agentType, "btc");
-    ASSERT_EQ(alwaysKeepDownconn, true);
-    ASSERT_EQ(disconnectWhenLostAsicBoost, true);
-    ASSERT_EQ(useIpAsWorkerName, true);
-    ASSERT_EQ(submitResponseFromServer, true);
-    ASSERT_EQ(listenIP, "127.0.0.1");
-    ASSERT_EQ(listenPort, "1800");
-    ASSERT_EQ(fixedWorkerName, "myworker");
+    ASSERT_EQ(conf.agentType_, "btc");
+    ASSERT_EQ(conf.alwaysKeepDownconn_, true);
+    ASSERT_EQ(conf.disconnectWhenLostAsicBoost_, false);
+    ASSERT_EQ(conf.useIpAsWorkerName_, true);
+    ASSERT_EQ(conf.ipWorkerNameFormat_, "{1}.{2}.{3}.{4}");
+    ASSERT_EQ(conf.submitResponseFromServer_, true);
+    ASSERT_EQ(conf.listenIP_, "127.0.0.1");
+    ASSERT_EQ(conf.listenPort_, 1800u);
+    ASSERT_EQ(conf.fixedWorkerName_, "myworker");
 
-    ASSERT_EQ(poolConfs.size(), 2u);
+    ASSERT_EQ(conf.pools_.size(), 2u);
 
-    ASSERT_EQ(poolConfs[0].host_, "cn.ss.btc.com");
-    ASSERT_EQ(poolConfs[0].port_, 1800);
-    ASSERT_EQ(poolConfs[0].upPoolUserName_, "kevin");
+    ASSERT_EQ(conf.pools_[0].host_, "cn.ss.btc.com");
+    ASSERT_EQ(conf.pools_[0].port_, 1800u);
+    ASSERT_EQ(conf.pools_[0].upPoolUserName_, "kevin");
 
-    ASSERT_EQ(poolConfs[1].host_, "us.ss.btc.com");
-    ASSERT_EQ(poolConfs[1].port_, 3333);
-    ASSERT_EQ(poolConfs[1].upPoolUserName_, "kevinus");
+    ASSERT_EQ(conf.pools_[1].host_, "us.ss.btc.com");
+    ASSERT_EQ(conf.pools_[1].port_, 3333u);
+    ASSERT_EQ(conf.pools_[1].upPoolUserName_, "kevinus");
   }
 }

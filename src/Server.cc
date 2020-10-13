@@ -501,11 +501,7 @@ StratumSession::~StratumSession() {
 
 void StratumSession::setWorkerName(const string &fullName) {
   if (server_->useIpAsWorkerName()) {
-    // get source IP address
-    char saddrBuffer[INET_ADDRSTRLEN];
-    evutil_inet_ntop(AF_INET, &saddr_, saddrBuffer, INET_ADDRSTRLEN);
-
-    workerName_ = saddrBuffer;
+    workerName_ = Strings::FormatIP(saddr_.s_addr, server_->ipWorkerNameFormat());
     return;
   }
 
@@ -547,8 +543,8 @@ void StratumSession::recvData(struct evbuffer *buf) {
 }
 
 /////////////////////////////////// StratumServer //////////////////////////////
-StratumServer::StratumServer(const string &listenIP, const uint16_t listenPort)
-: listenIP_(listenIP), listenPort_(listenPort)
+StratumServer::StratumServer(const AgentConf &conf)
+: conf_(conf)
 {
   upSessions_    .resize(kUpSessionCount_, NULL);
   upSessionCount_.resize(kUpSessionCount_, 0);
@@ -591,14 +587,6 @@ void StratumServer::stop() {
   event_base_loopexit(base_, NULL);
 }
 
-void StratumServer::addUpPool(const std::vector<PoolConf> &poolConfs) {
-  upPools_ =  poolConfs;
-
-  for (const auto &pool : upPools_) {
-    LOG(INFO) << "add pool: " << pool.host_ << ":" << pool.port_ << ", subaccount name: " << pool.upPoolUserName_ << std::endl;
-  }
-}
-
 UpStratumClient * StratumServer::createUpSession(int8_t idx) {
   UpStratumClient *up = createUpClient(idx, this);
   if (!up->connect()) {
@@ -607,17 +595,13 @@ UpStratumClient * StratumServer::createUpSession(int8_t idx) {
   return up;
 }
 
-bool StratumServer::run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoost,
-  bool useIpAsWorkerName, bool submitResponseFromServer,
-  const string &fixedWorkerName) {
-  alwaysKeepDownconn_ = alwaysKeepDownconn;
-  disconnectWhenLostAsicBoost_ = disconnectWhenLostAsicBoost;
-  useIpAsWorkerName_ = useIpAsWorkerName;
-  submitResponseFromServer_ = submitResponseFromServer;
-  fixedWorkerName_ = fixedWorkerName;
+bool StratumServer::run() {
+  for (const auto &pool : conf_.pools_) {
+    LOG(INFO) << "add pool: " << pool.host_ << ":" << pool.port_ << ", subaccount name: " << pool.upPoolUserName_ << std::endl;
+  }
 
-  if (!fixedWorkerName_.empty()) {
-    LOG(INFO) << "[OPTION] Fixed worker name enabled, all worker name will be replaced to " << fixedWorkerName_ << " on the server.";
+  if (!conf_.fixedWorkerName_.empty()) {
+    LOG(INFO) << "[OPTION] Fixed worker name enabled, all worker name will be replaced to " << conf_.fixedWorkerName_ << " on the server.";
   }
 
   if (running_) {
@@ -625,7 +609,7 @@ bool StratumServer::run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoos
   }
   running_ = true;
 
-  if (upPools_.size() == 0) {
+  if (conf_.pools_.size() == 0) {
     return false;
   }
 
@@ -694,10 +678,10 @@ bool StratumServer::run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoos
   struct sockaddr_in sin;
   memset(&sin, 0, sizeof(sin));
   sin.sin_family = AF_INET;
-  sin.sin_port   = htons(listenPort_);
+  sin.sin_port   = htons(conf_.listenPort_);
   sin.sin_addr.s_addr = htonl(INADDR_ANY);
-  if (evutil_inet_pton(AF_INET, listenIP_.c_str(), &sin.sin_addr) == 0) {
-    LOG(ERROR) << "invalid ip: " << listenIP_ << std::endl;
+  if (evutil_inet_pton(AF_INET, conf_.listenIP_.c_str(), &sin.sin_addr) == 0) {
+    LOG(ERROR) << "invalid ip: " << conf_.listenIP_ << std::endl;
     return false;
   }
 
@@ -709,11 +693,11 @@ bool StratumServer::run(bool alwaysKeepDownconn, bool disconnectWhenLostAsicBoos
                                       -1,
                                       (struct sockaddr*)&sin, sizeof(sin));
   if(!listener_) {
-    LOG(ERROR) << "cannot create listener: " << listenIP_ << ":" << listenPort_ << std::endl;
+    LOG(ERROR) << "cannot create listener: " << conf_.listenIP_ << ":" << conf_.listenPort_ << std::endl;
     return false;
   }
 
-  LOG(INFO) << "startup is successful, listening: " << listenIP_ << ":" << listenPort_ << std::endl;
+  LOG(INFO) << "startup is successful, listening: " << conf_.listenIP_ << ":" << conf_.listenPort_ << std::endl;
     
   assert(base_ != NULL);
   event_base_dispatch(base_);
@@ -776,7 +760,7 @@ void StratumServer::checkUpSessions() {
         continue;
       }
 
-      if (alwaysKeepDownconn_ || upSessions_[i]->reconnectCount_ < upPools_.size()) {
+      if (conf_.alwaysKeepDownconn_ || upSessions_[i]->reconnectCount_ < conf_.pools_.size()) {
         upSessions_[i]->reconnect();
         continue;
       }
@@ -1008,7 +992,7 @@ void StratumServer::upEventCallback(struct bufferevent *bev,
     LOG(ERROR) << "unhandled events from pool server: " << events << std::endl;
   }
 
-  if (server->alwaysKeepDownconn_ || up->reconnectCount_ < server->upPools_.size()) {
+  if (server->conf_.alwaysKeepDownconn_ || up->reconnectCount_ < server->conf_.pools_.size()) {
     up->reconnect();
     return;
   }
@@ -1081,7 +1065,7 @@ UpStratumClient *StratumServer::findUpSession() {
   }
 
   // Provide an unavailable connection if no available connection can be found
-  if (upSession == nullptr && alwaysKeepDownconn_) {
+  if (upSession == nullptr && conf_.alwaysKeepDownconn_) {
     for (size_t i = 0; i < upSessions_.size(); i++) {
       if (upSessions_[i] == nullptr) {
         continue;
@@ -1108,7 +1092,7 @@ void StratumServer::registerWorker(StratumSession *downSession) {
   //
   // | magic_number(1) | cmd(1) | len (2) | session_id(2) | clientAgent | worker_name |
   //
-  string workerName = fixedWorkerName_.empty() ? downSession->workerName() : fixedWorkerName_;
+  string workerName = conf_.fixedWorkerName_.empty() ? downSession->workerName() : conf_.fixedWorkerName_;
 
   uint16_t len = 0;
   len += (1+1+2+2); // magic_num, cmd, len, session_id
