@@ -1,0 +1,15 @@
+{
+
+    "agent_listen_ip": "49.48.251.37",
+    "agent_listen_port": 3333,
+
+    "pools": [
+
+        ["us.ss.btc.com", 1800, "Kronphan001.001"],
+
+        ["us.ss.btc.com", 1800, "Kronphan001.001"]
+
+    ]
+
+}
+
