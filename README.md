@@ -72,16 +72,24 @@ mkdir -p log_btcagent
 {
     "agent_listen_ip": "0.0.0.0",
     "agent_listen_port": 3333,
+    "pool_use_tls": false,
     "pools": [
-        ["us.ss.btc.com", 1800, "kevin"],
-        ["us.ss.btc.com", 1800, "kevin"]
+        ["us.ss.btc.com", 1800, "testus"],
+        ["us.ss.btc.com", 443, "testus"]
     ]
 }
 ```
 
 * `agent_listen_ip`: Agent's listen IP address.
+
 * `agent_listen_port`: Agent's listen port, miners will connect to this port.
+
+* `pool_use_tls`: If you want to connect to a pool server via SSL/TLS encryption, you can change `false` to `true`.
+
+   Note: If this option is `true` and a pool server does not support SSL/TLS, you cannot connect to it.
+
 * `pools`: pools settings which Agent will connect. You can put serval pool's settings here.
+
   * `["<stratum_server_host>", <stratum_server_port>, "<pool_username>"]`
 
 **start / stop**
@@ -134,8 +142,9 @@ cp agent_conf.json agent_conf_3334.json
 {
     "agent_listen_ip": "0.0.0.0",
     "agent_listen_port": 3334,
+    "pool_use_tls": false,
     "pools": [
-        ["us.ss.btc.com", 1800, "kevin3334"]
+        ["us.ss.btc.com", 1800, "testus3334"]
     ]
 }
 ```

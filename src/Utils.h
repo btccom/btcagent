@@ -122,6 +122,7 @@ struct AgentConf {
 	bool disconnectWhenLostAsicBoost_ = true;
   bool submitResponseFromServer_ = false;
   bool useIpAsWorkerName_ = false;
+  bool poolUseTls_ = false;
   string ipWorkerNameFormat_ = "{1}x{2}x{3}x{4}";
   string fixedWorkerName_;
 };

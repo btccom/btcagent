@@ -255,6 +255,7 @@ public:
   inline string ipWorkerNameFormat() { return conf_.ipWorkerNameFormat_; }
   inline bool submitResponseFromServer() { return conf_.submitResponseFromServer_; }
   inline const string &fixedWorkerName() { return conf_.fixedWorkerName_; }
+  inline bool poolUseTls() { return conf_.poolUseTls_; }
 
   void addDownConnection   (StratumSession *conn);
   void removeDownConnection(StratumSession *conn);

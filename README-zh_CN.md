@@ -81,15 +81,22 @@ mkdir -p log_btcagent
 {
     "agent_listen_ip": "0.0.0.0",
     "agent_listen_port": 3333,
+    "pool_use_tls": false,
     "pools": [
-        ["cn.ss.btc.com", 1800, "kevin"],
-        ["cn.ss.btc.com", 1800, "kevin"]
+        ["cn.ss.btc.com", 1800, "testpool"],
+        ["cn.ss.btc.com", 1800, "testpool"]
     ]
 }
 ```
 
 * `agent_listen_ip`: agent监听的IP地址，默认"0.0.0.0"即可
+
 * `agent_listen_port`: agent监听的端口，矿机会连接至此
+
+* `pool_use_tls`: 如果想通过SSL/TLS加密连接到矿池服务器，可以把该选项由`false`改为`true`。
+
+   注意：如果该选项为`true`但矿池服务器不支持SSL/TLS，代理就无法连接矿池，必须改成`false`才能连接。
+
 * `pools`: 上行矿池的配置信息
   * `["<stratum_server_host>", <stratum_server_port>, "<pool_username>"]`
   * 服务器, 端口, 用户名
@@ -168,8 +175,9 @@ cp agent_conf.json agent_conf_3334.json
 {
     "agent_listen_ip": "0.0.0.0",
     "agent_listen_port": 3334,
+    "pool_use_tls": false,
     "pools": [
-        ["cn.ss.btc.com", 1800, "kevin3334"]
+        ["cn.ss.btc.com", 1800, "testpool3334"]
     ]
 }
 ```

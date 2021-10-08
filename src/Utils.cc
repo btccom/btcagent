@@ -222,6 +222,12 @@ bool parseConfJson(const string &jsonStr, AgentConf &conf) {
       conf.fixedWorkerName_ = getJsonStr(c, &t[i+1]);
       i++;
     }
+    else if (jsoneq(c, &t[i], "pool_use_tls") == 0) {
+      string opt = getJsonStr(c, &t[i + 1]);
+      std::transform(opt.begin(), opt.end(), opt.begin(), ::tolower);
+      conf.poolUseTls_ = (opt == "true");
+      i++;
+    }
   }
 
   // check parametes
