@@ -6,7 +6,7 @@
 
 ```
 apt-get update
-apt-get install -y build-essential cmake git
+apt-get install -y build-essential cmake git wget libssl-dev
 
 #
 # prepare toolchain
@@ -17,11 +17,11 @@ tar zxvf PandoraBox-Toolchain-ralink-for-mipsel_24kec+dsp-gcc-4.8-linaro_uClibc-
 #
 # cross build libevent
 #
-wget https://github.com/libevent/libevent/releases/download/release-2.1.9-beta/libevent-2.1.9-beta.tar.gz
-tar zxvf libevent-2.1.9-beta.tar.gz
-cd libevent-2.1.9-beta
+wget https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz
+tar zxvf libevent-2.1.12-stable.tar.gz
+cd libevent-2.1.12-stable
 LIBS=-ldl ./configure --host=mipsel-openwrt-linux
-make
+make -j$(nproc)
 copy include and libraries to toolchain
 
 #
@@ -31,5 +31,5 @@ git clone https://github.com/btccom/btcagent.git
 cd btcagent
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release -DPOOLAGENT__USE_GLOG=OFF -DTOOLCHAIN=/path/to/toolchain ..
-make
+make -j$(nproc)
 ```

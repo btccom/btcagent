@@ -36,37 +36,37 @@ BtcAgent是定制的高效的专用矿池代理系统。其采用了自定义[�
 
 ```
 apt-get update
-apt-get install -y build-essential cmake git
+apt-get install -y build-essential cmake git wget libssl-dev
 
 #
-# install libevent
+# 编译 libevent
 #
 mkdir -p /root/source && cd /root/source
-wget https://github.com/libevent/libevent/releases/download/release-2.1.9-beta/libevent-2.1.9-beta.tar.gz
-tar zxvf libevent-2.1.9-beta.tar.gz
-cd libevent-2.1.9-beta
+wget https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz
+tar zxvf libevent-2.1.12-stable.tar.gz
+cd libevent-2.1.12-stable
 ./configure
-make
+make -j$(nproc)
 make install
 
 #
-# install glog
+# 编译 glog
 #
 mkdir -p /root/source && cd /root/source
 wget https://github.com/google/glog/archive/v0.3.5.tar.gz
 tar zxvf v0.3.5.tar.gz
 cd glog-0.3.5
-./configure && make && make install
+./configure && make -j$(nproc) && make install
 
 #
-# build agent
+# 编译 BTCAgent
 #
 mkdir -p /work && cd /work
 git clone https://github.com/btccom/btcagent.git
 cd btcagent
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
-make
+make -j$(nproc)
 
 # 拷贝配置文件
 cp ../src/agent/agent_conf.json .
@@ -110,7 +110,7 @@ cd /work/btcagent/build
 #
 # 启动
 #
-./agent -c agent_conf.json -l log_btcagent
+./btcagent -c agent_conf.json -l log_btcagent
 
 #
 # 停止: `Control+C`停止，或者kill进程号
@@ -185,7 +185,7 @@ cp agent_conf.json agent_conf_3334.json
 ```
 # 启动
 cd /work/btcagent/build
-./agent -c agent_conf_3334.json -l log_btcagent_3334
+./btcagent -c agent_conf_3334.json -l log_btcagent_3334
 ```
 
 如果使用 `supervisor`，则也需要复制一份配置文件：

@@ -31,17 +31,17 @@ Note:
 
 ```
 apt-get update
-apt-get install -y build-essential cmake git
+apt-get install -y build-essential cmake git wget libssl-dev
 
 #
 # install libevent
 #
 mkdir -p /root/source && cd /root/source
-wget https://github.com/libevent/libevent/releases/download/release-2.1.9-beta/libevent-2.1.9-beta.tar.gz
-tar zxvf libevent-2.1.9-beta.tar.gz
-cd libevent-2.1.9-beta
+wget https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz
+tar zxvf libevent-2.1.12-stable.tar.gz
+cd libevent-2.1.12-stable
 ./configure
-make
+make -j$(nproc)
 make install
 
 #
@@ -51,7 +51,7 @@ mkdir -p /root/source && cd /root/source
 wget https://github.com/google/glog/archive/v0.3.5.tar.gz
 tar zxvf v0.3.5.tar.gz
 cd glog-0.3.5
-./configure && make && make install
+./configure && make -j$(nproc) && make install
 
 #
 # build agent
@@ -61,7 +61,7 @@ git clone https://github.com/btccom/btcagent.git
 cd btcagent
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
-make
+make -j$(nproc)
 cp ../src/agent/agent_conf.json .
 mkdir -p log_btcagent
 ```
@@ -99,7 +99,7 @@ cd /work/btcagent/build
 #
 # start
 #
-./agent -c agent_conf.json -l log_btcagent
+./btcagent -c agent_conf.json -l log_btcagent
 
 #
 # stop: `kill` the process pid or use `Control+C`
@@ -152,7 +152,7 @@ cp agent_conf.json agent_conf_3334.json
 ```
 # start
 cd /work/btcagent/build
-./agent -c agent_conf_3334.json -l log_btcagent_3334
+./btcagent -c agent_conf_3334.json -l log_btcagent_3334
 ```
 
 if you use `supervisor`, you need another conf:

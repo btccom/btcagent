@@ -16,12 +16,12 @@ Add ```CmakeInstallDirectory\bin``` to ```PATH``` environment variable.
 
 ### libevent
 
-Libevent [release-2.1.9-beta](https://github.com/libevent/libevent/releases/tag/release-2.1.9-beta) is recommended because the earlier versions have a deadlock issue: [btcpool#75](https://github.com/btccom/btcpool/issues/75).
+Libevent [release-2.1.12-stable](https://github.com/libevent/libevent/releases/tag/release-2.1.12-stable) is recommended because the earlier versions have a deadlock issue: [btcpool#75](https://github.com/btccom/btcpool/issues/75).
 
 ```cmd
-wget https://github.com/libevent/libevent/releases/download/release-2.1.9-beta/libevent-2.1.9-beta.tar.gz
-tar xf libevent-2.1.9-beta.tar.gz
-cd libevent-2.1.9-beta
+wget https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz
+tar xf libevent-2.1.12-stable.tar.gz
+cd libevent-2.1.12-stable
 
 # fix missing files
 cd WIN32-Code
