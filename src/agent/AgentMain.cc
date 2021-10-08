@@ -27,6 +27,8 @@
 
 #ifdef _WIN32
  #include "win32/getopt/getopt.h"
+#else
+ #include <sys/resource.h>
 #endif
 
 StratumServer *gStratumServer = NULL;
@@ -100,6 +102,40 @@ int main(int argc, char **argv) {
 // sending data to a disconnected socket.
 #ifndef _WIN32
   signal(SIGPIPE, SIG_IGN);
+
+  // Increase the upper limit of file descriptors
+  {
+    struct rlimit rlm;
+
+    // Try to increase the soft limit
+    getrlimit(RLIMIT_NOFILE, &rlm);
+    if (rlm.rlim_cur < 65535 && rlm.rlim_cur < rlm.rlim_max) {
+      rlm.rlim_cur = std::min<uint32_t>(rlm.rlim_max, 65535u);
+      setrlimit(RLIMIT_NOFILE, &rlm);
+    }
+
+    // Try to increase the hard limit
+    getrlimit(RLIMIT_NOFILE, &rlm);
+    if (rlm.rlim_cur < 65535 || rlm.rlim_max < 65535) {
+      rlm.rlim_cur = 65535;
+      rlm.rlim_max = 65535;
+      setrlimit(RLIMIT_NOFILE, &rlm);
+    }
+
+    // checking
+    getrlimit(RLIMIT_NOFILE, &rlm);
+    LOG(INFO) << "[OPTION] File descriptor limits: " << rlm.rlim_cur << " / " << rlm.rlim_max << std::endl;
+    if (rlm.rlim_max < 5000) {
+      LOG(ERROR) << "[OPTION] File descriptor hard limit is too small: " << rlm.rlim_max
+        << "! The problem may be solved by executing the following command "
+           "before launching BTCAgent: ulimit -Hn 65535" << std::endl;
+    }
+    if (rlm.rlim_cur < 5000) {
+      LOG(ERROR) << "[OPTION] File descriptor soft limit is too small: " << rlm.rlim_cur
+        << "! The problem may be solved by executing the following command "
+           "before launching BTCAgent: ulimit -Sn 65535" << std::endl;
+    }
+  }
 #endif
 
   try {
@@ -113,6 +149,9 @@ int main(int argc, char **argv) {
       LOG(ERROR) << "parse json config file failure" << std::endl;
       return 1;
     }
+
+    LOG(INFO) << "[OPTION] Connect to pool server with SSL/TLS encryption: "
+              << (conf.poolUseTls_ ? "Enabled" : "Disabled");
 
     LOG(INFO) << "[OPTION] Always keep down connections even if pool disconnected: "
               << (conf.alwaysKeepDownconn_ ? "Enabled" : "Disabled");
