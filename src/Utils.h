@@ -123,6 +123,9 @@ struct AgentConf {
   bool submitResponseFromServer_ = false;
   bool useIpAsWorkerName_ = false;
   bool poolUseTls_ = false;
+#ifdef _WIN32
+  bool useIocp_ = false;
+#endif
   string ipWorkerNameFormat_ = "{1}x{2}x{3}x{4}";
   string fixedWorkerName_;
 };

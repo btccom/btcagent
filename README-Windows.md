@@ -76,9 +76,6 @@ There are ```btcagent``` specific Cmake variables (the values being the default)
 # Static linking VC++ runtime library (/MT)
 POOLAGENT__STATIC_LINKING_VC_LIB:BOOL=OFF
 
-# Use IOCP (I/O Completion Port) replace select() for libevent
-POOLAGENT__USE_IOCP:BOOL=OFF
-
 # Use GLog for logging replace stdout
 POOLAGENT__USE_GLOG:BOOL=OFF
 

@@ -34,24 +34,6 @@ message("-- Build Type: ${CMAKE_BUILD_TYPE} (-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TY
 
 IF(WIN32)
   ###
-  # Use IOCP (I/O Completion Port) replace select() for libevent
-  ###
-  option(POOLAGENT__USE_IOCP "Use IOCP (I/O Completion Port) replace select() for libevent" OFF)
-
-  if(POOLAGENT__USE_IOCP)
-    message("-- Use IOCP (I/O Completion Port) for libevent (-DPOOLAGENT__USE_IOCP=ON)")
-    set(CompilerFlags CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG
-                      CMAKE_CXX_FLAGS_RELEASE CMAKE_C_FLAGS_RELEASE)
-    foreach(CompilerFlag ${CompilerFlags})
-      set(${CompilerFlag} "${${CompilerFlag}} -DUSE_IOCP")
-      message("${CompilerFlag}=${${CompilerFlag}}")
-    endforeach()
-  else()
-    message("-- Use select() for libevent (-DPOOLAGENT__USE_IOCP=OFF)")
-  endif()
-
-
-  ###
   # static linking VC++ runtime library
   ###
   option(POOLAGENT__STATIC_LINKING_VC_LIB "Static linking VC++ runtime library (/MT)" OFF)
@@ -108,7 +90,6 @@ ELSE()
     message("-- Generate Debian/Ubuntu software package: Disabled (-DPOOLAGENT__GENERATE_DEB_PACKAGE=OFF)")
   endif()
 
-  set(POOLAGENT__USE_IOCP OFF)
   set(POOLAGENT__STATIC_LINKING_VC_LIB OFF)
 ENDIF()
 

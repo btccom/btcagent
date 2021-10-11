@@ -25,6 +25,7 @@
 #include <time.h>
 #include <numeric>
 
+#include <event2/thread.h>
 #include <event2/event.h>
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
@@ -33,10 +34,6 @@
 #include <event2/util.h>
 
 #include "ssl/SSLUtils.h"
-
-#if (defined _WIN32 && defined USE_IOCP)
- #include <event2/thread.h>
-#endif
 
 static
 bool tryReadLine(string &line, struct evbuffer *inBuf) {
@@ -637,16 +634,18 @@ bool StratumServer::run() {
       return false;
   }
 
-  #ifdef USE_IOCP
+  if (conf_.useIocp_) {
     // use IOCP for Windows
     evthread_use_windows_threads();
     struct event_config *cfg = event_config_new();
     event_config_set_flag(cfg, EVENT_BASE_FLAG_STARTUP_IOCP);
     base_ = event_base_new_with_config(cfg);
-  #else
+    LOG(INFO) << "[OPTION] Use IOCP (I/O Completion Port) in network communication.";
+  } else {
     // use select() by default
     base_ = event_base_new();
-  #endif
+    LOG(INFO) << "[OPTION] Use select() in network communication.";
+  }
 #else
   base_ = event_base_new();
 #endif
