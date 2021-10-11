@@ -20,7 +20,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <pthread.h>
+#ifndef _WIN32
+ #include <pthread.h>
+#endif
+
 #include <openssl/opensslv.h>
 #include <openssl/ssl.h>
 #include <openssl/crypto.h>

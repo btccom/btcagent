@@ -1,7 +1,10 @@
 cmake_minimum_required (VERSION 3.1)
 
 project (PoolAgent)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+
+IF(NOT CMAKE_TOOLCHAIN_FILE)
+  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+ENDIF()
 
 SET(CMAKE_CXX_STANDARD 11)
 SET(CMAKE_C_STANDARD 99)
@@ -29,7 +32,7 @@ endif()
 message("-- Build Type: ${CMAKE_BUILD_TYPE} (-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
 
 
-IF (CMAKE_SYSTEM_NAME MATCHES "Windows")
+IF(WIN32)
   ###
   # Use IOCP (I/O Completion Port) replace select() for libevent
   ###
@@ -149,14 +152,30 @@ endif()
 
 if(POOLAGENT__USE_GLOG)
   find_package(Glog REQUIRED)
+  if (CMAKE_TOOLCHAIN_FILE AND NOT GLOG_LIBRARIES)
+    set(GLOG_LIBRARIES glog::glog)
+  endif()
 endif()
 
 find_package(OpenSSL REQUIRED)
+if (CMAKE_TOOLCHAIN_FILE AND NOT OPENSSL_SSL_LIBRARY)
+  set(OPENSSL_SSL_LIBRARY OpenSSL::SSL)
+endif()
+if (CMAKE_TOOLCHAIN_FILE AND NOT OPENSSL_CRYPTO_LIBRARY)
+  set(OPENSSL_CRYPTO_LIBRARY OpenSSL::Crypto)
+endif()
+
 find_package(LibEvent REQUIRED)
+if (CMAKE_TOOLCHAIN_FILE AND NOT LIBEVENT_LIB)
+  set(LIBEVENT_LIB libevent::core libevent::extra)
+endif()
+if (CMAKE_TOOLCHAIN_FILE AND NOT LIBEVENT_OPENSSL_LIB)
+  set(LIBEVENT_OPENSSL_LIB libevent::openssl)
+endif()
 
 include_directories(src test ${GLOG_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR} ${LIBEVENT_INCLUDE_DIR})
 set(THRID_LIBRARIES ${GLOG_LIBRARIES} ${LIBEVENT_LIB} ${LIBEVENT_OPENSSL_LIB} ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
-IF (CMAKE_SYSTEM_NAME MATCHES "Windows")
+IF(WIN32)
   set(THRID_LIBRARIES ${THRID_LIBRARIES} ws2_32)
 ELSE()
   set(THRID_LIBRARIES ${THRID_LIBRARIES} pthread)
@@ -172,12 +191,14 @@ add_executable(unittest ${TEST_SOURCES})
 target_link_libraries(unittest btccomagent ${THRID_LIBRARIES})
 
 file(GLOB_RECURSE AGENT_SOURCES src/agent/*.*)
-IF (CMAKE_SYSTEM_NAME MATCHES "Windows")
+IF(WIN32)
   file(GLOB_RECURSE AGENT_SOURCES ${AGENT_SOURCES} src/win32/getopt/*.*)
 ENDIF()
 add_executable(btcagent ${AGENT_SOURCES})
 target_link_libraries(btcagent btccomagent ${THRID_LIBRARIES})
 
+message("include_directories: ${GLOG_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR} ${LIBEVENT_INCLUDE_DIR}")
+message("THRID_LIBRARIES: ${THRID_LIBRARIES}")
 
 # make instal support
 IF(POOLAGENT__GENERATE_DEB_PACKAGE)
