@@ -31,7 +31,7 @@ BtcAgent是定制的高效的专用矿池代理系统。其采用了自定义[�
 
 ## 安装
 
-* 操作系统: `Ubuntu 14.04 LTS, 64 Bits`
+* 操作系统: `Ubuntu 20.04 LTS, 64 Bits`
   * 嵌入式平台编译请参考：[嵌入式平台交叉编译](README-EmbeddedSystem.md)
 
 ```

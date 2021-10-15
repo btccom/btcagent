@@ -2,7 +2,7 @@
 
 ## Cross Build
 
-* OS: `Ubuntu 14.04 LTS, 64 Bits`
+* OS: `Ubuntu 20.04 LTS, 64 Bits`
 
 ```
 apt-get update
@@ -13,6 +13,12 @@ apt-get install -y build-essential cmake git wget libssl-dev
 #
 wget http://downloads.openwrt.org.cn/PandoraBox/PandoraBox-Toolchain-ralink-for-mipsel_24kec+dsp-gcc-4.8-linaro_uClibc-0.9.33.2.tar.bz2
 tar zxvf PandoraBox-Toolchain-ralink-for-mipsel_24kec+dsp-gcc-4.8-linaro_uClibc-0.9.33.2.tar.bz2
+
+#
+# cross build openssl
+#
+TODO: finish this.
+Please complete this step yourself.
 
 #
 # cross build libevent

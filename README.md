@@ -26,7 +26,7 @@ Note:
 
 ## Install
 
-* OS: `Ubuntu 14.04 LTS, 64 Bits`
+* OS: `Ubuntu 20.04 LTS, 64 Bits`
   * if you want build on Embedded System like open-wrt/dd-wrt/PandoraBox, please see: [build for Embedded System](README-EmbeddedSystem.md)
 
 ```
