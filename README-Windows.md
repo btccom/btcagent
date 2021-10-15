@@ -82,6 +82,9 @@ config json file example:
 }
 ```
 
+Config file Details: [ConfigFileDetails.md](ConfigFileDetails.md).
+配置文件详解：[ConfigFileDetails-zhCN.md](ConfigFileDetails-zhCN.md)
+
 run:
 ```cmd
 btcagent.exe -c agent_conf.json
