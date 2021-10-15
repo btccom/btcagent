@@ -74,8 +74,9 @@ mkdir -p log_btcagent
     "agent_listen_port": 3333,
     "pool_use_tls": false,
     "pools": [
-        ["us.ss.btc.com", 1800, "testus"],
-        ["us.ss.btc.com", 443, "testus"]
+        ["us.ss.btc.com", 1800, "YourSubAccountName"],
+        ["us.ss.btc.com", 443, "YourSubAccountName"],
+        ["us.ss.btc.com", 3333, "YourSubAccountName"]
     ]
 }
 ```
@@ -91,6 +92,8 @@ mkdir -p log_btcagent
 * `pools`: pools settings which Agent will connect. You can put serval pool's settings here.
 
   * `["<stratum_server_host>", <stratum_server_port>, "<pool_username>"]`
+
+More details see [ConfigFileDetails.md](ConfigFileDetails.md).
 
 **start / stop**
 
@@ -144,7 +147,7 @@ cp agent_conf.json agent_conf_3334.json
     "agent_listen_port": 3334,
     "pool_use_tls": false,
     "pools": [
-        ["us.ss.btc.com", 1800, "testus3334"]
+        ["us.ss.btc.com", 1800, "YourSubAccountName2"]
     ]
 }
 ```

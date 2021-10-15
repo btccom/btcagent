@@ -83,8 +83,9 @@ mkdir -p log_btcagent
     "agent_listen_port": 3333,
     "pool_use_tls": false,
     "pools": [
-        ["cn.ss.btc.com", 1800, "testpool"],
-        ["cn.ss.btc.com", 1800, "testpool"]
+        ["us.ss.btc.com", 1800, "YourSubAccountName"],
+        ["us.ss.btc.com", 443, "YourSubAccountName"],
+        ["us.ss.btc.com", 3333, "YourSubAccountName"]
     ]
 }
 ```
@@ -102,6 +103,8 @@ mkdir -p log_btcagent
   * 服务器, 端口, 用户名
 
 **注意**：矿机的用户会被自动替换为agent配置里的用户名，例如矿机为 `john.a001`，则在矿池端为：`kevin.a001`，矿机名称保持不变。
+
+配置文件详解：[ConfigFileDetails-zhCN.md](ConfigFileDetails-zhCN.md)
 
 **启动 / 停止**
 
@@ -177,7 +180,7 @@ cp agent_conf.json agent_conf_3334.json
     "agent_listen_port": 3334,
     "pool_use_tls": false,
     "pools": [
-        ["cn.ss.btc.com", 1800, "testpool3334"]
+        ["us.ss.btc.com", 1800, "YourSubAccountName2"]
     ]
 }
 ```

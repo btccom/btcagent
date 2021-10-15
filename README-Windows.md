@@ -75,8 +75,9 @@ config json file example:
     "agent_listen_port": 3333,
     "pool_use_tls": false,
     "pools": [
-        ["us.ss.btc.com", 1800, "kevin"],
-        ["us.ss.btc.com", 1800, "kevin"]
+        ["us.ss.btc.com", 1800, "YourSubAccountName"],
+        ["us.ss.btc.com", 443, "YourSubAccountName"],
+        ["us.ss.btc.com", 3333, "YourSubAccountName"]
     ]
 }
 ```

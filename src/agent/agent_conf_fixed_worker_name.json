@@ -11,8 +11,8 @@
     "use_iocp": false,
     "fixed_worker_name": "myworker",
     "pools": [
-        ["cn.ss.btc.com", 1800, "testpool"],
-        ["cn.ss.btc.com", 443, "testpool"],
-        ["cn.ss.btc.com", 3333, "testpool"]
+        ["us.ss.btc.com", 1800, "YourSubAccountName"],
+        ["us.ss.btc.com", 443, "YourSubAccountName"],
+        ["us.ss.btc.com", 3333, "YourSubAccountName"]
     ]
 }
