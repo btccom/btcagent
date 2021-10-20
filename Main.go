@@ -29,4 +29,8 @@ func main() {
 
 	configBytes, _ := json.Marshal(configData)
 	glog.Info("config: ", string(configBytes))
+
+	// 运行代理
+	manager := NewStratumSessionManager(&configData)
+	manager.Run()
 }
