@@ -1,0 +1,9 @@
+# binary
+btcagent
+
+# ide dir
+.vscode/
+
+# build dir
+build/
+
