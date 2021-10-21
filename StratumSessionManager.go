@@ -60,5 +60,6 @@ func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
 		return
 	}
 
-	glog.Info("miner connected, sessionId: ", sessionID, ", IP: ", conn.RemoteAddr())
+	session := NewStratumSession(manager, conn, sessionID)
+	session.Run()
 }
