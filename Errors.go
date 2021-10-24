@@ -35,19 +35,19 @@ func (err *StratumError) ToJSONRPCArray(extData interface{}) JSONRPCArray {
 
 var (
 	// ErrBufIOReadTimeout 从bufio.Reader中读取数据时超时
-	ErrBufIOReadTimeout = errors.New("BufIO Read Timeout")
+	ErrBufIOReadTimeout = errors.New("bufIO read timeout")
 	// ErrSessionIDFull SessionID已满（所有可用值均已分配）
-	ErrSessionIDFull = errors.New("Session ID is Full")
+	ErrSessionIDFull = errors.New("session id is full")
 	// ErrSessionIDOccupied SessionID已被占用（恢复SessionID时）
-	ErrSessionIDOccupied = errors.New("Session ID has been occupied")
+	ErrSessionIDOccupied = errors.New("session id has been occupied")
 	// ErrParseSubscribeResponseFailed 解析订阅响应失败
-	ErrParseSubscribeResponseFailed = errors.New("Parse Subscribe Response Failed")
+	ErrParseSubscribeResponseFailed = errors.New("parse subscribe response failed")
 	// ErrSessionIDInconformity 返回的会话ID和当前保存的不匹配
-	ErrSessionIDInconformity = errors.New("Session ID Inconformity")
+	ErrSessionIDInconformity = errors.New("session id inconformity")
 	// ErrAuthorizeFailed 认证失败
-	ErrAuthorizeFailed = errors.New("Authorize Failed")
+	ErrAuthorizeFailed = errors.New("authorize failed")
 	// ErrTooMuchPendingAutoRegReq 太多等待中的自动注册请求
-	ErrTooMuchPendingAutoRegReq = errors.New("Too much pending auto reg request")
+	ErrTooMuchPendingAutoRegReq = errors.New("too much pending auto reg request")
 )
 
 var (
@@ -73,13 +73,13 @@ var (
 
 var (
 	// ErrReadFailed IO读错误
-	ErrReadFailed = errors.New("Read Failed")
+	ErrReadFailed = errors.New("read failed")
 	// ErrWriteFailed IO写错误
-	ErrWriteFailed = errors.New("Write Failed")
+	ErrWriteFailed = errors.New("write failed")
 	// ErrInvalidReader 非法Reader
-	ErrInvalidReader = errors.New("Invalid Reader")
+	ErrInvalidReader = errors.New("invalid reader")
 	// ErrInvalidWritter 非法Writter
-	ErrInvalidWritter = errors.New("Invalid Writter")
+	ErrInvalidWritter = errors.New("invalid writter")
 	// ErrInvalidBuffer 非法Buffer
-	ErrInvalidBuffer = errors.New("Invalid Buffer")
+	ErrInvalidBuffer = errors.New("invalid buffer")
 )

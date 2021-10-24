@@ -10,39 +10,19 @@ import (
 	"github.com/golang/glog"
 )
 
-// AuthorizeStat 认证状态
-type AuthorizeStat uint8
-
-const (
-	// StatConnected 已连接（默认状态）
-	StatConnected AuthorizeStat = iota
-	// StatSubScribed 已订阅
-	StatSubScribed
-	// StatAuthorized 已认证
-	StatAuthorized
-	// StatDisconnected 已断开
-	StatDisconnected
-)
-
 type StratumSession struct {
-	// 会话管理器
-	manager *StratumSessionManager
-	// 会话ID
-	sessionID uint32
-	// 到矿机的TCP连接
-	clientConn net.Conn
-	// 读取矿机发送的内容
-	clientReader *bufio.Reader
-	// 认证状态
-	stat AuthorizeStat
+	manager      *StratumSessionManager // 会话管理器
+	sessionID    uint32                 // 会话ID
+	clientConn   net.Conn               // 到矿机的TCP连接
+	clientReader *bufio.Reader          // 读取矿机发送的内容
+	stat         AuthorizeStat          // 认证状态
 
 	userAgent      string // 矿机User-Agent
 	fullWorkerName string // 完整的矿工名
 	subAccountName string // 子账户名部分
 	minerName      string // 矿机名部分
 
-	// 比特币版本掩码(用于AsicBoost)
-	versionMask uint32
+	versionMask uint32 // 比特币版本掩码(用于AsicBoost)
 }
 
 // NewStratumSession 创建一个新的 Stratum 会话
