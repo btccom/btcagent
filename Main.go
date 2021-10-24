@@ -30,6 +30,10 @@ func main() {
 	configBytes, _ := json.Marshal(configData)
 	glog.Info("config: ", string(configBytes))
 
+	// for test only
+	up := NewUpSession(configData.Pools[0].SubAccount, &configData)
+	up.Run()
+
 	// 运行代理
 	manager := NewStratumSessionManager(&configData)
 	manager.Run()

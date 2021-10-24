@@ -82,4 +82,6 @@ var (
 	ErrInvalidWritter = errors.New("invalid writter")
 	// ErrInvalidBuffer 非法Buffer
 	ErrInvalidBuffer = errors.New("invalid buffer")
+	// ErrConnectionClosed 连接已关闭
+	ErrConnectionClosed = errors.New("connection closed")
 )

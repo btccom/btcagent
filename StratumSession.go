@@ -92,7 +92,7 @@ func (session *StratumSession) handleRequest() {
 
 func (session *StratumSession) writeJSONResponseToClient(jsonData *JSONRPCResponse) (int, error) {
 	if session.stat == StatDisconnected {
-		return 0, nil
+		return 0, ErrConnectionClosed
 	}
 
 	bytes, err := jsonData.ToJSONBytesLine()
