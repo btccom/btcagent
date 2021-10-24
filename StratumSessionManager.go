@@ -26,7 +26,7 @@ func (manager *StratumSessionManager) Run() {
 	var err error
 
 	// 初始化会话管理器
-	manager.sessionIDManager, err = NewSessionIDManager(32)
+	manager.sessionIDManager, err = NewSessionIDManager(0xfffe)
 	if err != nil {
 		glog.Fatal("NewSessionIDManager failed: ", err)
 		return
