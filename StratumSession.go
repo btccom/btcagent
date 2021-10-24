@@ -95,13 +95,11 @@ func (session *StratumSession) writeJSONResponseToClient(jsonData *JSONRPCRespon
 		return 0, nil
 	}
 
-	bytes, err := jsonData.ToJSONBytes(1)
-
+	bytes, err := jsonData.ToJSONBytesLine()
 	if err != nil {
 		return 0, err
 	}
 
-	defer session.clientConn.Write([]byte{'\n'})
 	return session.clientConn.Write(bytes)
 }
 

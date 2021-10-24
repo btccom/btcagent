@@ -97,6 +97,14 @@ func (rpcData *JSONRPCRequest) ToJSONBytes() ([]byte, error) {
 	return json.Marshal(rpcData)
 }
 
+func (rpcData *JSONRPCRequest) ToJSONBytesLine() (bytes []byte, err error) {
+	bytes, err = rpcData.ToJSONBytes()
+	if err == nil {
+		bytes = append(bytes, '\n')
+	}
+	return
+}
+
 // NewJSONRPCResponse 解析 JSON RPC 响应字符串并创建 JSONRPCResponse 对象
 func NewJSONRPCResponse(rpcJSON []byte) (*JSONRPCResponse, error) {
 	rpcData := new(JSONRPCResponse)
@@ -112,11 +120,19 @@ func (rpcData *JSONRPCResponse) SetResult(result interface{}) {
 }
 
 // ToJSONBytes 将 JSONRPCResponse 对象转换为 JSON 字节序列
-func (rpcData *JSONRPCResponse) ToJSONBytes(version int) ([]byte, error) {
-	if version == 1 {
-		return json.Marshal(rpcData)
-	}
+func (rpcData *JSONRPCResponse) ToJSONBytes() ([]byte, error) {
+	return json.Marshal(rpcData)
+}
 
+func (rpcData *JSONRPCResponse) ToJSONBytesLine() (bytes []byte, err error) {
+	bytes, err = rpcData.ToJSONBytes()
+	if err == nil {
+		bytes = append(bytes, '\n')
+	}
+	return
+}
+
+func (rpcData *JSONRPCResponse) ToRPC2JSONBytes() ([]byte, error) {
 	rpc2Data := JSONRPC2Response{rpcData.ID, "2.0", rpcData.Result, NewJSONRPC2Error(rpcData.Error)}
 	return json.Marshal(rpc2Data)
 }
