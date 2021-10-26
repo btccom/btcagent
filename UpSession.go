@@ -25,9 +25,10 @@ type UpSession struct {
 	serverCapsSubRes bool
 }
 
-func NewUpSession(subAccount string, configData *ConfigData) (up *UpSession) {
+func NewUpSession(subAccount string, poolIndex int, configData *ConfigData) (up *UpSession) {
 	up = new(UpSession)
 	up.subAccount = subAccount
+	up.poolIndex = poolIndex
 	up.configData = configData
 	up.stat = StatDisconnected
 	return
@@ -37,7 +38,6 @@ func (up *UpSession) Connect() (err error) {
 	up.stat = StatConnecting
 
 	pool := up.configData.Pools[up.poolIndex]
-	up.poolIndex++
 
 	url := fmt.Sprintf("%s:%d", pool.Host, pool.Port)
 	up.serverConn, err = net.DialTimeout("tcp", url, UpSessionDialTimeout)
@@ -108,6 +108,10 @@ func (up *UpSession) close() {
 }
 
 func (up *UpSession) IP() string {
+	if up.serverConn == nil {
+		pool := up.configData.Pools[up.poolIndex]
+		return fmt.Sprintf("%s:%d", pool.Host, pool.Port)
+	}
 	return up.serverConn.RemoteAddr().String()
 }
 

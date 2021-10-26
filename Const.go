@@ -19,3 +19,6 @@ const UpSessionUserAgent = "btccom-agent/2.0.0-mu"
 
 // ex-message的magic number
 const ExMessageMagicNumber = 0x7F
+
+// UpSessionNumPerSubAccount 每个子账户的矿池连接数量
+const UpSessionNumPerSubAccount = 5

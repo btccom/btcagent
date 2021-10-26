@@ -31,7 +31,7 @@ func main() {
 	glog.Info("config: ", string(configBytes))
 
 	// for test only
-	up := NewUpSession(configData.Pools[0].SubAccount, &configData)
+	up := NewUpSessionManager(configData.Pools[0].SubAccount, &configData)
 	up.Run()
 
 	// 运行代理
