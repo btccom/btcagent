@@ -36,20 +36,21 @@ func (manager *UpSessionManager) Run() {
 		go manager.connect(i)
 	}
 
-	go manager.handleEvent()
+	manager.handleEvent()
 }
 
 func (manager *UpSessionManager) connect(slot int) {
-	info := &manager.upSessions[slot]
 	for i := range manager.config.Pools {
-		info.upSession = NewUpSession(manager.subAccount, i, manager.config)
-		info.upSession.Run()
+		session := NewUpSession(manager, manager.config, manager.subAccount, i)
+		session.Init()
 
-		if info.upSession.stat == StatAuthorized {
-			manager.SendEvent(EventUpStreamReady{slot})
+		if session.stat == StatAuthorized {
+			go session.Run()
+			manager.SendEvent(EventUpSessionReady{slot, session})
 			break
 		}
 	}
+	manager.SendEvent(EventUpSessionInitFailed{slot})
 }
 
 func (manager *UpSessionManager) SendEvent(event interface{}) {
@@ -60,11 +61,7 @@ func (manager *UpSessionManager) AddStratumSession(session *StratumSession) {
 	manager.SendEvent(EventAddStratumSession{session})
 }
 
-func (manager *UpSessionManager) upStreamReady(slot int) {
-	manager.upSessions[slot].ready = true
-}
-
-func (manager *UpSessionManager) addStratumSession(session *StratumSession) {
+func (manager *UpSessionManager) addStratumSession(e EventAddStratumSession) {
 	var selected *UpSessionInfo
 
 	// 寻找连接数最少的服务器
@@ -77,13 +74,29 @@ func (manager *UpSessionManager) addStratumSession(session *StratumSession) {
 
 	// 服务器均未就绪，1秒后重试
 	if selected == nil {
+		glog.Warning("Cannot find a ready pool connection for miner ", e.Session.ID(), "! Retry in 1 seconds.")
 		go func() {
 			time.Sleep(1 * time.Second)
-			manager.SendEvent(EventAddStratumSession{session})
+			manager.SendEvent(e)
 		}()
 		return
 	}
 
+	selected.upSession.AddStratumSession(e.Session)
+}
+
+func (manager *UpSessionManager) upSessionReady(e EventUpSessionReady) {
+	info := &manager.upSessions[e.Slot]
+	info.upSession = e.Session
+	info.ready = true
+}
+
+func (manager *UpSessionManager) upSessionInitFailed(e EventUpSessionInitFailed) {
+	glog.Error("Failed to connect to all ", len(manager.config.Pools), " pool servers, please check your configuration! Retry in 5 seconds.")
+	go func() {
+		time.Sleep(5 * time.Second)
+		manager.connect(e.Slot)
+	}()
 }
 
 func (manager *UpSessionManager) handleEvent() {
@@ -91,10 +104,12 @@ func (manager *UpSessionManager) handleEvent() {
 		event := <-manager.eventChannel
 
 		switch e := event.(type) {
-		case EventUpStreamReady:
-			manager.upStreamReady(e.Slot)
+		case EventUpSessionReady:
+			manager.upSessionReady(e)
+		case EventUpSessionInitFailed:
+			manager.upSessionInitFailed(e)
 		case EventAddStratumSession:
-			manager.addStratumSession(e.Session)
+			manager.addStratumSession(e)
 		case EventApplicationExit:
 		default:
 			glog.Error("Unknown event: ", event)

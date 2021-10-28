@@ -14,11 +14,14 @@ type StratumSessionManager struct {
 	tcpListener net.Listener
 	// 会话ID管理器
 	sessionIDManager *SessionIDManager
+	// map[子账户名]矿池会话管理器
+	upSessionManagers map[string]*UpSessionManager
 }
 
 func NewStratumSessionManager(config *Config) (manager *StratumSessionManager) {
 	manager = new(StratumSessionManager)
 	manager.config = config
+	manager.upSessionManagers = make(map[string]*UpSessionManager)
 	return
 }
 
@@ -61,5 +64,17 @@ func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
 	}
 
 	session := NewStratumSession(manager, conn, sessionID)
-	session.Run()
+	session.Init()
+	if session.stat != StatAuthorized {
+		// 认证失败，放弃连接
+		return
+	}
+
+	upManager, ok := manager.upSessionManagers[session.fullWorkerName]
+	if !ok {
+		upManager = NewUpSessionManager(session.subAccountName, manager.config)
+		go upManager.Run()
+		manager.upSessionManagers[session.fullWorkerName] = upManager
+	}
+	upManager.AddStratumSession(session)
 }

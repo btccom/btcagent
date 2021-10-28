@@ -12,6 +12,7 @@ import (
 
 type StratumSession struct {
 	manager      *StratumSessionManager // 会话管理器
+	upSession    *UpSession             // 所属的服务器会话
 	sessionID    uint32                 // 会话ID
 	clientConn   net.Conn               // 到矿机的TCP连接
 	clientReader *bufio.Reader          // 读取矿机发送的内容
@@ -38,7 +39,7 @@ func NewStratumSession(manager *StratumSessionManager, clientConn net.Conn, sess
 	return
 }
 
-func (session *StratumSession) Run() {
+func (session *StratumSession) Init() {
 	for session.stat != StatAuthorized && session.stat != StatDisconnected {
 		session.handleRequest()
 	}
@@ -51,6 +52,13 @@ func (session *StratumSession) close() {
 
 func (session *StratumSession) IP() string {
 	return session.clientConn.RemoteAddr().String()
+}
+
+func (session *StratumSession) ID() string {
+	if session.stat == StatAuthorized {
+		return fmt.Sprintf("%s@%s", session.fullWorkerName, session.IP())
+	}
+	return session.IP()
 }
 
 func (session *StratumSession) handleRequest() {
@@ -228,4 +236,8 @@ func (session *StratumSession) parseConfigureRequest(request *JSONRPCRequest) (r
 
 func (session *StratumSession) versionMaskStr() string {
 	return fmt.Sprintf("%08x", session.versionMask)
+}
+
+func (session *StratumSession) SetUpSession(upSession *UpSession) {
+	session.upSession = upSession
 }

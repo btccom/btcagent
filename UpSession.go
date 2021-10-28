@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
 	"net"
 	"strconv"
@@ -10,12 +11,16 @@ import (
 )
 
 type UpSession struct {
+	manager *UpSessionManager
+	config  *Config
+
 	subAccount string
-	config     *Config
 	poolIndex  int
 
+	stratumSessions map[uint32]*StratumSession
 	serverConn      net.Conn
 	serverReader    *bufio.Reader
+
 	stat            AuthorizeStat
 	sessionID       uint32
 	versionMask     uint32
@@ -23,18 +28,22 @@ type UpSession struct {
 
 	serverCapsVerRol bool
 	serverCapsSubRes bool
+
+	eventChannel chan interface{}
 }
 
-func NewUpSession(subAccount string, poolIndex int, config *Config) (up *UpSession) {
+func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, poolIndex int) (up *UpSession) {
 	up = new(UpSession)
+	up.manager = manager
+	up.config = config
 	up.subAccount = subAccount
 	up.poolIndex = poolIndex
-	up.config = config
+	up.stratumSessions = make(map[uint32]*StratumSession)
 	up.stat = StatDisconnected
 	return
 }
 
-func (up *UpSession) Connect() (err error) {
+func (up *UpSession) connect() (err error) {
 	up.stat = StatConnecting
 
 	pool := up.config.Pools[up.poolIndex]
@@ -64,7 +73,7 @@ func (up *UpSession) writeJSONRequestToServer(jsonData *JSONRPCRequest) (int, er
 	return up.serverConn.Write(bytes)
 }
 
-func (up *UpSession) SendRequest() (err error) {
+func (up *UpSession) initSendRequest() (err error) {
 	var request JSONRPCRequest
 
 	request.ID = "sub"
@@ -115,7 +124,7 @@ func (up *UpSession) IP() string {
 	return up.serverConn.RemoteAddr().String()
 }
 
-func (up *UpSession) handleResponse() {
+func (up *UpSession) initHandleResponse() {
 	magicNum, err := up.serverReader.Peek(1)
 	if err != nil {
 		glog.Error("peek failed, server: ", up.IP(), ", error: ", err.Error())
@@ -123,17 +132,44 @@ func (up *UpSession) handleResponse() {
 		return
 	}
 	if magicNum[0] == ExMessageMagicNumber {
-		up.readExMessage()
+		up.initReadExMessage()
 	} else {
-		up.readLine()
+		up.initReadLine()
 	}
 }
 
-func (up *UpSession) readExMessage() {
-	glog.Info("readExMessage: stub")
+func (up *UpSession) initReadExMessage() {
+	// ex-message:
+	//   magic_number	uint8_t		magic number for Ex-Message, always 0x7F
+	//   type/cmd		uint8_t		message type
+	//   length			uint16_t	message length (include header self)
+	//   message_body	uint8_t[]	message body
+	header, err := up.serverReader.ReadBytes(4)
+	if err != nil {
+		glog.Error("read ex-message failed, server: ", up.IP(), ", error: ", err.Error())
+		up.close()
+		return
+	}
+	len := binary.LittleEndian.Uint16(header[2:])
+	if len < 4 {
+		glog.Warning("Broken ex-message from server: ", up.IP(), ", content: ", header)
+		up.close()
+		return
+	}
+
+	len -= 4 // len 包括 header 的长度 4 字节，所以减 4
+	if len > 0 {
+		// 初始化阶段不处理 ex-message，所以 Discard 掉
+		_, err = up.serverReader.Discard(int(len))
+		if err != nil {
+			glog.Error("read ex-message failed, server: ", up.IP(), ", error: ", err.Error())
+			up.close()
+			return
+		}
+	}
 }
 
-func (up *UpSession) readLine() {
+func (up *UpSession) initReadLine() {
 	jsonBytes, err := up.serverReader.ReadBytes('\n')
 	if err != nil {
 		glog.Error("read line failed, server: ", up.IP(), ", error: ", err.Error())
@@ -151,11 +187,11 @@ func (up *UpSession) readLine() {
 
 	if len(rpcData.Method) > 0 {
 		switch rpcData.Method {
-		case "mining.notify":
-			up.handleNotify(rpcData, jsonBytes)
 		case "mining.set_version_mask":
 			up.handleSetVersionMask(rpcData, jsonBytes)
 		case "mining.set_difficulty":
+			// ignore
+		case "mining.notify":
 			// ignore
 		default:
 			glog.Info("[TODO] pool request: ", rpcData)
@@ -177,14 +213,14 @@ func (up *UpSession) readLine() {
 	}
 }
 
-func (up *UpSession) Run() {
-	err := up.Connect()
+func (up *UpSession) Init() {
+	err := up.connect()
 	if err != nil {
 		glog.Error("connect failed, server: ", up.IP(), ", error: ", err.Error())
 		return
 	}
 
-	err = up.SendRequest()
+	err = up.initSendRequest()
 	if err != nil {
 		glog.Error("write JSON request failed, server: ", up.IP(), ", error: ", err.Error())
 		up.close()
@@ -192,12 +228,8 @@ func (up *UpSession) Run() {
 	}
 
 	for up.stat != StatAuthorized && up.stat != StatDisconnected && up.stat != StatConnecting {
-		up.handleResponse()
+		up.initHandleResponse()
 	}
-}
-
-func (up *UpSession) handleNotify(rpcData *JSONRPCLine, jsonBytes []byte) {
-	glog.Info("[TODO] pool nootify: ", rpcData)
 }
 
 func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte) {
@@ -295,8 +327,39 @@ func (up *UpSession) handleAuthorizeResponse(rpcData *JSONRPCLine, jsonBytes []b
 	result, ok := rpcData.Result.(bool)
 	if !ok || !result {
 		glog.Error("authorize failed, server: ", up.IP(), ", sub-account: ", up.subAccount, ", error: ", rpcData.Error)
+		up.close()
 		return
 	}
 	glog.Info("authorize success, server: ", up.IP(), ", sub-account: ", up.subAccount)
 	up.stat = StatAuthorized
+}
+
+func (up *UpSession) Run() {
+	up.handleEvent()
+}
+
+func (up *UpSession) SendEvent(event interface{}) {
+	up.eventChannel <- event
+}
+
+func (up *UpSession) AddStratumSession(session *StratumSession) {
+	up.SendEvent(EventAddStratumSession{session})
+}
+
+func (up *UpSession) addStratumSession(e EventAddStratumSession) {
+	up.stratumSessions[e.Session.sessionID] = e.Session
+	e.Session.SetUpSession(up)
+}
+
+func (up *UpSession) handleEvent() {
+	for {
+		event := <-up.eventChannel
+
+		switch e := event.(type) {
+		case EventAddStratumSession:
+			up.addStratumSession(e)
+		default:
+			glog.Error("Unknown event: ", e)
+		}
+	}
 }
