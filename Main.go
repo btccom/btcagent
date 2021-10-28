@@ -20,21 +20,21 @@ func main() {
 	}
 
 	// 读取配置文件
-	var configData ConfigData
-	err := configData.LoadFromFile(*configFilePath)
+	var config Config
+	err := config.LoadFromFile(*configFilePath)
 	if err != nil {
 		glog.Fatal("load config failed: ", err)
 		return
 	}
 
-	configBytes, _ := json.Marshal(configData)
+	configBytes, _ := json.Marshal(config)
 	glog.Info("config: ", string(configBytes))
 
 	// for test only
-	up := NewUpSessionManager(configData.Pools[0].SubAccount, &configData)
+	up := NewUpSessionManager(config.Pools[0].SubAccount, &config)
 	up.Run()
 
 	// 运行代理
-	manager := NewStratumSessionManager(&configData)
+	manager := NewStratumSessionManager(&config)
 	manager.Run()
 }

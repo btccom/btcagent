@@ -9,16 +9,16 @@ import (
 
 type StratumSessionManager struct {
 	// 配置
-	configData *ConfigData
+	config *Config
 	// TCP监听对象
 	tcpListener net.Listener
 	// 会话ID管理器
 	sessionIDManager *SessionIDManager
 }
 
-func NewStratumSessionManager(configData *ConfigData) (manager *StratumSessionManager) {
+func NewStratumSessionManager(config *Config) (manager *StratumSessionManager) {
 	manager = new(StratumSessionManager)
-	manager.configData = configData
+	manager.config = config
 	return
 }
 
@@ -33,7 +33,7 @@ func (manager *StratumSessionManager) Run() {
 	}
 
 	// TCP监听
-	listenAddr := fmt.Sprintf("%s:%d", manager.configData.AgentListenIp, manager.configData.AgentListenPort)
+	listenAddr := fmt.Sprintf("%s:%d", manager.config.AgentListenIp, manager.config.AgentListenPort)
 	glog.Info("startup is successful, listening: ", listenAddr)
 	manager.tcpListener, err = net.Listen("tcp", listenAddr)
 	if err != nil {

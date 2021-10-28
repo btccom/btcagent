@@ -38,7 +38,7 @@ func (r *PoolInfo) MarshalJSON() ([]byte, error) {
 	return json.Marshal([]interface{}{r.Host, r.Port, r.SubAccount})
 }
 
-type ConfigData struct {
+type Config struct {
 	AgentType                   string     `json:"agent_type"`
 	AlwaysKeepDownconn          bool       `json:"always_keep_downconn"`
 	DisconnectWhenLostAsicboost bool       `json:"disconnect_when_lost_asicboost"`
@@ -54,7 +54,7 @@ type ConfigData struct {
 }
 
 // LoadFromFile 从文件载入配置
-func (conf *ConfigData) LoadFromFile(file string) (err error) {
+func (conf *Config) LoadFromFile(file string) (err error) {
 	configJSON, err := ioutil.ReadFile(file)
 	if err != nil {
 		return

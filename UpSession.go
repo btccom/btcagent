@@ -11,7 +11,7 @@ import (
 
 type UpSession struct {
 	subAccount string
-	configData *ConfigData
+	config     *Config
 	poolIndex  int
 
 	serverConn      net.Conn
@@ -25,11 +25,11 @@ type UpSession struct {
 	serverCapsSubRes bool
 }
 
-func NewUpSession(subAccount string, poolIndex int, configData *ConfigData) (up *UpSession) {
+func NewUpSession(subAccount string, poolIndex int, config *Config) (up *UpSession) {
 	up = new(UpSession)
 	up.subAccount = subAccount
 	up.poolIndex = poolIndex
-	up.configData = configData
+	up.config = config
 	up.stat = StatDisconnected
 	return
 }
@@ -37,7 +37,7 @@ func NewUpSession(subAccount string, poolIndex int, configData *ConfigData) (up 
 func (up *UpSession) Connect() (err error) {
 	up.stat = StatConnecting
 
-	pool := up.configData.Pools[up.poolIndex]
+	pool := up.config.Pools[up.poolIndex]
 
 	url := fmt.Sprintf("%s:%d", pool.Host, pool.Port)
 	up.serverConn, err = net.DialTimeout("tcp", url, UpSessionDialTimeout)
@@ -109,7 +109,7 @@ func (up *UpSession) close() {
 
 func (up *UpSession) IP() string {
 	if up.serverConn == nil {
-		pool := up.configData.Pools[up.poolIndex]
+		pool := up.config.Pools[up.poolIndex]
 		return fmt.Sprintf("%s:%d", pool.Host, pool.Port)
 	}
 	return up.serverConn.RemoteAddr().String()
@@ -286,7 +286,7 @@ func (up *UpSession) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []byt
 	if !up.serverCapsVerRol {
 		glog.Warning("[WARNING] pool server ", up.IP(), " does not support ASICBoost")
 	}
-	if up.configData.SubmitResponseFromServer && !up.serverCapsSubRes {
+	if up.config.SubmitResponseFromServer && !up.serverCapsSubRes {
 		glog.Warning("[WARNING] pool server does not support sendding response to BTCAgent")
 	}
 }

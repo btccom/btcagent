@@ -14,17 +14,17 @@ type UpSessionInfo struct {
 
 type UpSessionManager struct {
 	subAccount string
-	configData *ConfigData
+	config     *Config
 
 	upSessions []UpSessionInfo
 
 	eventChannel chan interface{}
 }
 
-func NewUpSessionManager(subAccount string, configData *ConfigData) (manager *UpSessionManager) {
+func NewUpSessionManager(subAccount string, config *Config) (manager *UpSessionManager) {
 	manager = new(UpSessionManager)
 	manager.subAccount = subAccount
-	manager.configData = configData
+	manager.config = config
 
 	upSessions := [UpSessionNumPerSubAccount]UpSessionInfo{}
 	manager.upSessions = upSessions[:]
@@ -41,8 +41,8 @@ func (manager *UpSessionManager) Run() {
 
 func (manager *UpSessionManager) connect(slot int) {
 	info := &manager.upSessions[slot]
-	for i := range manager.configData.Pools {
-		info.upSession = NewUpSession(manager.subAccount, i, manager.configData)
+	for i := range manager.config.Pools {
+		info.upSession = NewUpSession(manager.subAccount, i, manager.config)
 		info.upSession.Run()
 
 		if info.upSession.stat == StatAuthorized {
