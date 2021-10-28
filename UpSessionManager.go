@@ -1,10 +1,15 @@
 package main
 
-import "sync"
+import (
+	"time"
+
+	"github.com/golang/glog"
+)
 
 type UpSessionInfo struct {
-	downSessionNum uint
-	upSession      *UpSession
+	minerNum  uint
+	ready     bool
+	upSession *UpSession
 }
 
 type UpSessionManager struct {
@@ -12,6 +17,8 @@ type UpSessionManager struct {
 	configData *ConfigData
 
 	upSessions []UpSessionInfo
+
+	eventChannel chan interface{}
 }
 
 func NewUpSessionManager(subAccount string, configData *ConfigData) (manager *UpSessionManager) {
@@ -25,23 +32,72 @@ func NewUpSessionManager(subAccount string, configData *ConfigData) (manager *Up
 }
 
 func (manager *UpSessionManager) Run() {
-	var wg sync.WaitGroup
-	wg.Add(len(manager.upSessions))
 	for i := range manager.upSessions {
-		go manager.connect(&manager.upSessions[i], wg)
+		go manager.connect(i)
 	}
-	wg.Wait()
+
+	go manager.handleEvent()
 }
 
-func (manager *UpSessionManager) connect(info *UpSessionInfo, wg sync.WaitGroup) {
-	defer wg.Done()
-
+func (manager *UpSessionManager) connect(slot int) {
+	info := &manager.upSessions[slot]
 	for i := range manager.configData.Pools {
 		info.upSession = NewUpSession(manager.subAccount, i, manager.configData)
 		info.upSession.Run()
 
 		if info.upSession.stat == StatAuthorized {
+			manager.SendEvent(EventUpStreamReady{slot})
 			break
+		}
+	}
+}
+
+func (manager *UpSessionManager) SendEvent(event interface{}) {
+	manager.eventChannel <- event
+}
+
+func (manager *UpSessionManager) AddStratumSession(session *StratumSession) {
+	manager.SendEvent(EventAddStratumSession{session})
+}
+
+func (manager *UpSessionManager) upStreamReady(slot int) {
+	manager.upSessions[slot].ready = true
+}
+
+func (manager *UpSessionManager) addStratumSession(session *StratumSession) {
+	var selected *UpSessionInfo
+
+	// 寻找连接数最少的服务器
+	for i := range manager.upSessions {
+		info := &manager.upSessions[i]
+		if info.ready && (selected == nil || info.minerNum < selected.minerNum) {
+			selected = info
+		}
+	}
+
+	// 服务器均未就绪，1秒后重试
+	if selected == nil {
+		go func() {
+			time.Sleep(1 * time.Second)
+			manager.SendEvent(EventAddStratumSession{session})
+		}()
+		return
+	}
+
+}
+
+func (manager *UpSessionManager) handleEvent() {
+	for {
+		event := <-manager.eventChannel
+
+		switch e := event.(type) {
+		case EventUpStreamReady:
+			manager.upStreamReady(e.Slot)
+		case EventAddStratumSession:
+			manager.addStratumSession(e.Session)
+		case EventApplicationExit:
+		default:
+			glog.Error("Unknown event: ", event)
 		}
 	}
 }
