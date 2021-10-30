@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/golang/glog"
 )
@@ -75,6 +76,8 @@ func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
 		upManager = NewUpSessionManager(session.subAccountName, manager.config)
 		go upManager.Run()
 		manager.upSessionManagers[session.fullWorkerName] = upManager
+		// 等待连接就绪
+		time.Sleep(3 * time.Second)
 	}
 	upManager.AddStratumSession(session)
 }

@@ -28,6 +28,8 @@ func NewUpSessionManager(subAccount string, config *Config) (manager *UpSessionM
 
 	upSessions := [UpSessionNumPerSubAccount]UpSessionInfo{}
 	manager.upSessions = upSessions[:]
+
+	manager.eventChannel = make(chan interface{})
 	return
 }
 
@@ -47,7 +49,7 @@ func (manager *UpSessionManager) connect(slot int) {
 		if session.stat == StatAuthorized {
 			go session.Run()
 			manager.SendEvent(EventUpSessionReady{slot, session})
-			break
+			return
 		}
 	}
 	manager.SendEvent(EventUpSessionInitFailed{slot})
@@ -72,11 +74,11 @@ func (manager *UpSessionManager) addStratumSession(e EventAddStratumSession) {
 		}
 	}
 
-	// 服务器均未就绪，1秒后重试
+	// 服务器均未就绪，3秒后重试
 	if selected == nil {
-		glog.Warning("Cannot find a ready pool connection for miner ", e.Session.ID(), "! Retry in 1 seconds.")
+		glog.Warning("Cannot find a ready pool connection for miner ", e.Session.ID(), "! Retry in 3 seconds.")
 		go func() {
-			time.Sleep(1 * time.Second)
+			time.Sleep(3 * time.Second)
 			manager.SendEvent(e)
 		}()
 		return

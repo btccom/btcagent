@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 
@@ -20,6 +21,7 @@ type UpSession struct {
 	stratumSessions map[uint32]*StratumSession
 	serverConn      net.Conn
 	serverReader    *bufio.Reader
+	readLoopRunning bool
 
 	stat            AuthorizeStat
 	sessionID       uint32
@@ -29,7 +31,8 @@ type UpSession struct {
 	serverCapsVerRol bool
 	serverCapsSubRes bool
 
-	eventChannel chan interface{}
+	eventLoopRunning bool
+	eventChannel     chan interface{}
 }
 
 func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, poolIndex int) (up *UpSession) {
@@ -40,6 +43,7 @@ func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, 
 	up.poolIndex = poolIndex
 	up.stratumSessions = make(map[uint32]*StratumSession)
 	up.stat = StatDisconnected
+	up.eventChannel = make(chan interface{})
 	return
 }
 
@@ -73,7 +77,7 @@ func (up *UpSession) writeJSONRequestToServer(jsonData *JSONRPCRequest) (int, er
 	return up.serverConn.Write(bytes)
 }
 
-func (up *UpSession) initSendRequest() (err error) {
+func (up *UpSession) sendInitRequest() (err error) {
 	var request JSONRPCRequest
 
 	request.ID = "sub"
@@ -112,6 +116,7 @@ func (up *UpSession) initSendRequest() (err error) {
 }
 
 func (up *UpSession) close() {
+	up.eventLoopRunning = false
 	up.stat = StatDisconnected
 	up.serverConn.Close()
 }
@@ -124,95 +129,6 @@ func (up *UpSession) IP() string {
 	return up.serverConn.RemoteAddr().String()
 }
 
-func (up *UpSession) initHandleResponse() {
-	magicNum, err := up.serverReader.Peek(1)
-	if err != nil {
-		glog.Error("peek failed, server: ", up.IP(), ", error: ", err.Error())
-		up.close()
-		return
-	}
-	if magicNum[0] == ExMessageMagicNumber {
-		up.initReadExMessage()
-	} else {
-		up.initReadLine()
-	}
-}
-
-func (up *UpSession) initReadExMessage() {
-	// ex-message:
-	//   magic_number	uint8_t		magic number for Ex-Message, always 0x7F
-	//   type/cmd		uint8_t		message type
-	//   length			uint16_t	message length (include header self)
-	//   message_body	uint8_t[]	message body
-	header, err := up.serverReader.ReadBytes(4)
-	if err != nil {
-		glog.Error("read ex-message failed, server: ", up.IP(), ", error: ", err.Error())
-		up.close()
-		return
-	}
-	len := binary.LittleEndian.Uint16(header[2:])
-	if len < 4 {
-		glog.Warning("Broken ex-message from server: ", up.IP(), ", content: ", header)
-		up.close()
-		return
-	}
-
-	len -= 4 // len 包括 header 的长度 4 字节，所以减 4
-	if len > 0 {
-		// 初始化阶段不处理 ex-message，所以 Discard 掉
-		_, err = up.serverReader.Discard(int(len))
-		if err != nil {
-			glog.Error("read ex-message failed, server: ", up.IP(), ", error: ", err.Error())
-			up.close()
-			return
-		}
-	}
-}
-
-func (up *UpSession) initReadLine() {
-	jsonBytes, err := up.serverReader.ReadBytes('\n')
-	if err != nil {
-		glog.Error("read line failed, server: ", up.IP(), ", error: ", err.Error())
-		up.close()
-		return
-	}
-
-	rpcData, err := NewJSONRPCLine(jsonBytes)
-
-	// ignore the json decode error
-	if err != nil {
-		glog.Info("JSON decode failed, server: ", up.IP(), err.Error(), string(jsonBytes))
-		return
-	}
-
-	if len(rpcData.Method) > 0 {
-		switch rpcData.Method {
-		case "mining.set_version_mask":
-			up.handleSetVersionMask(rpcData, jsonBytes)
-		case "mining.set_difficulty":
-			// ignore
-		case "mining.notify":
-			// ignore
-		default:
-			glog.Info("[TODO] pool request: ", rpcData)
-		}
-		return
-	}
-
-	switch rpcData.ID {
-	case "sub":
-		up.handleSubScribeResponse(rpcData, jsonBytes)
-	case "conf":
-		up.handleConfigureResponse(rpcData, jsonBytes)
-	case "caps":
-		up.handleGetCapsResponse(rpcData, jsonBytes)
-	case "auth":
-		up.handleAuthorizeResponse(rpcData, jsonBytes)
-	default:
-		glog.Info("[TODO] pool response: ", rpcData)
-	}
-}
-
 func (up *UpSession) Init() {
 	err := up.connect()
 	if err != nil {
@@ -220,16 +136,16 @@ func (up *UpSession) Init() {
 		return
 	}
 
-	err = up.initSendRequest()
+	go up.handleResponse()
+
+	err = up.sendInitRequest()
 	if err != nil {
 		glog.Error("write JSON request failed, server: ", up.IP(), ", error: ", err.Error())
 		up.close()
 		return
 	}
 
-	for up.stat != StatAuthorized && up.stat != StatDisconnected && up.stat != StatConnecting {
-		up.initHandleResponse()
-	}
+	up.handleEvent()
 }
 
 func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte) {
@@ -332,6 +248,81 @@ func (up *UpSession) handleAuthorizeResponse(rpcData *JSONRPCLine, jsonBytes []b
 	}
 	glog.Info("authorize success, server: ", up.IP(), ", sub-account: ", up.subAccount)
 	up.stat = StatAuthorized
+	// 让 Init() 函数返回
+	up.eventLoopRunning = false
+}
+
+func (up *UpSession) connBroken() {
+	up.readLoopRunning = false
+	up.SendEvent(EventConnBroken{})
+}
+
+func (up *UpSession) handleResponse() {
+	up.readLoopRunning = true
+	for up.readLoopRunning {
+		magicNum, err := up.serverReader.Peek(1)
+		if err != nil {
+			glog.Error("peek failed, server: ", up.IP(), ", error: ", err.Error())
+			up.connBroken()
+			return
+		}
+		if magicNum[0] == ExMessageMagicNumber {
+			up.readExMessage()
+		} else {
+			up.readLine()
+		}
+	}
+}
+
+func (up *UpSession) readExMessage() {
+	// ex-message:
+	//   magic_number	uint8_t		magic number for Ex-Message, always 0x7F
+	//   type/cmd		uint8_t		message type
+	//   length			uint16_t	message length (include header self)
+	//   message_body	uint8_t[]	message body
+	message := new(ExMessage)
+	err := binary.Read(up.serverReader, binary.LittleEndian, message.ExMessageHeader)
+	if err != nil {
+		glog.Error("read ex-message failed, server: ", up.IP(), ", error: ", err.Error())
+		up.connBroken()
+		return
+	}
+	if message.Size < 4 {
+		glog.Warning("Broken ex-message header from server: ", up.IP(), ", content: ", message.ExMessageHeader)
+		up.connBroken()
+		return
+	}
+
+	message.Size -= 4 // len 包括 header 的长度 4 字节，所以减 4
+	if message.Size > 0 {
+		_, err = io.ReadFull(up.serverReader, message.Body)
+		if err != nil {
+			glog.Error("read ex-message failed, server: ", up.IP(), ", error: ", err.Error())
+			up.connBroken()
+			return
+		}
+	}
+
+	up.SendEvent(EventRecvExMessage{message})
+}
+
+func (up *UpSession) readLine() {
+	jsonBytes, err := up.serverReader.ReadBytes('\n')
+	if err != nil {
+		glog.Error("read line failed, server: ", up.IP(), ", error: ", err.Error())
+		up.connBroken()
+		return
+	}
+
+	rpcData, err := NewJSONRPCLine(jsonBytes)
+
+	// ignore the json decode error
+	if err != nil {
+		glog.Info("JSON decode failed, server: ", up.IP(), err.Error(), string(jsonBytes))
+		return
+	}
+
+	up.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
 }
 
 func (up *UpSession) Run() {
@@ -351,13 +342,51 @@ func (up *UpSession) addStratumSession(e EventAddStratumSession) {
 	e.Session.SetUpSession(up)
 }
 
+func (up *UpSession) recvJSONRPC(e EventRecvJSONRPC) {
+	rpcData := e.rpcData
+	jsonBytes := e.jsonBytes
+
+	if len(rpcData.Method) > 0 {
+		switch rpcData.Method {
+		case "mining.set_version_mask":
+			up.handleSetVersionMask(rpcData, jsonBytes)
+		case "mining.set_difficulty":
+			// ignore
+		case "mining.notify":
+			// TODO: finish it
+			glog.Info("[TODO] mining.notify: ", rpcData)
+		default:
+			glog.Info("[TODO] pool request: ", rpcData)
+		}
+		return
+	}
+
+	switch rpcData.ID {
+	case "sub":
+		up.handleSubScribeResponse(rpcData, jsonBytes)
+	case "conf":
+		up.handleConfigureResponse(rpcData, jsonBytes)
+	case "caps":
+		up.handleGetCapsResponse(rpcData, jsonBytes)
+	case "auth":
+		up.handleAuthorizeResponse(rpcData, jsonBytes)
+	default:
+		glog.Info("[TODO] pool response: ", rpcData)
+	}
+}
+
 func (up *UpSession) handleEvent() {
-	for {
+	up.eventLoopRunning = true
+	for up.eventLoopRunning {
 		event := <-up.eventChannel
 
 		switch e := event.(type) {
 		case EventAddStratumSession:
 			up.addStratumSession(e)
+		case EventRecvJSONRPC:
+			up.recvJSONRPC(e)
+		case EventConnBroken:
+			up.close()
 		default:
 			glog.Error("Unknown event: ", e)
 		}
