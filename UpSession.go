@@ -33,6 +33,8 @@ type UpSession struct {
 
 	eventLoopRunning bool
 	eventChannel     chan interface{}
+
+	lastJob *StratumJob
 }
 
 func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, poolIndex int) (up *UpSession) {
@@ -333,18 +335,44 @@ func (up *UpSession) SendEvent(event interface{}) {
 	up.eventChannel <- event
 }
 
-func (up *UpSession) AddStratumSession(session *StratumSession) {
-	up.SendEvent(EventAddStratumSession{session})
-}
-
 func (up *UpSession) addStratumSession(e EventAddStratumSession) {
 	up.stratumSessions[e.Session.sessionID] = e.Session
 	e.Session.SetUpSession(up)
+	go e.Session.Run()
+
+	if up.lastJob != nil {
+		bytes, err := up.lastJob.ToNotifyLine(true)
+		if err == nil {
+			e.Session.SendEvent(EventSendBytes{bytes})
+		} else {
+			glog.Warning("create notify bytes failed, ", err.Error(), ", struct: ", up.lastJob)
+		}
+	}
+}
+
+func (up *UpSession) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byte) {
+	job, err := NewStratumJob(rpcData, up.sessionID)
+	if err != nil {
+		glog.Warning(err.Error(), ": ", string(jsonBytes))
+		return
+	}
+
+	bytes, err := job.ToNotifyLine(false)
+	if err != nil {
+		glog.Warning("create notify bytes failed, ", err.Error(), ", content: ", string(jsonBytes))
+		return
+	}
+
+	for _, session := range up.stratumSessions {
+		session.SendEvent(EventSendBytes{bytes})
+	}
+
+	up.lastJob = job
 }
 
 func (up *UpSession) recvJSONRPC(e EventRecvJSONRPC) {
-	rpcData := e.rpcData
-	jsonBytes := e.jsonBytes
+	rpcData := e.RPCData
+	jsonBytes := e.JSONBytes
 
 	if len(rpcData.Method) > 0 {
 		switch rpcData.Method {
@@ -353,8 +381,7 @@ func (up *UpSession) recvJSONRPC(e EventRecvJSONRPC) {
 		case "mining.set_difficulty":
 			// ignore
 		case "mining.notify":
-			// TODO: finish it
-			glog.Info("[TODO] mining.notify: ", rpcData)
+			up.handleMiningNotify(rpcData, jsonBytes)
 		default:
 			glog.Info("[TODO] pool request: ", rpcData)
 		}

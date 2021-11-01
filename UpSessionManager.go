@@ -59,10 +59,6 @@ func (manager *UpSessionManager) SendEvent(event interface{}) {
 	manager.eventChannel <- event
 }
 
-func (manager *UpSessionManager) AddStratumSession(session *StratumSession) {
-	manager.SendEvent(EventAddStratumSession{session})
-}
-
 func (manager *UpSessionManager) addStratumSession(e EventAddStratumSession) {
 	var selected *UpSessionInfo
 
@@ -84,7 +80,7 @@ func (manager *UpSessionManager) addStratumSession(e EventAddStratumSession) {
 		return
 	}
 
-	selected.upSession.AddStratumSession(e.Session)
+	selected.upSession.SendEvent(e)
 }
 
 func (manager *UpSessionManager) upSessionReady(e EventUpSessionReady) {

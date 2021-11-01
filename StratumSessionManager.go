@@ -79,5 +79,5 @@ func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
 		// 等待连接就绪
 		time.Sleep(3 * time.Second)
 	}
-	upManager.AddStratumSession(session)
+	upManager.SendEvent(EventAddStratumSession{session})
 }

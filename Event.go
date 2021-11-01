@@ -22,10 +22,22 @@ type EventAddStratumSession struct {
 type EventConnBroken struct{}
 
 type EventRecvExMessage struct {
-	message *ExMessage
+	Message *ExMessage
 }
 
 type EventRecvJSONRPC struct {
-	rpcData   *JSONRPCLine
-	jsonBytes []byte
+	RPCData   *JSONRPCLine
+	JSONBytes []byte
+}
+
+type EventSendBytes struct {
+	Content []byte
+}
+
+type EventStratumSessionBroken struct {
+	SessionID uint32
+}
+
+type EventUpSessionBroken struct {
+	Slot int
 }

@@ -49,6 +49,10 @@ func (session *StratumSession) Init() {
 	session.handleEvent()
 }
 
+func (session *StratumSession) Run() {
+	session.handleEvent()
+}
+
 func (session *StratumSession) close() {
 	session.eventLoopRunning = false
 	session.stat = StatDisconnected
@@ -237,12 +241,12 @@ func (session *StratumSession) handleRequest() {
 
 func (session *StratumSession) recvJSONRPC(e EventRecvJSONRPC) {
 	// stat will be changed in stratumHandleRequest
-	result, stratumErr := session.stratumHandleRequest(e.rpcData, e.jsonBytes)
+	result, stratumErr := session.stratumHandleRequest(e.RPCData, e.JSONBytes)
 
 	// 两个均为空说明没有想要返回的响应
 	if result != nil || stratumErr != nil {
 		var response JSONRPCResponse
-		response.ID = e.rpcData.ID
+		response.ID = e.RPCData.ID
 		response.Result = result
 		response.Error = stratumErr.ToJSONRPCArray(nil)
 
@@ -265,6 +269,14 @@ func (session *StratumSession) connBroken() {
 	session.SendEvent(EventConnBroken{})
 }
 
+func (session *StratumSession) sendBytes(e EventSendBytes) {
+	_, err := session.clientConn.Write(e.Content)
+	if err != nil {
+		glog.Error("write bytes failed, IP: ", session.IP(), ", error: ", err.Error())
+		session.close()
+	}
+}
+
 func (session *StratumSession) handleEvent() {
 	session.eventLoopRunning = true
 	for session.eventLoopRunning {
@@ -273,6 +285,8 @@ func (session *StratumSession) handleEvent() {
 		switch e := event.(type) {
 		case EventRecvJSONRPC:
 			session.recvJSONRPC(e)
+		case EventSendBytes:
+			session.sendBytes(e)
 		case EventConnBroken:
 			session.close()
 		default:
