@@ -11,19 +11,23 @@ import (
 )
 
 type StratumSession struct {
-	manager      *StratumSessionManager // 会话管理器
-	upSession    *UpSession             // 所属的服务器会话
-	sessionID    uint32                 // 会话ID
-	clientConn   net.Conn               // 到矿机的TCP连接
-	clientReader *bufio.Reader          // 读取矿机发送的内容
-	stat         AuthorizeStat          // 认证状态
+	manager   *StratumSessionManager // 会话管理器
+	upSession *UpSession             // 所属的服务器会话
+
+	sessionID       uint32        // 会话ID
+	clientConn      net.Conn      // 到矿机的TCP连接
+	clientReader    *bufio.Reader // 读取矿机发送的内容
+	readLoopRunning bool          // TCP读循环是否在运行
+	stat            AuthorizeStat // 认证状态
 
 	userAgent      string // 矿机User-Agent
 	fullWorkerName string // 完整的矿工名
 	subAccountName string // 子账户名部分
 	minerName      string // 矿机名部分
+	versionMask    uint32 // 比特币版本掩码(用于AsicBoost)
 
-	versionMask uint32 // 比特币版本掩码(用于AsicBoost)
+	eventLoopRunning bool             // 消息循环是否在运行
+	eventChannel     chan interface{} // 消息通道
 }
 
 // NewStratumSession 创建一个新的 Stratum 会话
@@ -34,18 +38,19 @@ func NewStratumSession(manager *StratumSessionManager, clientConn net.Conn, sess
 	session.clientConn = clientConn
 	session.clientReader = bufio.NewReader(clientConn)
 	session.stat = StatConnected
+	session.eventChannel = make(chan interface{})
 
 	glog.Info("miner connected, sessionId: ", sessionID, ", IP: ", session.IP())
 	return
 }
 
 func (session *StratumSession) Init() {
-	for session.stat != StatAuthorized && session.stat != StatDisconnected {
-		session.handleRequest()
-	}
+	go session.handleRequest()
+	session.handleEvent()
 }
 
 func (session *StratumSession) close() {
+	session.eventLoopRunning = false
 	session.stat = StatDisconnected
 	session.clientConn.Close()
 }
@@ -61,43 +66,6 @@ func (session *StratumSession) ID() string {
 	return session.IP()
 }
 
-func (session *StratumSession) handleRequest() {
-	requestJSON, err := session.clientReader.ReadBytes('\n')
-
-	if err != nil {
-		glog.Error("read line failed, IP: ", session.IP(), ", error: ", err.Error())
-		session.close()
-		return
-	}
-
-	request, err := NewJSONRPCRequest(requestJSON)
-
-	// ignore the json decode error
-	if err != nil {
-		glog.Info("JSON decode failed, IP: ", session.IP(), err.Error(), string(requestJSON))
-		return
-	}
-
-	// stat will be changed in stratumHandleRequest
-	result, stratumErr := session.stratumHandleRequest(request, requestJSON)
-
-	// 两个均为空说明没有想要返回的响应
-	if result != nil || stratumErr != nil {
-		var response JSONRPCResponse
-		response.ID = request.ID
-		response.Result = result
-		response.Error = stratumErr.ToJSONRPCArray(nil)
-
-		_, err = session.writeJSONResponseToClient(&response)
-
-		if err != nil {
-			glog.Error("write JSON response failed, IP: ", session.IP(), ", error: ", err.Error())
-			session.close()
-			return
-		}
-	}
-}
-
 func (session *StratumSession) writeJSONResponseToClient(jsonData *JSONRPCResponse) (int, error) {
 	if session.stat == StatDisconnected {
 		return 0, ErrConnectionClosed
@@ -111,7 +79,7 @@ func (session *StratumSession) writeJSONResponseToClient(jsonData *JSONRPCRespon
 	return session.clientConn.Write(bytes)
 }
 
-func (session *StratumSession) stratumHandleRequest(request *JSONRPCRequest, requestJSON []byte) (result interface{}, err *StratumError) {
+func (session *StratumSession) stratumHandleRequest(request *JSONRPCLine, requestJSON []byte) (result interface{}, err *StratumError) {
 	switch request.Method {
 	case "mining.subscribe":
 		if session.stat != StatConnected {
@@ -132,6 +100,9 @@ func (session *StratumSession) stratumHandleRequest(request *JSONRPCRequest, req
 		result, err = session.parseAuthorizeRequest(request)
 		if err == nil {
 			session.stat = StatAuthorized
+			// 让 Init() 函数返回
+			session.eventLoopRunning = false
+
 			glog.Info("miner authorized, session id: ", session.sessionID, ", IP: ", session.IP(), ", worker name: ", session.fullWorkerName)
 		}
 		return
@@ -147,7 +118,7 @@ func (session *StratumSession) stratumHandleRequest(request *JSONRPCRequest, req
 	}
 }
 
-func (session *StratumSession) parseSubscribeRequest(request *JSONRPCRequest) (result interface{}, err *StratumError) {
+func (session *StratumSession) parseSubscribeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
 
 	if len(request.Params) >= 1 {
 		session.userAgent, _ = request.Params[0].(string)
@@ -160,7 +131,7 @@ func (session *StratumSession) parseSubscribeRequest(request *JSONRPCRequest) (r
 
 }
 
-func (session *StratumSession) parseAuthorizeRequest(request *JSONRPCRequest) (result interface{}, err *StratumError) {
+func (session *StratumSession) parseAuthorizeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
 	if len(request.Params) < 1 {
 		err = StratumErrTooFewParams
 		return
@@ -191,14 +162,13 @@ func (session *StratumSession) parseAuthorizeRequest(request *JSONRPCRequest) (r
 		return
 	}
 
-	// 获取矿机名成功，但此处不需要返回内容给矿机
-	// 连接服务器后会将服务器发送的响应返回给矿机
-	result = nil
+	// 获取矿机名成功
+	result = true
 	err = nil
 	return
 }
 
-func (session *StratumSession) parseConfigureRequest(request *JSONRPCRequest) (result interface{}, err *StratumError) {
+func (session *StratumSession) parseConfigureRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
 	// request:
 	//		{"id":3,"method":"mining.configure","params":[["version-rolling"],{"version-rolling.mask":"1fffe000","version-rolling.min-bit-count":2}]}
 	// response:
@@ -240,4 +210,73 @@ func (session *StratumSession) versionMaskStr() string {
 
 func (session *StratumSession) SetUpSession(upSession *UpSession) {
 	session.upSession = upSession
+}
+
+func (session *StratumSession) handleRequest() {
+	session.readLoopRunning = true
+
+	for session.readLoopRunning {
+		jsonBytes, err := session.clientReader.ReadBytes('\n')
+
+		if err != nil {
+			glog.Error("read line failed, IP: ", session.IP(), ", error: ", err.Error())
+			session.connBroken()
+			return
+		}
+
+		rpcData, err := NewJSONRPCLine(jsonBytes)
+
+		// ignore the json decode error
+		if err != nil {
+			glog.Warning("JSON decode failed, IP: ", session.IP(), err.Error(), string(jsonBytes))
+		}
+
+		session.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
+	}
+}
+
+func (session *StratumSession) recvJSONRPC(e EventRecvJSONRPC) {
+	// stat will be changed in stratumHandleRequest
+	result, stratumErr := session.stratumHandleRequest(e.rpcData, e.jsonBytes)
+
+	// 两个均为空说明没有想要返回的响应
+	if result != nil || stratumErr != nil {
+		var response JSONRPCResponse
+		response.ID = e.rpcData.ID
+		response.Result = result
+		response.Error = stratumErr.ToJSONRPCArray(nil)
+
+		_, err := session.writeJSONResponseToClient(&response)
+
+		if err != nil {
+			glog.Error("write JSON response failed, IP: ", session.IP(), ", error: ", err.Error())
+			session.close()
+			return
+		}
+	}
+}
+
+func (session *StratumSession) SendEvent(event interface{}) {
+	session.eventChannel <- event
+}
+
+func (session *StratumSession) connBroken() {
+	session.readLoopRunning = false
+	session.SendEvent(EventConnBroken{})
+}
+
+func (session *StratumSession) handleEvent() {
+	session.eventLoopRunning = true
+	for session.eventLoopRunning {
+		event := <-session.eventChannel
+
+		switch e := event.(type) {
+		case EventRecvJSONRPC:
+			session.recvJSONRPC(e)
+		case EventConnBroken:
+			session.close()
+		default:
+			glog.Error("Unknown event: ", e)
+		}
+	}
 }
