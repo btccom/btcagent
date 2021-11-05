@@ -28,8 +28,8 @@ type UpSession struct {
 	versionMask     uint32
 	extraNonce2Size int
 
-	serverCapsVerRol bool
-	serverCapsSubRes bool
+	serverCapVersionRolling bool
+	serverCapSubmitResponse bool
 
 	eventLoopRunning bool
 	eventChannel     chan interface{}
@@ -100,7 +100,13 @@ func (up *UpSession) sendInitRequest() (err error) {
 
 	request.ID = "caps"
 	request.Method = "agent.get_capabilities"
-	request.SetParam(JSONRPCArray{"verrol" /*version rolling*/})
+
+	if up.config.SubmitResponseFromServer {
+		request.SetParam(JSONRPCArray{CapVersionRolling, CapSubmitResponse})
+	} else {
+		request.SetParam(JSONRPCArray{CapVersionRolling})
+	}
+
 	up.writeJSONRequestToServer(&request)
 	if err != nil {
 		return
@@ -227,16 +233,16 @@ func (up *UpSession) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []byt
 	}
 	for _, capability := range capsArr {
 		switch capability {
-		case "verrol":
-			up.serverCapsVerRol = true
-		case "subres":
-			up.serverCapsSubRes = true
+		case CapVersionRolling:
+			up.serverCapVersionRolling = true
+		case CapSubmitResponse:
+			up.serverCapSubmitResponse = true
 		}
 	}
-	if !up.serverCapsVerRol {
+	if !up.serverCapVersionRolling {
 		glog.Warning("[WARNING] pool server ", up.IP(), " does not support ASICBoost")
 	}
-	if up.config.SubmitResponseFromServer && !up.serverCapsSubRes {
+	if up.config.SubmitResponseFromServer && !up.serverCapSubmitResponse {
 		glog.Warning("[WARNING] pool server does not support sendding response to BTCAgent")
 	}
 }

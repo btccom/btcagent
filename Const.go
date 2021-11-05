@@ -19,3 +19,8 @@ const UpSessionUserAgent = "btccom-agent/2.0.0-mu"
 
 // UpSessionNumPerSubAccount 每个子账户的矿池连接数量
 const UpSessionNumPerSubAccount = 5
+
+const (
+	CapVersionRolling = "verrol" // ASICBoost version rolling
+	CapSubmitResponse = "subres" // Send response of mining.submit
+)
