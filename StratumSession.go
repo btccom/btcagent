@@ -20,10 +20,10 @@ type StratumSession struct {
 	readLoopRunning bool          // TCP读循环是否在运行
 	stat            AuthorizeStat // 认证状态
 
-	userAgent      string // 矿机User-Agent
+	clientAgent    string // 挖矿软件名称
 	fullWorkerName string // 完整的矿工名
 	subAccountName string // 子账户名部分
-	minerName      string // 矿机名部分
+	workerName     string // 矿机名部分
 	versionMask    uint32 // 比特币版本掩码(用于AsicBoost)
 
 	eventLoopRunning bool             // 消息循环是否在运行
@@ -125,7 +125,7 @@ func (session *StratumSession) stratumHandleRequest(request *JSONRPCLine, reques
 func (session *StratumSession) parseSubscribeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
 
 	if len(request.Params) >= 1 {
-		session.userAgent, _ = request.Params[0].(string)
+		session.clientAgent, _ = request.Params[0].(string)
 	}
 
 	sessionIDString := Uint32ToHex(session.sessionID)[2:8]
@@ -155,10 +155,10 @@ func (session *StratumSession) parseAuthorizeRequest(request *JSONRPCLine) (resu
 		// 截取“.”之前的做为子账户名，“.”及之后的做矿机名
 		pos := strings.Index(session.fullWorkerName, ".")
 		session.subAccountName = session.fullWorkerName[:pos]
-		session.minerName = session.fullWorkerName[pos+1:]
+		session.workerName = session.fullWorkerName[pos+1:]
 	} else {
 		session.subAccountName = session.fullWorkerName
-		session.minerName = ""
+		session.workerName = ""
 	}
 
 	if len(session.subAccountName) < 1 {

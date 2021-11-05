@@ -348,6 +348,17 @@ func (up *UpSession) addStratumSession(e EventAddStratumSession) {
 			glog.Warning("create notify bytes failed, ", err.Error(), ", struct: ", up.lastJob)
 		}
 	}
+
+	up.registerWorker(e.Session)
+}
+
+func (up *UpSession) registerWorker(session *StratumSession) {
+	msg := ExMessageRegisterWorker{uint16(session.sessionID), session.clientAgent, session.workerName}
+	_, err := up.serverConn.Write(msg.Serialize())
+	if err != nil {
+		glog.Error("register worker to server failed, server: ", up.IP(), ", error: ", err.Error())
+		up.close()
+	}
 }
 
 func (up *UpSession) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byte) {
