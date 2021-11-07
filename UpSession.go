@@ -55,7 +55,7 @@ func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, 
 	up.poolIndex = poolIndex
 	up.stratumSessions = make(map[uint32]*StratumSession)
 	up.stat = StatDisconnected
-	up.eventChannel = make(chan interface{})
+	up.eventChannel = make(chan interface{}, UpSessionChannelCache)
 	up.submitIDs = make(map[uint16]SubmitID)
 	return
 }
@@ -241,7 +241,8 @@ func (up *UpSession) handleSubScribeResponse(rpcData *JSONRPCLine, jsonBytes []b
 }
 
 func (up *UpSession) handleConfigureResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
-	glog.Info("TODO: finish handleConfigureResponse, ", string(jsonBytes))
+	//glog.Info("TODO: finish handleConfigureResponse, ", string(jsonBytes))
+	// ignore
 }
 
 func (up *UpSession) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
@@ -476,6 +477,7 @@ func (up *UpSession) sendSubmitResponse(sessionID uint32, id interface{}, status
 	session, ok := up.stratumSessions[sessionID]
 	if !ok {
 		// 客户端已断开，忽略
+		glog.Info("cannot find session ", sessionID)
 		return
 	}
 	session.SendEvent(EventSubmitResponse{id, status})

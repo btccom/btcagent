@@ -38,7 +38,7 @@ func NewStratumSession(manager *StratumSessionManager, clientConn net.Conn, sess
 	session.clientConn = clientConn
 	session.clientReader = bufio.NewReader(clientConn)
 	session.stat = StatConnected
-	session.eventChannel = make(chan interface{})
+	session.eventChannel = make(chan interface{}, StratumSessionChannelCache)
 
 	glog.Info("miner connected, sessionId: ", sessionID, ", IP: ", session.IP())
 	return

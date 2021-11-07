@@ -29,7 +29,7 @@ func NewUpSessionManager(subAccount string, config *Config) (manager *UpSessionM
 	upSessions := [UpSessionNumPerSubAccount]UpSessionInfo{}
 	manager.upSessions = upSessions[:]
 
-	manager.eventChannel = make(chan interface{})
+	manager.eventChannel = make(chan interface{}, UpSessionManagerChannelCache)
 	return
 }
 

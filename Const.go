@@ -13,12 +13,16 @@ const (
 	StatDisconnected
 )
 
+const StratumSessionChannelCache = 128
+const UpSessionChannelCache = 1024
+const UpSessionManagerChannelCache = 128
+
 const UpSessionDialTimeout = 15 * time.Second
 
 const UpSessionUserAgent = "btccom-agent/2.0.0-mu"
 
 // UpSessionNumPerSubAccount 每个子账户的矿池连接数量
-const UpSessionNumPerSubAccount = 5
+const UpSessionNumPerSubAccount = 1
 
 const (
 	CapVersionRolling = "verrol" // ASICBoost version rolling

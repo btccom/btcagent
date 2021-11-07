@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/golang/glog"
@@ -16,13 +17,12 @@ type StratumSessionManager struct {
 	// 会话ID管理器
 	sessionIDManager *SessionIDManager
 	// map[子账户名]矿池会话管理器
-	upSessionManagers map[string]*UpSessionManager
+	upSessionManagers sync.Map
 }
 
 func NewStratumSessionManager(config *Config) (manager *StratumSessionManager) {
 	manager = new(StratumSessionManager)
 	manager.config = config
-	manager.upSessionManagers = make(map[string]*UpSessionManager)
 	return
 }
 
@@ -71,11 +71,14 @@ func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
 		return
 	}
 
-	upManager, ok := manager.upSessionManagers[session.fullName]
-	if !ok {
+	var upManager *UpSessionManager
+	obj, ok := manager.upSessionManagers.Load(session.subAccountName)
+	if ok {
+		upManager = obj.(*UpSessionManager)
+	} else {
 		upManager = NewUpSessionManager(session.subAccountName, manager.config)
 		go upManager.Run()
-		manager.upSessionManagers[session.fullName] = upManager
+		manager.upSessionManagers.Store(session.subAccountName, upManager)
 		// 等待连接就绪
 		time.Sleep(3 * time.Second)
 	}
