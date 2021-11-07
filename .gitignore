@@ -8,3 +8,6 @@ btcagent
 # build dir
 build/
 
+# config file
+*.json
+!*.default.json
