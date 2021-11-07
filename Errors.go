@@ -52,11 +52,13 @@ var (
 
 var (
 	// StratumErrNeedSubscribed 需要订阅
-	StratumErrNeedSubscribed = NewStratumError(101, "Need Subscribed")
+	StratumErrNeedSubscribed = NewStratumError(25, "Not subscribed")
+	// StratumErrIllegalParams 参数非法
+	StratumErrIllegalParams = NewStratumError(27, "Illegal params")
+	// StratumErrTooFewParams 参数太少
+	StratumErrTooFewParams = NewStratumError(27, "Too few params")
 	// StratumErrDuplicateSubscribed 重复订阅
 	StratumErrDuplicateSubscribed = NewStratumError(102, "Duplicate Subscribed")
-	// StratumErrTooFewParams 参数太少
-	StratumErrTooFewParams = NewStratumError(103, "Too Few Params")
 	// StratumErrWorkerNameMustBeString 矿工名必须是字符串
 	StratumErrWorkerNameMustBeString = NewStratumError(104, "Worker Name Must be a String")
 	// StratumErrWorkerNameStartWrong 矿工名开头错误

@@ -143,3 +143,14 @@ func (msg *ExMessageMiningSetDiff) Unserialize(data []byte) (err error) {
 	err = binary.Read(buf, binary.LittleEndian, msg.SessionIDs)
 	return
 }
+
+type ExMessageSubmitResponse struct {
+	Index  uint16
+	Status StratumStatus
+}
+
+func (msg *ExMessageSubmitResponse) Unserialize(data []byte) (err error) {
+	buf := bytes.NewReader(data)
+	err = binary.Read(buf, binary.LittleEndian, msg)
+	return
+}

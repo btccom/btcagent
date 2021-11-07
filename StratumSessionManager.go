@@ -71,11 +71,11 @@ func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
 		return
 	}
 
-	upManager, ok := manager.upSessionManagers[session.fullWorkerName]
+	upManager, ok := manager.upSessionManagers[session.fullName]
 	if !ok {
 		upManager = NewUpSessionManager(session.subAccountName, manager.config)
 		go upManager.Run()
-		manager.upSessionManagers[session.fullWorkerName] = upManager
+		manager.upSessionManagers[session.fullName] = upManager
 		// 等待连接就绪
 		time.Sleep(3 * time.Second)
 	}

@@ -21,7 +21,7 @@ type StratumSession struct {
 	stat            AuthorizeStat // 认证状态
 
 	clientAgent    string // 挖矿软件名称
-	fullWorkerName string // 完整的矿工名
+	fullName       string // 完整的矿工名
 	subAccountName string // 子账户名部分
 	workerName     string // 矿机名部分
 	versionMask    uint32 // 比特币版本掩码(用于AsicBoost)
@@ -65,21 +65,16 @@ func (session *StratumSession) IP() string {
 
 func (session *StratumSession) ID() string {
 	if session.stat == StatAuthorized {
-		return fmt.Sprintf("%s@%s", session.fullWorkerName, session.IP())
+		return fmt.Sprintf("%s@%s", session.fullName, session.IP())
 	}
 	return session.IP()
 }
 
-func (session *StratumSession) writeJSONResponseToClient(jsonData *JSONRPCResponse) (int, error) {
-	if session.stat == StatDisconnected {
-		return 0, ErrConnectionClosed
-	}
-
+func (session *StratumSession) writeJSONResponse(jsonData *JSONRPCResponse) (int, error) {
 	bytes, err := jsonData.ToJSONBytesLine()
 	if err != nil {
 		return 0, err
 	}
-
 	return session.clientConn.Write(bytes)
 }
 
@@ -107,7 +102,7 @@ func (session *StratumSession) stratumHandleRequest(request *JSONRPCLine, reques
 			// 让 Init() 函数返回
 			session.eventLoopRunning = false
 
-			glog.Info("miner authorized, session id: ", session.sessionID, ", IP: ", session.IP(), ", worker name: ", session.fullWorkerName)
+			glog.Info("miner authorized, session id: ", session.sessionID, ", IP: ", session.IP(), ", worker name: ", session.fullName)
 		}
 		return
 
@@ -115,11 +110,109 @@ func (session *StratumSession) stratumHandleRequest(request *JSONRPCLine, reques
 		result, err = session.parseConfigureRequest(request)
 		return
 
+	case "mining.submit":
+		result, err = session.parseMiningSubmit(request)
+		if err != nil {
+			glog.Warning("stratum error, IP: ", session.IP(), ", worker: ", session.fullName, ", error: ", err, ", submit: ", string(requestJSON))
+		}
+		return
+
 	default:
 		// ignore unimplemented methods
 		glog.Warning("unknown request, IP: ", session.IP(), ", request: ", string(requestJSON))
 		return
 	}
+}
+
+func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result interface{}, err *StratumError) {
+	// params:
+	// [0] Worker Name
+	// [1] Job ID
+	// [2] ExtraNonce2
+	// [3] Time
+	// [4] Nonce
+	// [5] Version Mask
+
+	if len(request.Params) < 5 {
+		err = StratumErrTooFewParams
+		return
+	}
+
+	var msg ExMessageSubmitShare
+
+	// [1] Job ID
+	jobIDStr, ok := request.Params[1].(string)
+	if !ok {
+		err = StratumErrIllegalParams
+		return
+	}
+	jobID, convErr := strconv.ParseUint(jobIDStr, 10, 8)
+	if convErr != nil {
+		err = StratumErrIllegalParams
+		return
+	}
+	msg.Base.JobID = uint8(jobID)
+
+	// [2] ExtraNonce2
+	extraNonce2Hex, ok := request.Params[2].(string)
+	if !ok {
+		err = StratumErrIllegalParams
+		return
+	}
+	extraNonce, convErr := strconv.ParseUint(extraNonce2Hex, 16, 32)
+	if convErr != nil {
+		err = StratumErrIllegalParams
+		return
+	}
+	msg.Base.ExtraNonce2 = uint32(extraNonce)
+
+	// [3] Time
+	timeHex, ok := request.Params[3].(string)
+	if !ok {
+		err = StratumErrIllegalParams
+		return
+	}
+	time, convErr := strconv.ParseUint(timeHex, 16, 32)
+	if convErr != nil {
+		err = StratumErrIllegalParams
+		return
+	}
+	msg.Time = uint32(time)
+
+	// [4] Nonce
+	nonceHex, ok := request.Params[4].(string)
+	if !ok {
+		err = StratumErrIllegalParams
+		return
+	}
+	nonce, convErr := strconv.ParseUint(nonceHex, 16, 32)
+	if convErr != nil {
+		err = StratumErrIllegalParams
+		return
+	}
+	msg.Base.ExtraNonce2 = uint32(nonce)
+
+	// [5] Version Mask
+	if len(request.Params) >= 6 {
+		versionMaskHex, ok := request.Params[5].(string)
+		if !ok {
+			err = StratumErrIllegalParams
+			return
+		}
+		versionMask, convErr := strconv.ParseUint(versionMaskHex, 16, 32)
+		if convErr != nil {
+			err = StratumErrIllegalParams
+			return
+		}
+		msg.VersionMask = uint32(versionMask)
+	}
+
+	var e EventSubmitShare
+	e.ID = request.ID
+	e.SessionID = session.sessionID
+	e.Message = &msg
+	session.upSession.SendEvent(e)
+	return
 }
 
 func (session *StratumSession) parseSubscribeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
@@ -149,15 +242,15 @@ func (session *StratumSession) parseAuthorizeRequest(request *JSONRPCLine) (resu
 	}
 
 	// 矿工名
-	session.fullWorkerName = FilterWorkerName(fullWorkerName)
+	session.fullName = FilterWorkerName(fullWorkerName)
 
-	if strings.Contains(session.fullWorkerName, ".") {
+	if strings.Contains(session.fullName, ".") {
 		// 截取“.”之前的做为子账户名，“.”及之后的做矿机名
-		pos := strings.Index(session.fullWorkerName, ".")
-		session.subAccountName = session.fullWorkerName[:pos]
-		session.workerName = session.fullWorkerName[pos+1:]
+		pos := strings.Index(session.fullName, ".")
+		session.subAccountName = session.fullName[:pos]
+		session.workerName = session.fullName[pos+1:]
 	} else {
-		session.subAccountName = session.fullWorkerName
+		session.subAccountName = session.fullName
 		session.workerName = ""
 	}
 
@@ -185,8 +278,8 @@ func (session *StratumSession) parseConfigureRequest(request *JSONRPCLine) (resu
 	}
 
 	if options, ok := request.Params[1].(map[string]interface{}); ok {
-		if versionMaskI, ok := options["version-rolling.mask"]; ok {
-			if versionMaskStr, ok := versionMaskI.(string); ok {
+		if obj, ok := options["version-rolling.mask"]; ok {
+			if versionMaskStr, ok := obj.(string); ok {
 				versionMask, err := strconv.ParseUint(versionMaskStr, 16, 32)
 				if err == nil {
 					session.versionMask = uint32(versionMask)
@@ -250,7 +343,7 @@ func (session *StratumSession) recvJSONRPC(e EventRecvJSONRPC) {
 		response.Result = result
 		response.Error = stratumErr.ToJSONRPCArray(nil)
 
-		_, err := session.writeJSONResponseToClient(&response)
+		_, err := session.writeJSONResponse(&response)
 
 		if err != nil {
 			glog.Error("write JSON response failed, IP: ", session.IP(), ", error: ", err.Error())
@@ -277,6 +370,22 @@ func (session *StratumSession) sendBytes(e EventSendBytes) {
 	}
 }
 
+func (session *StratumSession) submitResponse(e EventSubmitResponse) {
+	var response JSONRPCResponse
+	response.ID = e.ID
+	if e.Status.IsAccepted() {
+		response.Result = true
+	} else {
+		response.Error = e.Status.ToJSONRPCArray(nil)
+	}
+
+	_, err := session.writeJSONResponse(&response)
+	if err != nil {
+		glog.Error("write submit response failed, IP: ", session.IP(), ", error: ", err.Error())
+		session.close()
+	}
+}
+
 func (session *StratumSession) handleEvent() {
 	session.eventLoopRunning = true
 	for session.eventLoopRunning {
@@ -287,6 +396,8 @@ func (session *StratumSession) handleEvent() {
 			session.recvJSONRPC(e)
 		case EventSendBytes:
 			session.sendBytes(e)
+		case EventSubmitResponse:
+			session.submitResponse(e)
 		case EventConnBroken:
 			session.close()
 		default:

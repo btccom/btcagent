@@ -99,14 +99,14 @@ func NewJSONRPCRequest(rpcJSON []byte) (rpcData *JSONRPCRequest, err error) {
 	return
 }
 
-// AddParam 向 JSONRPCRequest 对象添加一个或多个参数
-func (rpcData *JSONRPCRequest) AddParam(param ...interface{}) {
+// AddParams 向 JSONRPCRequest 对象添加一个或多个参数
+func (rpcData *JSONRPCRequest) AddParams(param ...interface{}) {
 	rpcData.Params = append(rpcData.Params, param...)
 }
 
-// SetParam 设置 JSONRPCRequest 对象的参数
-// 传递给 SetParam 的参数列表将按顺序复制到 JSONRPCRequest.Params 中
-func (rpcData *JSONRPCRequest) SetParam(param ...interface{}) {
+// SetParams 设置 JSONRPCRequest 对象的参数
+// 传递给 SetParams 的参数列表将按顺序复制到 JSONRPCRequest.Params 中
+func (rpcData *JSONRPCRequest) SetParams(param ...interface{}) {
 	rpcData.Params = param
 }
 

@@ -41,3 +41,14 @@ type EventStratumSessionBroken struct {
 type EventUpSessionBroken struct {
 	Slot int
 }
+
+type EventSubmitShare struct {
+	ID        interface{}
+	SessionID uint32
+	Message   *ExMessageSubmitShare
+}
+
+type EventSubmitResponse struct {
+	ID     interface{}
+	Status StratumStatus
+}

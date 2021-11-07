@@ -11,6 +11,11 @@ import (
 	"github.com/golang/glog"
 )
 
+type SubmitID struct {
+	ID        interface{}
+	SessionID uint32
+}
+
 type UpSession struct {
 	manager *UpSessionManager
 	config  *Config
@@ -34,7 +39,12 @@ type UpSession struct {
 	eventLoopRunning bool
 	eventChannel     chan interface{}
 
-	lastJob *StratumJob
+	lastJob           *StratumJob
+	rpcSetVersionMask []byte
+	rpcSetDifficulty  []byte
+
+	submitIDs   map[uint16]SubmitID
+	submitIndex uint16
 }
 
 func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, poolIndex int) (up *UpSession) {
@@ -46,6 +56,7 @@ func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, 
 	up.stratumSessions = make(map[uint32]*StratumSession)
 	up.stat = StatDisconnected
 	up.eventChannel = make(chan interface{})
+	up.submitIDs = make(map[uint16]SubmitID)
 	return
 }
 
@@ -66,16 +77,11 @@ func (up *UpSession) connect() (err error) {
 	return
 }
 
-func (up *UpSession) writeJSONRequestToServer(jsonData *JSONRPCRequest) (int, error) {
-	if up.stat == StatConnecting || up.stat == StatDisconnected {
-		return 0, ErrConnectionClosed
-	}
-
+func (up *UpSession) writeJSONRequest(jsonData *JSONRPCRequest) (int, error) {
 	bytes, err := jsonData.ToJSONBytesLine()
 	if err != nil {
 		return 0, err
 	}
-
 	return up.serverConn.Write(bytes)
 }
 
@@ -84,38 +90,46 @@ func (up *UpSession) sendInitRequest() (err error) {
 
 	request.ID = "sub"
 	request.Method = "mining.subscribe"
-	request.SetParam(UpSessionUserAgent)
-	up.writeJSONRequestToServer(&request)
+	request.SetParams(UpSessionUserAgent)
+	up.writeJSONRequest(&request)
 	if err != nil {
 		return
 	}
 
 	request.ID = "conf"
 	request.Method = "mining.configure"
-	request.SetParam(JSONRPCArray{"version-rolling"}, JSONRPCObj{"version-rolling.mask": "ffffffff", "version-rolling.min-bit-count": 0})
-	up.writeJSONRequestToServer(&request)
+	request.SetParams(JSONRPCArray{"version-rolling"}, JSONRPCObj{"version-rolling.mask": "ffffffff", "version-rolling.min-bit-count": 0})
+	up.writeJSONRequest(&request)
 	if err != nil {
 		return
 	}
 
+	// send agent.get_capabilities first
 	request.ID = "caps"
 	request.Method = "agent.get_capabilities"
-
 	if up.config.SubmitResponseFromServer {
-		request.SetParam(JSONRPCArray{CapVersionRolling, CapSubmitResponse})
+		request.SetParams(JSONRPCArray{CapVersionRolling, CapSubmitResponse})
 	} else {
-		request.SetParam(JSONRPCArray{CapVersionRolling})
+		request.SetParams(JSONRPCArray{CapVersionRolling})
 	}
-
-	up.writeJSONRequestToServer(&request)
+	up.writeJSONRequest(&request)
 	if err != nil {
 		return
 	}
+	capsRequestAgain := request
 
 	request.ID = "auth"
 	request.Method = "mining.authorize"
-	request.SetParam(up.subAccount, "")
-	up.writeJSONRequestToServer(&request)
+	request.SetParams(up.subAccount, "")
+	up.writeJSONRequest(&request)
+	if err != nil {
+		return
+	}
+
+	// send agent.get_capabilities again
+	// fix subres (submit_response_from_server)
+	// Subres negotiation must be sent after authentication, or sserver will not send the response.
+	up.writeJSONRequest(&capsRequestAgain)
 	if err != nil {
 		return
 	}
@@ -157,6 +171,8 @@ func (up *UpSession) Init() {
 }
 
 func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte) {
+	up.rpcSetVersionMask = jsonBytes
+
 	if len(rpcData.Params) > 0 {
 		versionMaskHex, ok := rpcData.Params[0].(string)
 		if !ok {
@@ -170,6 +186,16 @@ func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte
 		}
 		up.versionMask = uint32(versionMask)
 		glog.Info("version mask update, server: ", up.IP(), ", version mask: ", versionMaskHex)
+	}
+
+	for _, session := range up.stratumSessions {
+		session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
+	}
+}
+
+func (up *UpSession) handleSetDifficulty(rpcData *JSONRPCLine, jsonBytes []byte) {
+	if up.rpcSetDifficulty == nil {
+		up.rpcSetDifficulty = jsonBytes
 	}
 }
 
@@ -289,7 +315,7 @@ func (up *UpSession) readExMessage() {
 	//   length			uint16_t	message length (include header self)
 	//   message_body	uint8_t[]	message body
 	message := new(ExMessage)
-	err := binary.Read(up.serverReader, binary.LittleEndian, message.ExMessageHeader)
+	err := binary.Read(up.serverReader, binary.LittleEndian, &message.ExMessageHeader)
 	if err != nil {
 		glog.Error("read ex-message failed, server: ", up.IP(), ", error: ", err.Error())
 		up.connBroken()
@@ -301,8 +327,9 @@ func (up *UpSession) readExMessage() {
 		return
 	}
 
-	message.Size -= 4 // len 包括 header 的长度 4 字节，所以减 4
-	if message.Size > 0 {
+	size := message.Size - 4 // len 包括 header 的长度 4 字节，所以减 4
+	if size > 0 {
+		message.Body = make([]byte, size)
 		_, err = io.ReadFull(up.serverReader, message.Body)
 		if err != nil {
 			glog.Error("read ex-message failed, server: ", up.IP(), ", error: ", err.Error())
@@ -345,6 +372,14 @@ func (up *UpSession) addStratumSession(e EventAddStratumSession) {
 	up.stratumSessions[e.Session.sessionID] = e.Session
 	e.Session.SetUpSession(up)
 	go e.Session.Run()
+
+	if up.rpcSetVersionMask != nil && e.Session.versionMask != 0 {
+		e.Session.SendEvent(EventSendBytes{up.rpcSetDifficulty})
+	}
+
+	if up.rpcSetDifficulty != nil {
+		e.Session.SendEvent(EventSendBytes{up.rpcSetDifficulty})
+	}
 
 	if up.lastJob != nil {
 		bytes, err := up.lastJob.ToNotifyLine(true)
@@ -396,7 +431,7 @@ func (up *UpSession) recvJSONRPC(e EventRecvJSONRPC) {
 		case "mining.set_version_mask":
 			up.handleSetVersionMask(rpcData, jsonBytes)
 		case "mining.set_difficulty":
-			// ignore
+			up.handleSetDifficulty(rpcData, jsonBytes)
 		case "mining.notify":
 			up.handleMiningNotify(rpcData, jsonBytes)
 		default:
@@ -419,6 +454,65 @@ func (up *UpSession) recvJSONRPC(e EventRecvJSONRPC) {
 	}
 }
 
+func (up *UpSession) handleSubmitShare(e EventSubmitShare) {
+	data := e.Message.Serialize()
+	_, err := up.serverConn.Write(data)
+
+	if up.config.SubmitResponseFromServer && up.serverCapSubmitResponse {
+		up.submitIDs[up.submitIndex] = SubmitID{e.ID, e.SessionID}
+		up.submitIndex++
+	} else {
+		up.sendSubmitResponse(e.SessionID, e.ID, STATUS_ACCEPT)
+	}
+
+	if err != nil {
+		glog.Error("submit share failed, server: ", up.IP(), ", error: ", err.Error())
+		up.close()
+		return
+	}
+}
+
+func (up *UpSession) sendSubmitResponse(sessionID uint32, id interface{}, status StratumStatus) {
+	session, ok := up.stratumSessions[sessionID]
+	if !ok {
+		// 客户端已断开，忽略
+		return
+	}
+	session.SendEvent(EventSubmitResponse{id, status})
+}
+
+func (up *UpSession) handleExMessageSubmitResponse(ex *ExMessage) {
+	if !up.config.SubmitResponseFromServer || !up.serverCapSubmitResponse {
+		glog.Error("unexpected ex-message CMD_SUBMIT_RESPONSE, server: ", up.IP())
+		return
+	}
+
+	var msg ExMessageSubmitResponse
+	err := msg.Unserialize(ex.Body)
+	if err != nil {
+		glog.Error("decode ex-message failed, server: ", up.IP(), ", error: ", err.Error(), ", ex-message: ", ex)
+		return
+	}
+
+	submitID, ok := up.submitIDs[msg.Index]
+	if !ok {
+		glog.Error("cannot find submit id ", msg.Index, " in ex-message CMD_SUBMIT_RESPONSE, server: ", up.IP(), ", ex-message: ", msg)
+		return
+	}
+	delete(up.submitIDs, msg.Index)
+
+	up.sendSubmitResponse(submitID.SessionID, submitID.ID, msg.Status)
+}
+
+func (up *UpSession) recvExMessage(e EventRecvExMessage) {
+	switch e.Message.Type {
+	case CMD_SUBMIT_RESPONSE:
+		up.handleExMessageSubmitResponse(e.Message)
+	default:
+		glog.Error("Unknown ex-message: ", e.Message)
+	}
+}
+
 func (up *UpSession) handleEvent() {
 	up.eventLoopRunning = true
 	for up.eventLoopRunning {
@@ -427,8 +521,12 @@ func (up *UpSession) handleEvent() {
 		switch e := event.(type) {
 		case EventAddStratumSession:
 			up.addStratumSession(e)
+		case EventSubmitShare:
+			up.handleSubmitShare(e)
 		case EventRecvJSONRPC:
 			up.recvJSONRPC(e)
+		case EventRecvExMessage:
+			up.recvExMessage(e)
 		case EventConnBroken:
 			up.close()
 		default:
