@@ -17,7 +17,8 @@ type StratumSessionManager struct {
 	// 会话ID管理器
 	sessionIDManager *SessionIDManager
 	// map[子账户名]矿池会话管理器
-	upSessionManagers sync.Map
+	upSessionManagers     map[string]*UpSessionManager
+	upSessionManagersLock sync.Mutex
 	// 退出信号
 	exitChannel chan bool
 }
@@ -25,6 +26,7 @@ type StratumSessionManager struct {
 func NewStratumSessionManager(config *Config) (manager *StratumSessionManager) {
 	manager = new(StratumSessionManager)
 	manager.config = config
+	manager.upSessionManagers = make(map[string]*UpSessionManager)
 	manager.exitChannel = make(chan bool, 1)
 	return
 }
@@ -67,10 +69,11 @@ func (manager *StratumSessionManager) Stop() {
 	manager.exitChannel <- true
 	manager.tcpListener.Close()
 
-	manager.upSessionManagers.Range(func(key interface{}, value interface{}) bool {
-		value.(*UpSessionManager).SendEvent(EventExit{})
-		return true
-	})
+	manager.upSessionManagersLock.Lock()
+	defer manager.upSessionManagersLock.Unlock()
+	for _, up := range manager.upSessionManagers {
+		up.SendEvent(EventExit{})
+	}
 }
 
 func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
@@ -90,14 +93,14 @@ func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
 		return
 	}
 
-	var upManager *UpSessionManager
-	obj, ok := manager.upSessionManagers.Load(session.subAccountName)
-	if ok {
-		upManager = obj.(*UpSessionManager)
-	} else {
+	manager.upSessionManagersLock.Lock()
+	defer manager.upSessionManagersLock.Unlock()
+
+	upManager, ok := manager.upSessionManagers[session.subAccountName]
+	if !ok {
 		upManager = NewUpSessionManager(session.subAccountName, manager.config)
 		go upManager.Run()
-		manager.upSessionManagers.Store(session.subAccountName, upManager)
+		manager.upSessionManagers[session.subAccountName] = upManager
 		// 等待连接就绪
 		time.Sleep(3 * time.Second)
 	}
