@@ -56,6 +56,10 @@ func (session *StratumSession) Run() {
 }
 
 func (session *StratumSession) close() {
+	if session.upSession != nil && session.stat != StatExit {
+		session.upSession.SendEvent(EventStratumSessionBroken{session.sessionID})
+	}
+
 	session.eventLoopRunning = false
 	session.stat = StatDisconnected
 	session.clientConn.Close()
@@ -387,6 +391,20 @@ func (session *StratumSession) submitResponse(e EventSubmitResponse) {
 	}
 }
 
+func (session *StratumSession) exit() {
+	session.stat = StatExit
+
+	// send reconnect request to miner
+	var reconnect JSONRPCRequest
+	reconnect.Method = "client.reconnect"
+	bytes, err := reconnect.ToJSONBytesLine()
+	if err != nil {
+		session.clientConn.Write(bytes)
+	}
+
+	session.close()
+}
+
 func (session *StratumSession) handleEvent() {
 	session.eventLoopRunning = true
 	for session.eventLoopRunning {
@@ -401,6 +419,8 @@ func (session *StratumSession) handleEvent() {
 			session.submitResponse(e)
 		case EventConnBroken:
 			session.close()
+		case EventExit:
+			session.exit()
 		default:
 			glog.Error("Unknown event: ", e)
 		}

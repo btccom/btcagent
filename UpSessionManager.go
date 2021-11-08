@@ -43,7 +43,7 @@ func (manager *UpSessionManager) Run() {
 
 func (manager *UpSessionManager) connect(slot int) {
 	for i := range manager.config.Pools {
-		session := NewUpSession(manager, manager.config, manager.subAccount, i)
+		session := NewUpSession(manager, manager.config, manager.subAccount, i, slot)
 		session.Init()
 
 		if session.stat == StatAuthorized {
@@ -97,6 +97,16 @@ func (manager *UpSessionManager) upSessionInitFailed(e EventUpSessionInitFailed)
 	}()
 }
 
+func (manager *UpSessionManager) upSessionBroken(e EventUpSessionBroken) {
+	go manager.connect(e.Slot)
+}
+
+func (manager *UpSessionManager) exit() {
+	for _, up := range manager.upSessions {
+		up.upSession.SendEvent(EventExit{})
+	}
+}
+
 func (manager *UpSessionManager) handleEvent() {
 	for {
 		event := <-manager.eventChannel
@@ -108,7 +118,11 @@ func (manager *UpSessionManager) handleEvent() {
 			manager.upSessionInitFailed(e)
 		case EventAddStratumSession:
 			manager.addStratumSession(e)
-		case EventApplicationExit:
+		case EventUpSessionBroken:
+			manager.upSessionBroken(e)
+		case EventExit:
+			manager.exit()
+			return
 		default:
 			glog.Error("Unknown event: ", event)
 		}

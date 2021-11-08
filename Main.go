@@ -5,11 +5,17 @@ import (
 	"flag"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
 	"github.com/golang/glog"
 )
 
 func main() {
+	var waitGroup sync.WaitGroup
+
 	// 解析命令行参数
 	configFilePath := flag.String("c", "agent_conf.json", "Path of config file")
 	logDir := flag.String("l", "", "Log directory")
@@ -34,10 +40,29 @@ func main() {
 
 	if config.HTTPDebug.Enable {
 		glog.Info("HTTP debug enabled: ", config.HTTPDebug.Listen)
-		go http.ListenAndServe(config.HTTPDebug.Listen, nil)
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			err := http.ListenAndServe(config.HTTPDebug.Listen, nil)
+			if err != nil {
+				glog.Error("launch http debug service failed: ", err.Error())
+			}
+		}()
 	}
 
-	// 运行代理
 	manager := NewStratumSessionManager(&config)
+
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		glog.Info("exiting...")
+		manager.Stop()
+	}()
+
+	// 运行代理
 	manager.Run()
+
+	// 等待所有服务结束
+	waitGroup.Done()
 }

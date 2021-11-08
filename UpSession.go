@@ -19,6 +19,7 @@ type SubmitID struct {
 type UpSession struct {
 	manager *UpSessionManager
 	config  *Config
+	slot    int
 
 	subAccount string
 	poolIndex  int
@@ -47,10 +48,11 @@ type UpSession struct {
 	submitIndex uint16
 }
 
-func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, poolIndex int) (up *UpSession) {
+func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, poolIndex int, slot int) (up *UpSession) {
 	up = new(UpSession)
 	up.manager = manager
 	up.config = config
+	up.slot = slot
 	up.subAccount = subAccount
 	up.poolIndex = poolIndex
 	up.stratumSessions = make(map[uint32]*StratumSession)
@@ -139,6 +141,12 @@ func (up *UpSession) sendInitRequest() (err error) {
 }
 
 func (up *UpSession) close() {
+	up.manager.SendEvent(EventUpSessionBroken{up.slot})
+
+	for _, session := range up.stratumSessions {
+		session.SendEvent(EventExit{})
+	}
+
 	up.eventLoopRunning = false
 	up.stat = StatDisconnected
 	up.serverConn.Close()
@@ -376,7 +384,7 @@ func (up *UpSession) addStratumSession(e EventAddStratumSession) {
 	go e.Session.Run()
 
 	if up.rpcSetVersionMask != nil && e.Session.versionMask != 0 {
-		e.Session.SendEvent(EventSendBytes{up.rpcSetDifficulty})
+		e.Session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
 	}
 
 	if up.rpcSetDifficulty != nil {
@@ -481,7 +489,7 @@ func (up *UpSession) sendSubmitResponse(sessionID uint32, id interface{}, status
 		glog.Info("cannot find session ", sessionID)
 		return
 	}
-	session.SendEvent(EventSubmitResponse{id, status})
+	go session.SendEvent(EventSubmitResponse{id, status})
 }
 
 func (up *UpSession) handleExMessageSubmitResponse(ex *ExMessage) {
@@ -516,6 +524,10 @@ func (up *UpSession) recvExMessage(e EventRecvExMessage) {
 	}
 }
 
+func (up *UpSession) stratumSessionBroken(e EventStratumSessionBroken) {
+	delete(up.stratumSessions, e.SessionID)
+}
+
 func (up *UpSession) handleEvent() {
 	up.eventLoopRunning = true
 	for up.eventLoopRunning {
@@ -532,6 +544,10 @@ func (up *UpSession) handleEvent() {
 			up.recvExMessage(e)
 		case EventConnBroken:
 			up.close()
+		case EventExit:
+			up.close()
+		case EventStratumSessionBroken:
+			up.stratumSessionBroken(e)
 		default:
 			glog.Error("Unknown event: ", e)
 		}

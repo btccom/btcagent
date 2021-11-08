@@ -2,7 +2,7 @@ package main
 
 type EventType uint8
 
-type EventApplicationExit struct{}
+type EventExit struct{}
 
 type EventInitFinished struct{}
 

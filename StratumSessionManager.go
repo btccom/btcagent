@@ -18,11 +18,14 @@ type StratumSessionManager struct {
 	sessionIDManager *SessionIDManager
 	// map[子账户名]矿池会话管理器
 	upSessionManagers sync.Map
+	// 退出信号
+	exitChannel chan bool
 }
 
 func NewStratumSessionManager(config *Config) (manager *StratumSessionManager) {
 	manager = new(StratumSessionManager)
 	manager.config = config
+	manager.exitChannel = make(chan bool, 1)
 	return
 }
 
@@ -48,10 +51,26 @@ func (manager *StratumSessionManager) Run() {
 	for {
 		conn, err := manager.tcpListener.Accept()
 		if err != nil {
-			continue
+			select {
+			case <-manager.exitChannel:
+				return
+			default:
+				glog.Warning("accept miner connection failed: ", err.Error())
+				continue
+			}
 		}
 		go manager.RunStratumSession(conn)
 	}
+}
+
+func (manager *StratumSessionManager) Stop() {
+	manager.exitChannel <- true
+	manager.tcpListener.Close()
+
+	manager.upSessionManagers.Range(func(key interface{}, value interface{}) bool {
+		value.(*UpSessionManager).SendEvent(EventExit{})
+		return true
+	})
 }
 
 func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
