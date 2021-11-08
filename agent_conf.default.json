@@ -14,5 +14,9 @@
         ["cn.ss.btc.com", 1800, "testpool"],
         ["cn.ss.btc.com", 443, "testpool"],
         ["cn.ss.btc.com", 3333, "testpool"]
-    ]
+    ],
+    "http_debug": {
+        "enable": false,
+        "listen": "127.0.0.1:9999"
+    }
 }

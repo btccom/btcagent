@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"net/http"
+	_ "net/http/pprof"
 
 	"github.com/golang/glog"
 )
@@ -29,6 +31,11 @@ func main() {
 
 	configBytes, _ := json.Marshal(config)
 	glog.Info("config: ", string(configBytes))
+
+	if config.HTTPDebug.Enable {
+		glog.Info("HTTP debug enabled: ", config.HTTPDebug.Listen)
+		go http.ListenAndServe(config.HTTPDebug.Listen, nil)
+	}
 
 	// 运行代理
 	manager := NewStratumSessionManager(&config)

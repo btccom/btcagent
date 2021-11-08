@@ -51,6 +51,10 @@ type Config struct {
 	UseIocp                     bool       `json:"use_iocp"`
 	FixedWorkerName             string     `json:"fixed_worker_name"`
 	Pools                       []PoolInfo `json:"pools"`
+	HTTPDebug                   struct {
+		Enable bool   `json:"enable"`
+		Listen string `json:"listen"`
+	} `json:"http_debug"`
 }
 
 // LoadFromFile 从文件载入配置
