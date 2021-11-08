@@ -71,6 +71,7 @@ func (up *UpSession) connect() (err error) {
 		up.stat = StatDisconnected
 		return
 	}
+	up.serverConn.(*net.TCPConn).SetNoDelay(true)
 
 	up.serverReader = bufio.NewReader(up.serverConn)
 	up.stat = StatConnected
@@ -189,7 +190,7 @@ func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte
 	}
 
 	for _, session := range up.stratumSessions {
-		session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
+		go session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
 	}
 }
 
@@ -417,7 +418,7 @@ func (up *UpSession) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byte) 
 	}
 
 	for _, session := range up.stratumSessions {
-		session.SendEvent(EventSendBytes{bytes})
+		go session.SendEvent(EventSendBytes{bytes})
 	}
 
 	up.lastJob = job

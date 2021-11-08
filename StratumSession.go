@@ -45,6 +45,8 @@ func NewStratumSession(manager *StratumSessionManager, clientConn net.Conn, sess
 }
 
 func (session *StratumSession) Init() {
+	session.clientConn.(*net.TCPConn).SetNoDelay(true)
+
 	go session.handleRequest()
 	session.handleEvent()
 }
@@ -225,7 +227,6 @@ func (session *StratumSession) parseSubscribeRequest(request *JSONRPCLine) (resu
 
 	result = JSONRPCArray{JSONRPCArray{JSONRPCArray{"mining.set_difficulty", sessionIDString}, JSONRPCArray{"mining.notify", sessionIDString}}, sessionIDString, 4}
 	return
-
 }
 
 func (session *StratumSession) parseAuthorizeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
