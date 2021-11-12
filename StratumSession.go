@@ -57,7 +57,7 @@ func (session *StratumSession) Run() {
 
 func (session *StratumSession) close() {
 	if session.upSession != nil && session.stat != StatExit {
-		session.upSession.SendEvent(EventStratumSessionBroken{session.sessionID})
+		go session.upSession.SendEvent(EventStratumSessionBroken{session.sessionID})
 	}
 
 	session.eventLoopRunning = false
@@ -196,7 +196,7 @@ func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result i
 		err = StratumErrIllegalParams
 		return
 	}
-	msg.Base.ExtraNonce2 = uint32(nonce)
+	msg.Base.Nonce = uint32(nonce)
 
 	// [5] Version Mask
 	if len(request.Params) >= 6 {
@@ -217,7 +217,7 @@ func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result i
 	e.ID = request.ID
 	e.SessionID = session.sessionID
 	e.Message = &msg
-	session.upSession.SendEvent(e)
+	go session.upSession.SendEvent(e)
 	return
 }
 

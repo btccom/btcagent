@@ -144,7 +144,7 @@ func (up *UpSession) close() {
 	up.manager.SendEvent(EventUpSessionBroken{up.slot})
 
 	for _, session := range up.stratumSessions {
-		session.SendEvent(EventExit{})
+		go session.SendEvent(EventExit{})
 	}
 
 	up.eventLoopRunning = false
@@ -380,27 +380,27 @@ func (up *UpSession) SendEvent(event interface{}) {
 
 func (up *UpSession) addStratumSession(e EventAddStratumSession) {
 	up.stratumSessions[e.Session.sessionID] = e.Session
+	up.registerWorker(e.Session)
+
 	e.Session.SetUpSession(up)
 	go e.Session.Run()
 
 	if up.rpcSetVersionMask != nil && e.Session.versionMask != 0 {
-		e.Session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
+		go e.Session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
 	}
 
 	if up.rpcSetDifficulty != nil {
-		e.Session.SendEvent(EventSendBytes{up.rpcSetDifficulty})
+		go e.Session.SendEvent(EventSendBytes{up.rpcSetDifficulty})
 	}
 
 	if up.lastJob != nil {
 		bytes, err := up.lastJob.ToNotifyLine(true)
 		if err == nil {
-			e.Session.SendEvent(EventSendBytes{bytes})
+			go e.Session.SendEvent(EventSendBytes{bytes})
 		} else {
 			glog.Warning("create notify bytes failed, ", err.Error(), ", struct: ", up.lastJob)
 		}
 	}
-
-	up.registerWorker(e.Session)
 }
 
 func (up *UpSession) registerWorker(session *StratumSession) {
