@@ -252,9 +252,9 @@ func (session *StratumSession) parseAuthorizeRequest(request *JSONRPCLine) (resu
 	// 矿工名
 	session.fullName = FilterWorkerName(fullWorkerName)
 
-	if strings.Contains(session.fullName, ".") {
-		// 截取“.”之前的做为子账户名，“.”及之后的做矿机名
-		pos := strings.Index(session.fullName, ".")
+	// 截取“.”之前的做为子账户名，“.”及之后的做矿机名
+	pos := strings.IndexByte(session.fullName, '.')
+	if pos >= 0 {
 		session.subAccountName = session.fullName[:pos]
 		session.workerName = session.fullName[pos+1:]
 	} else {
@@ -262,8 +262,16 @@ func (session *StratumSession) parseAuthorizeRequest(request *JSONRPCLine) (resu
 		session.workerName = ""
 	}
 
+	if len(session.manager.config.FixedWorkerName) > 0 {
+		session.workerName = session.manager.config.FixedWorkerName
+		session.fullName = session.subAccountName + "." + session.workerName
+	} else if session.manager.config.UseIpAsWorkerName {
+		session.workerName = IPAsWorkerName(session.manager.config.IpWorkerNameFormat, session.clientConn.RemoteAddr().String())
+		session.fullName = session.subAccountName + "." + session.workerName
+	}
+
 	if len(session.subAccountName) < 1 {
-		err = StratumErrWorkerNameStartWrong
+		err = StratumErrSubAccountNameEmpty
 		return
 	}
 

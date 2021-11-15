@@ -61,8 +61,8 @@ var (
 	StratumErrDuplicateSubscribed = NewStratumError(102, "Duplicate Subscribed")
 	// StratumErrWorkerNameMustBeString 矿工名必须是字符串
 	StratumErrWorkerNameMustBeString = NewStratumError(104, "Worker Name Must be a String")
-	// StratumErrWorkerNameStartWrong 矿工名开头错误
-	StratumErrWorkerNameStartWrong = NewStratumError(105, "Sub-account Name Cannot be Empty")
+	// StratumErrSubAccountNameEmpty 子账户名为空
+	StratumErrSubAccountNameEmpty = NewStratumError(105, "Sub-account Name Cannot be Empty")
 
 	// StratumErrStratumServerNotFound 找不到对应币种的Stratum Server
 	StratumErrStratumServerNotFound = NewStratumError(301, "Stratum Server Not Found")

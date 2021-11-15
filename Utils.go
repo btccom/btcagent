@@ -132,3 +132,32 @@ func FilterWorkerName(workerName string) string {
 	pattren := regexp.MustCompile("[^a-zA-Z0-9._:|^/-]")
 	return pattren.ReplaceAllString(workerName, "")
 }
+
+func IPAsWorkerName(format string, ip string) string {
+	if len(ip) < 1 {
+		return ip
+	}
+
+	addr, err := net.ResolveTCPAddr("tcp", ip)
+	if err != nil {
+		return ip
+	}
+
+	len := len(addr.IP)
+	if len < 4 {
+		return ip
+	}
+
+	var base int
+	if ip[0] == '[' {
+		base = 16
+	} else {
+		base = 10
+	}
+
+	format = strings.ReplaceAll(format, "{1}", strconv.FormatUint(uint64(addr.IP[len-4]), base))
+	format = strings.ReplaceAll(format, "{2}", strconv.FormatUint(uint64(addr.IP[len-3]), base))
+	format = strings.ReplaceAll(format, "{3}", strconv.FormatUint(uint64(addr.IP[len-2]), base))
+	format = strings.ReplaceAll(format, "{4}", strconv.FormatUint(uint64(addr.IP[len-1]), base))
+	return format
+}
