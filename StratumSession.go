@@ -61,6 +61,9 @@ func (session *StratumSession) close() {
 	session.eventLoopRunning = false
 	session.stat = StatDisconnected
 	session.clientConn.Close()
+
+	// release session id
+	session.manager.sessionIDManager.FreeSessionID(session.sessionID)
 }
 
 func (session *StratumSession) IP() string {
