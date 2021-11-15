@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -68,12 +69,15 @@ func (up *UpSession) connect() (err error) {
 	pool := up.config.Pools[up.poolIndex]
 
 	url := fmt.Sprintf("%s:%d", pool.Host, pool.Port)
-	up.serverConn, err = net.DialTimeout("tcp", url, UpSessionDialTimeout)
+	if up.config.PoolUseTls {
+		up.serverConn, err = tls.DialWithDialer(&net.Dialer{Timeout: UpSessionDialTimeout}, "tcp", url, UpSessionTLSConf)
+	} else {
+		up.serverConn, err = net.DialTimeout("tcp", url, UpSessionDialTimeout)
+	}
 	if err != nil {
 		up.stat = StatDisconnected
 		return
 	}
-	up.serverConn.(*net.TCPConn).SetNoDelay(true)
 
 	up.serverReader = bufio.NewReader(up.serverConn)
 	up.stat = StatConnected

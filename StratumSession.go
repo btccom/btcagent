@@ -45,8 +45,6 @@ func NewStratumSession(manager *StratumSessionManager, clientConn net.Conn, sess
 }
 
 func (session *StratumSession) Init() {
-	session.clientConn.(*net.TCPConn).SetNoDelay(true)
-
 	go session.handleRequest()
 	session.handleEvent()
 }

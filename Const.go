@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"crypto/tls"
+	"time"
+)
 
 // AuthorizeStat 认证状态
 type AuthorizeStat uint8
@@ -29,3 +32,6 @@ const (
 	CapVersionRolling = "verrol" // ASICBoost version rolling
 	CapSubmitResponse = "subres" // Send response of mining.submit
 )
+
+var UpSessionTLSConf = &tls.Config{
+	InsecureSkipVerify: true}
