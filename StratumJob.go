@@ -38,7 +38,7 @@ func NewStratumJob(json *JSONRPCLine, sessionID uint32) (job *StratumJob, err er
 		return
 	}
 
-	job.Params[2] = coinbase1 + Uint32ToHexLE(sessionID)
+	job.Params[2] = coinbase1 + Uint32ToHex(sessionID)
 
 	return
 }

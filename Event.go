@@ -43,9 +43,8 @@ type EventUpSessionBroken struct {
 }
 
 type EventSubmitShare struct {
-	ID        interface{}
-	SessionID uint32
-	Message   *ExMessageSubmitShare
+	ID      interface{}
+	Message *ExMessageSubmitShare
 }
 
 type EventSubmitResponse struct {

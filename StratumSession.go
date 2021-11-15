@@ -213,9 +213,11 @@ func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result i
 		msg.VersionMask = uint32(versionMask)
 	}
 
+	// session id
+	msg.Base.SessionID = uint16(session.sessionID)
+
 	var e EventSubmitShare
 	e.ID = request.ID
-	e.SessionID = session.sessionID
 	e.Message = &msg
 	go session.upSession.SendEvent(e)
 	return
@@ -227,7 +229,7 @@ func (session *StratumSession) parseSubscribeRequest(request *JSONRPCLine) (resu
 		session.clientAgent, _ = request.Params[0].(string)
 	}
 
-	sessionIDString := Uint32ToHex(session.sessionID)[2:8]
+	sessionIDString := Uint32ToHex(session.sessionID)
 
 	result = JSONRPCArray{JSONRPCArray{JSONRPCArray{"mining.set_difficulty", sessionIDString}, JSONRPCArray{"mining.notify", sessionIDString}}, sessionIDString, 4}
 	return

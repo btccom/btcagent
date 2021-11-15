@@ -13,7 +13,7 @@ import (
 
 type SubmitID struct {
 	ID        interface{}
-	SessionID uint32
+	SessionID uint16
 }
 
 type UpSession struct {
@@ -469,10 +469,10 @@ func (up *UpSession) handleSubmitShare(e EventSubmitShare) {
 	_, err := up.serverConn.Write(data)
 
 	if up.config.SubmitResponseFromServer && up.serverCapSubmitResponse {
-		up.submitIDs[up.submitIndex] = SubmitID{e.ID, e.SessionID}
+		up.submitIDs[up.submitIndex] = SubmitID{e.ID, e.Message.Base.SessionID}
 		up.submitIndex++
 	} else {
-		up.sendSubmitResponse(e.SessionID, e.ID, STATUS_ACCEPT)
+		up.sendSubmitResponse(uint32(e.Message.Base.SessionID), e.ID, STATUS_ACCEPT)
 	}
 
 	if err != nil {
@@ -512,7 +512,7 @@ func (up *UpSession) handleExMessageSubmitResponse(ex *ExMessage) {
 	}
 	delete(up.submitIDs, msg.Index)
 
-	up.sendSubmitResponse(submitID.SessionID, submitID.ID, msg.Status)
+	up.sendSubmitResponse(uint32(submitID.SessionID), submitID.ID, msg.Status)
 }
 
 func (up *UpSession) recvExMessage(e EventRecvExMessage) {
