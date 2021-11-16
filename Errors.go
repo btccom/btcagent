@@ -51,6 +51,8 @@ var (
 )
 
 var (
+	// StratumErrNeedAuthorized 需要认证
+	StratumErrNeedAuthorized = NewStratumError(24, "Unauthorized worker")
 	// StratumErrNeedSubscribed 需要订阅
 	StratumErrNeedSubscribed = NewStratumError(25, "Not subscribed")
 	// StratumErrIllegalParams 参数非法

@@ -134,6 +134,14 @@ func (session *StratumSession) stratumHandleRequest(request *JSONRPCLine, reques
 }
 
 func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result interface{}, err *StratumError) {
+	if session.stat != StatAuthorized {
+		err = StratumErrNeedAuthorized
+
+		// there must be something wrong, send reconnect command
+		session.sendReconnectRequest()
+		return
+	}
+
 	// params:
 	// [0] Worker Name
 	// [1] Job ID
@@ -234,26 +242,22 @@ func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result i
 			glog.Warning("AsicBoost disabled mid-way, send client.reconnect. worker: ", session.ID(), ", version rolling shares: ", session.versionRollingShareCounter)
 
 			// send reconnect request to miner
-			sendErr := session.sendReconnectRequest()
-			if sendErr != nil {
-				glog.Error("write reconnect request failed, IP: ", session.IP(), ", error: ", err.Error())
-				session.close()
-				return
-			}
+			session.sendReconnectRequest()
 		}
 	}
 	return
 }
 
-func (session *StratumSession) sendReconnectRequest() (err error) {
+func (session *StratumSession) sendReconnectRequest() {
 	var reconnect JSONRPCRequest
 	reconnect.Method = "client.reconnect"
+	reconnect.Params = JSONRPCArray{}
 	bytes, err := reconnect.ToJSONBytesLine()
 	if err != nil {
+		glog.Error("convert client.reconnect request to JSON failed, request: ", reconnect, ", error: ", err.Error())
 		return
 	}
-	_, err = session.clientConn.Write(bytes)
-	return
+	go session.SendEvent(EventSendBytes{bytes})
 }
 
 func (session *StratumSession) parseSubscribeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
@@ -436,7 +440,6 @@ func (session *StratumSession) submitResponse(e EventSubmitResponse) {
 
 func (session *StratumSession) exit() {
 	session.stat = StatExit
-	session.sendReconnectRequest()
 	session.close()
 }
 
