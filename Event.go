@@ -58,3 +58,7 @@ type EventUpdateMinerNum struct {
 }
 
 type EventSendUpdateMinerNum struct{}
+
+type EventStopUpSessionManager struct {
+	SubAccount string
+}

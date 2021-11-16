@@ -98,18 +98,28 @@ func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
 	manager.SendEvent(EventAddStratumSession{session})
 }
 
+func (manager *StratumSessionManager) SendEvent(event interface{}) {
+	manager.eventChannel <- event
+}
+
 func (manager *StratumSessionManager) addStratumSession(e EventAddStratumSession) {
 	upManager, ok := manager.upSessionManagers[e.Session.subAccountName]
 	if !ok {
-		upManager = NewUpSessionManager(e.Session.subAccountName, manager.config)
+		upManager = NewUpSessionManager(e.Session.subAccountName, manager.config, manager)
 		go upManager.Run()
 		manager.upSessionManagers[e.Session.subAccountName] = upManager
 	}
 	upManager.SendEvent(EventAddStratumSession{e.Session})
 }
 
-func (manager *StratumSessionManager) SendEvent(event interface{}) {
-	manager.eventChannel <- event
+func (manager *StratumSessionManager) stopUpSessionManager(e EventStopUpSessionManager) {
+	child := manager.upSessionManagers[e.SubAccount]
+	if child == nil {
+		glog.Error("StopUpSessionManager: cannot find sub-account: ", e.SubAccount)
+		return
+	}
+	delete(manager.upSessionManagers, e.SubAccount)
+	child.SendEvent(EventExit{})
 }
 
 func (manager *StratumSessionManager) handleEvent() {
@@ -119,6 +129,8 @@ func (manager *StratumSessionManager) handleEvent() {
 		switch e := event.(type) {
 		case EventAddStratumSession:
 			manager.addStratumSession(e)
+		case EventStopUpSessionManager:
+			manager.stopUpSessionManager(e)
 		case EventExit:
 			manager.exit()
 			return

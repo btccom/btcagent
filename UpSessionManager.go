@@ -15,17 +15,22 @@ type UpSessionInfo struct {
 type UpSessionManager struct {
 	subAccount string
 	config     *Config
+	parent     *StratumSessionManager
 
 	upSessions             []UpSessionInfo
 	unboundStratumSessions []*StratumSession
 
 	eventChannel chan interface{}
+
+	initSuccess        bool
+	initFailureCounter int
 }
 
-func NewUpSessionManager(subAccount string, config *Config) (manager *UpSessionManager) {
+func NewUpSessionManager(subAccount string, config *Config, parent *StratumSessionManager) (manager *UpSessionManager) {
 	manager = new(UpSessionManager)
 	manager.subAccount = subAccount
 	manager.config = config
+	manager.parent = parent
 
 	upSessions := [UpSessionNumPerSubAccount]UpSessionInfo{}
 	manager.upSessions = upSessions[:]
@@ -82,6 +87,8 @@ func (manager *UpSessionManager) addStratumSession(e EventAddStratumSession) {
 }
 
 func (manager *UpSessionManager) upSessionReady(e EventUpSessionReady) {
+	manager.initSuccess = true
+
 	info := &manager.upSessions[e.Slot]
 	info.upSession = e.Session
 	info.ready = true
@@ -95,11 +102,23 @@ func (manager *UpSessionManager) upSessionReady(e EventUpSessionReady) {
 }
 
 func (manager *UpSessionManager) upSessionInitFailed(e EventUpSessionInitFailed) {
-	glog.Error("Failed to connect to all ", len(manager.config.Pools), " pool servers, please check your configuration! Retry in 5 seconds.")
-	go func() {
-		time.Sleep(5 * time.Second)
-		manager.connect(e.Slot)
-	}()
+	if manager.initSuccess {
+		glog.Error("Failed to connect to all ", len(manager.config.Pools), " pool servers, please check your configuration! Retry in 5 seconds.")
+		go func() {
+			time.Sleep(5 * time.Second)
+			manager.connect(e.Slot)
+		}()
+		return
+	}
+
+	manager.initFailureCounter++
+
+	if manager.initFailureCounter >= len(manager.upSessions) {
+		glog.Error("Too many connection failure to pool, please check your sub-account or pool configurations! Sub-account: ", manager.subAccount, ", pools: ", manager.config.Pools)
+
+		manager.parent.SendEvent(EventStopUpSessionManager{manager.subAccount})
+		return
+	}
 }
 
 func (manager *UpSessionManager) upSessionBroken(e EventUpSessionBroken) {
@@ -112,8 +131,15 @@ func (manager *UpSessionManager) updateMinerNum(e EventUpdateMinerNum) {
 }
 
 func (manager *UpSessionManager) exit() {
+	for _, session := range manager.unboundStratumSessions {
+		// 这些 session 没有启动事件循环，所以不能用 SendEvent(EventExit{})。
+		// 这里直接 close()。
+		session.close()
+	}
 	for _, up := range manager.upSessions {
-		up.upSession.SendEvent(EventExit{})
+		if up.ready {
+			up.upSession.SendEvent(EventExit{})
+		}
 	}
 }
 
