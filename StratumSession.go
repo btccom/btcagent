@@ -229,10 +229,7 @@ func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result i
 	// session id
 	msg.Base.SessionID = uint16(session.sessionID)
 
-	var e EventSubmitShare
-	e.ID = request.ID
-	e.Message = &msg
-	go session.upSession.SendEvent(e)
+	go session.upSession.SendEvent(EventSubmitShare{request.ID, &msg})
 
 	// 如果 AsicBoost 丢失，就发送重连请求
 	if session.manager.config.DisconnectWhenLostAsicboost {

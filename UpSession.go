@@ -207,8 +207,9 @@ func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte
 		glog.Info("version mask update, server: ", up.IP(), ", version mask: ", versionMaskHex)
 	}
 
+	e := EventSendBytes{up.rpcSetVersionMask}
 	for _, session := range up.stratumSessions {
-		go session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
+		go session.SendEvent(e)
 	}
 }
 
