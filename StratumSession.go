@@ -28,6 +28,8 @@ type StratumSession struct {
 
 	eventLoopRunning bool             // 消息循环是否在运行
 	eventChannel     chan interface{} // 消息通道
+
+	versionRollingShareCounter uint64 // ASICBoost share 提交数量
 }
 
 // NewStratumSession 创建一个新的 Stratum 会话
@@ -200,6 +202,7 @@ func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result i
 	msg.Base.Nonce = uint32(nonce)
 
 	// [5] Version Mask
+	hasVersionMask := false
 	if len(request.Params) >= 6 {
 		versionMaskHex, ok := request.Params[5].(string)
 		if !ok {
@@ -212,6 +215,7 @@ func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result i
 			return
 		}
 		msg.VersionMask = uint32(versionMask)
+		hasVersionMask = true
 	}
 
 	// session id
@@ -221,6 +225,34 @@ func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result i
 	e.ID = request.ID
 	e.Message = &msg
 	go session.upSession.SendEvent(e)
+
+	// 如果 AsicBoost 丢失，就发送重连请求
+	if session.manager.config.DisconnectWhenLostAsicboost {
+		if hasVersionMask {
+			session.versionRollingShareCounter++
+		} else if session.versionRollingShareCounter > 100 {
+			glog.Warning("AsicBoost disabled mid-way, send client.reconnect. worker: ", session.ID(), ", version rolling shares: ", session.versionRollingShareCounter)
+
+			// send reconnect request to miner
+			sendErr := session.sendReconnectRequest()
+			if sendErr != nil {
+				glog.Error("write reconnect request failed, IP: ", session.IP(), ", error: ", err.Error())
+				session.close()
+				return
+			}
+		}
+	}
+	return
+}
+
+func (session *StratumSession) sendReconnectRequest() (err error) {
+	var reconnect JSONRPCRequest
+	reconnect.Method = "client.reconnect"
+	bytes, err := reconnect.ToJSONBytesLine()
+	if err != nil {
+		return
+	}
+	_, err = session.clientConn.Write(bytes)
 	return
 }
 
@@ -404,15 +436,7 @@ func (session *StratumSession) submitResponse(e EventSubmitResponse) {
 
 func (session *StratumSession) exit() {
 	session.stat = StatExit
-
-	// send reconnect request to miner
-	var reconnect JSONRPCRequest
-	reconnect.Method = "client.reconnect"
-	bytes, err := reconnect.ToJSONBytesLine()
-	if err != nil {
-		session.clientConn.Write(bytes)
-	}
-
+	session.sendReconnectRequest()
 	session.close()
 }
 
