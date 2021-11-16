@@ -50,7 +50,7 @@ type UpSession struct {
 	submitIndex uint16
 
 	// 用于统计断开连接的矿机数，并同步给 UpSessionManager
-	disconnectedMinerCounter uint
+	disconnectedMinerCounter int
 }
 
 func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, poolIndex int, slot int) (up *UpSession) {

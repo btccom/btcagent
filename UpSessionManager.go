@@ -7,7 +7,7 @@ import (
 )
 
 type UpSessionInfo struct {
-	minerNum  uint
+	minerNum  int
 	ready     bool
 	upSession *UpSession
 }
@@ -16,7 +16,8 @@ type UpSessionManager struct {
 	subAccount string
 	config     *Config
 
-	upSessions []UpSessionInfo
+	upSessions             []UpSessionInfo
+	unboundStratumSessions []*StratumSession
 
 	eventChannel chan interface{}
 }
@@ -70,13 +71,9 @@ func (manager *UpSessionManager) addStratumSession(e EventAddStratumSession) {
 		}
 	}
 
-	// 服务器均未就绪，3秒后重试
+	// 服务器均未就绪，把连接暂存起来
 	if selected == nil {
-		glog.Warning("Cannot find a ready pool connection for miner ", e.Session.ID(), "! Retry in 3 seconds.")
-		go func() {
-			time.Sleep(3 * time.Second)
-			manager.SendEvent(e)
-		}()
+		manager.unboundStratumSessions = append(manager.unboundStratumSessions, e.Session)
 		return
 	}
 
@@ -88,6 +85,13 @@ func (manager *UpSessionManager) upSessionReady(e EventUpSessionReady) {
 	info := &manager.upSessions[e.Slot]
 	info.upSession = e.Session
 	info.ready = true
+
+	// 绑定暂存的连接
+	for _, session := range manager.unboundStratumSessions {
+		info.upSession.SendEvent(EventAddStratumSession{session})
+	}
+	info.minerNum += len(manager.unboundStratumSessions)
+	manager.unboundStratumSessions = nil
 }
 
 func (manager *UpSessionManager) upSessionInitFailed(e EventUpSessionInitFailed) {

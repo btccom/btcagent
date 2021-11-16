@@ -54,7 +54,7 @@ type EventSubmitResponse struct {
 
 type EventUpdateMinerNum struct {
 	Slot                     int
-	DisconnectedMinerCounter uint
+	DisconnectedMinerCounter int
 }
 
 type EventSendUpdateMinerNum struct{}
