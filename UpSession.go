@@ -390,17 +390,17 @@ func (up *UpSession) addStratumSession(e EventAddStratumSession) {
 	go e.Session.Run()
 
 	if up.rpcSetVersionMask != nil && e.Session.versionMask != 0 {
-		go e.Session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
+		e.Session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
 	}
 
 	if up.rpcSetDifficulty != nil {
-		go e.Session.SendEvent(EventSendBytes{up.rpcSetDifficulty})
+		e.Session.SendEvent(EventSendBytes{up.rpcSetDifficulty})
 	}
 
 	if up.lastJob != nil {
 		bytes, err := up.lastJob.ToNotifyLine(true)
 		if err == nil {
-			go e.Session.SendEvent(EventSendBytes{bytes})
+			e.Session.SendEvent(EventSendBytes{bytes})
 		} else {
 			glog.Warning("create notify bytes failed, ", err.Error(), ", struct: ", up.lastJob)
 		}
