@@ -145,7 +145,9 @@ func (up *UpSession) sendInitRequest() (err error) {
 }
 
 func (up *UpSession) close() {
-	up.manager.SendEvent(EventUpSessionBroken{up.slot})
+	if up.stat == StatAuthorized {
+		up.manager.SendEvent(EventUpSessionBroken{up.slot})
+	}
 
 	for _, session := range up.stratumSessions {
 		go session.SendEvent(EventExit{})
