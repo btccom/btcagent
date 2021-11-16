@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"time"
 
 	"github.com/golang/glog"
 )
@@ -47,6 +48,9 @@ type UpSession struct {
 
 	submitIDs   map[uint16]SubmitID
 	submitIndex uint16
+
+	// 用于统计断开连接的矿机数，并同步给 UpSessionManager
+	disconnectedMinerCounter uint
 }
 
 func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, poolIndex int, slot int) (up *UpSession) {
@@ -532,6 +536,19 @@ func (up *UpSession) recvExMessage(e EventRecvExMessage) {
 
 func (up *UpSession) stratumSessionBroken(e EventStratumSessionBroken) {
 	delete(up.stratumSessions, e.SessionID)
+
+	if up.disconnectedMinerCounter == 0 {
+		go func() {
+			time.Sleep(1 * time.Second)
+			up.SendEvent(EventSendUpdateMinerNum{})
+		}()
+	}
+	up.disconnectedMinerCounter++
+}
+
+func (up *UpSession) sendUpdateMinerNum() {
+	go up.manager.SendEvent(EventUpdateMinerNum{up.slot, up.disconnectedMinerCounter})
+	up.disconnectedMinerCounter = 0
 }
 
 func (up *UpSession) handleEvent() {
@@ -554,6 +571,8 @@ func (up *UpSession) handleEvent() {
 			up.close()
 		case EventStratumSessionBroken:
 			up.stratumSessionBroken(e)
+		case EventSendUpdateMinerNum:
+			up.sendUpdateMinerNum()
 		default:
 			glog.Error("Unknown event: ", e)
 		}

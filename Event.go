@@ -51,3 +51,10 @@ type EventSubmitResponse struct {
 	ID     interface{}
 	Status StratumStatus
 }
+
+type EventUpdateMinerNum struct {
+	Slot                     int
+	DisconnectedMinerCounter uint
+}
+
+type EventSendUpdateMinerNum struct{}

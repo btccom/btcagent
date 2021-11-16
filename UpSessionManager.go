@@ -81,6 +81,7 @@ func (manager *UpSessionManager) addStratumSession(e EventAddStratumSession) {
 	}
 
 	selected.upSession.SendEvent(e)
+	selected.minerNum++
 }
 
 func (manager *UpSessionManager) upSessionReady(e EventUpSessionReady) {
@@ -99,6 +100,11 @@ func (manager *UpSessionManager) upSessionInitFailed(e EventUpSessionInitFailed)
 
 func (manager *UpSessionManager) upSessionBroken(e EventUpSessionBroken) {
 	go manager.connect(e.Slot)
+}
+
+func (manager *UpSessionManager) updateMinerNum(e EventUpdateMinerNum) {
+	manager.upSessions[e.Slot].minerNum -= e.DisconnectedMinerCounter
+	glog.Info("miner num update, slot: ", e.Slot, ", miners: ", manager.upSessions[e.Slot].minerNum)
 }
 
 func (manager *UpSessionManager) exit() {
@@ -120,6 +126,8 @@ func (manager *UpSessionManager) handleEvent() {
 			manager.addStratumSession(e)
 		case EventUpSessionBroken:
 			manager.upSessionBroken(e)
+		case EventUpdateMinerNum:
+			manager.updateMinerNum(e)
 		case EventExit:
 			manager.exit()
 			return
