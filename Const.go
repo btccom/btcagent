@@ -19,7 +19,8 @@ const (
 
 const StratumSessionChannelCache = 64
 const UpSessionChannelCache = 512
-const UpSessionManagerChannelCache = 16
+const UpSessionManagerChannelCache = 64
+const StratumSessionManagerChannelCache = 64
 
 const UpSessionDialTimeout = 15 * time.Second
 
