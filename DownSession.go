@@ -14,7 +14,7 @@ type DownSession struct {
 	manager   *SessionManager // 会话管理器
 	upSession EventInterface  // 所属的服务器会话
 
-	sessionID       uint32        // 会话ID
+	sessionID       uint16        // 会话ID
 	clientConn      net.Conn      // 到矿机的TCP连接
 	clientReader    *bufio.Reader // 读取矿机发送的内容
 	readLoopRunning bool          // TCP读循环是否在运行
@@ -33,7 +33,7 @@ type DownSession struct {
 }
 
 // NewDownSession 创建一个新的 Stratum 会话
-func NewDownSession(manager *SessionManager, clientConn net.Conn, sessionID uint32) (down *DownSession) {
+func NewDownSession(manager *SessionManager, clientConn net.Conn, sessionID uint16) (down *DownSession) {
 	down = new(DownSession)
 	down.manager = manager
 	down.sessionID = sessionID
@@ -273,7 +273,7 @@ func (down *DownSession) parseSubscribeRequest(request *JSONRPCLine) (result int
 		down.clientAgent, _ = request.Params[0].(string)
 	}
 
-	sessionIDString := Uint32ToHex(down.sessionID)
+	sessionIDString := Uint32ToHex(uint32(down.sessionID))
 
 	result = JSONRPCArray{JSONRPCArray{JSONRPCArray{"mining.set_difficulty", sessionIDString}, JSONRPCArray{"mining.notify", sessionIDString}}, sessionIDString, 4}
 	return

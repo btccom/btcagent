@@ -13,7 +13,7 @@ func TestSessionIDManager16Bits(t *testing.T) {
 
 	// fill all session ids
 	{
-		var i uint32
+		var i uint16
 		for i = 0; i <= 0xfffe; i++ {
 			id, err := m.AllocSessionID()
 			if err != nil {
@@ -34,7 +34,7 @@ func TestSessionIDManager16Bits(t *testing.T) {
 
 	// free the first one
 	{
-		var id1, id2 uint32
+		var id1, id2 uint16
 		id1 = 0x0000
 		m.FreeSessionID(id1)
 		id2, err := m.AllocSessionID()
@@ -50,7 +50,7 @@ func TestSessionIDManager16Bits(t *testing.T) {
 
 	// free the second one
 	{
-		var id1, id2 uint32
+		var id1, id2 uint16
 		id1 = 0x0001
 		m.FreeSessionID(id1)
 		id2, err := m.AllocSessionID()
@@ -66,7 +66,7 @@ func TestSessionIDManager16Bits(t *testing.T) {
 
 	// free the one in the middle
 	{
-		var id1, id2 uint32
+		var id1, id2 uint16
 		id1 = 0x5024
 		m.FreeSessionID(id1)
 		id2, err := m.AllocSessionID()
@@ -82,7 +82,7 @@ func TestSessionIDManager16Bits(t *testing.T) {
 
 	// free the penult one
 	{
-		var id1, id2 uint32
+		var id1, id2 uint16
 		id1 = 0xfffd
 		m.FreeSessionID(id1)
 		id2, err := m.AllocSessionID()
@@ -98,7 +98,7 @@ func TestSessionIDManager16Bits(t *testing.T) {
 
 	// free the last one
 	{
-		var id1, id2 uint32
+		var id1, id2 uint16
 		id1 = 0x00fffe
 		m.FreeSessionID(id1)
 		id2, err := m.AllocSessionID()
@@ -114,7 +114,7 @@ func TestSessionIDManager16Bits(t *testing.T) {
 
 	// free all ids
 	{
-		var i uint32
+		var i uint16
 		for i = 0x0000; i <= 0xfffe; i++ {
 			m.FreeSessionID(i)
 		}

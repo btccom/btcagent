@@ -8,7 +8,7 @@ import (
 
 type FakeUpSession struct {
 	manager      *UpSessionManager
-	downSessions map[uint32]*DownSession
+	downSessions map[uint16]*DownSession
 	eventChannel chan interface{}
 
 	fakeJob     *StratumJob
@@ -18,7 +18,7 @@ type FakeUpSession struct {
 func NewFakeUpSession(manager *UpSessionManager) (up *FakeUpSession) {
 	up = new(FakeUpSession)
 	up.manager = manager
-	up.downSessions = make(map[uint32]*DownSession)
+	up.downSessions = make(map[uint16]*DownSession)
 	up.eventChannel = make(chan interface{}, UpSessionChannelCache)
 	up.exitChannel = make(chan bool, 1)
 	return
@@ -55,7 +55,7 @@ func (up *FakeUpSession) transferDownSessions() {
 		up.manager.SendEvent(EventAddDownSession{down})
 	}
 	// 清空map
-	up.downSessions = make(map[uint32]*DownSession)
+	up.downSessions = make(map[uint16]*DownSession)
 }
 
 func (up *FakeUpSession) exit() {
@@ -68,7 +68,7 @@ func (up *FakeUpSession) exit() {
 	}
 }
 
-func (up *FakeUpSession) sendSubmitResponse(sessionID uint32, id interface{}, status StratumStatus) {
+func (up *FakeUpSession) sendSubmitResponse(sessionID uint16, id interface{}, status StratumStatus) {
 	down, ok := up.downSessions[sessionID]
 	if !ok {
 		// 客户端已断开，忽略
@@ -79,7 +79,7 @@ func (up *FakeUpSession) sendSubmitResponse(sessionID uint32, id interface{}, st
 }
 
 func (up *FakeUpSession) handleSubmitShare(e EventSubmitShare) {
-	up.sendSubmitResponse(uint32(e.Message.Base.SessionID), e.ID, STATUS_ACCEPT)
+	up.sendSubmitResponse(e.Message.Base.SessionID, e.ID, STATUS_ACCEPT)
 }
 
 func (up *FakeUpSession) downSessionBroken(e EventDownSessionBroken) {

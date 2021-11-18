@@ -39,7 +39,7 @@ type EventSendBytes struct {
 }
 
 type EventDownSessionBroken struct {
-	SessionID uint32
+	SessionID uint16
 }
 
 type EventUpSessionBroken struct {

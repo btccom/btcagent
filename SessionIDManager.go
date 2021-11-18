@@ -13,13 +13,13 @@ type SessionIDManager struct {
 	lock       sync.Mutex
 	sessionIDs *bitset.BitSet
 
-	count        uint32 // how many ids are used now
-	allocIDx     uint32
-	maxSessionId uint32 // sessionID可以达到的最大数值
+	count        uint16 // how many ids are used now
+	allocIDx     uint16
+	maxSessionId uint16 // sessionID可以达到的最大数值
 }
 
 // NewSessionIDManager 创建一个会话ID管理器实例
-func NewSessionIDManager(maxSessionId uint32) (manager *SessionIDManager, err error) {
+func NewSessionIDManager(maxSessionId uint16) (manager *SessionIDManager, err error) {
 	manager = new(SessionIDManager)
 
 	manager.maxSessionId = maxSessionId
@@ -51,7 +51,7 @@ func (manager *SessionIDManager) next() {
 }
 
 // AllocSessionID 为调用者分配一个会话ID
-func (manager *SessionIDManager) AllocSessionID() (sessionID uint32, err error) {
+func (manager *SessionIDManager) AllocSessionID() (sessionID uint16, err error) {
 	defer manager.lock.Unlock()
 	manager.lock.Lock()
 
@@ -77,7 +77,7 @@ func (manager *SessionIDManager) AllocSessionID() (sessionID uint32, err error) 
 }
 
 // FreeSessionID 释放调用者持有的会话ID
-func (manager *SessionIDManager) FreeSessionID(sessionID uint32) {
+func (manager *SessionIDManager) FreeSessionID(sessionID uint16) {
 	defer manager.lock.Unlock()
 	manager.lock.Lock()
 

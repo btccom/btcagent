@@ -26,7 +26,7 @@ type UpSession struct {
 	subAccount string
 	poolIndex  int
 
-	downSessions    map[uint32]*DownSession
+	downSessions    map[uint16]*DownSession
 	serverConn      net.Conn
 	serverReader    *bufio.Reader
 	readLoopRunning bool
@@ -60,7 +60,7 @@ func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, 
 	up.slot = slot
 	up.subAccount = subAccount
 	up.poolIndex = poolIndex
-	up.downSessions = make(map[uint32]*DownSession)
+	up.downSessions = make(map[uint16]*DownSession)
 	up.stat = StatDisconnected
 	up.eventChannel = make(chan interface{}, UpSessionChannelCache)
 	up.submitIDs = make(map[uint16]SubmitID)
@@ -487,7 +487,7 @@ func (up *UpSession) recvJSONRPC(e EventRecvJSONRPC) {
 
 func (up *UpSession) handleSubmitShare(e EventSubmitShare) {
 	if e.Message.IsFakeJob {
-		up.sendSubmitResponse(uint32(e.Message.Base.SessionID), e.ID, STATUS_ACCEPT)
+		up.sendSubmitResponse(e.Message.Base.SessionID, e.ID, STATUS_ACCEPT)
 		return
 	}
 
@@ -498,7 +498,7 @@ func (up *UpSession) handleSubmitShare(e EventSubmitShare) {
 		up.submitIDs[up.submitIndex] = SubmitID{e.ID, e.Message.Base.SessionID}
 		up.submitIndex++
 	} else {
-		up.sendSubmitResponse(uint32(e.Message.Base.SessionID), e.ID, STATUS_ACCEPT)
+		up.sendSubmitResponse(e.Message.Base.SessionID, e.ID, STATUS_ACCEPT)
 	}
 
 	if err != nil {
@@ -508,7 +508,7 @@ func (up *UpSession) handleSubmitShare(e EventSubmitShare) {
 	}
 }
 
-func (up *UpSession) sendSubmitResponse(sessionID uint32, id interface{}, status StratumStatus) {
+func (up *UpSession) sendSubmitResponse(sessionID uint16, id interface{}, status StratumStatus) {
 	down, ok := up.downSessions[sessionID]
 	if !ok {
 		// 客户端已断开，忽略
@@ -538,7 +538,7 @@ func (up *UpSession) handleExMessageSubmitResponse(ex *ExMessage) {
 	}
 	delete(up.submitIDs, msg.Index)
 
-	up.sendSubmitResponse(uint32(submitID.SessionID), submitID.ID, msg.Status)
+	up.sendSubmitResponse(submitID.SessionID, submitID.ID, msg.Status)
 }
 
 func (up *UpSession) recvExMessage(e EventRecvExMessage) {
