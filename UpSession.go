@@ -430,10 +430,19 @@ func (up *UpSession) addDownSession(e EventAddDownSession) {
 }
 
 func (up *UpSession) registerWorker(down *DownSession) {
-	msg := ExMessageRegisterWorker{uint16(down.sessionID), down.clientAgent, down.workerName}
+	msg := ExMessageRegisterWorker{down.sessionID, down.clientAgent, down.workerName}
 	_, err := up.serverConn.Write(msg.Serialize())
 	if err != nil {
 		glog.Error("register worker to server failed, server: ", up.IP(), ", error: ", err.Error())
+		up.close()
+	}
+}
+
+func (up *UpSession) unregisterWorker(sessionID uint16) {
+	msg := ExMessageUnregisterWorker{sessionID}
+	_, err := up.serverConn.Write(msg.Serialize())
+	if err != nil {
+		glog.Error("unregister worker to server failed, server: ", up.IP(), ", error: ", err.Error())
 		up.close()
 	}
 }
@@ -557,6 +566,7 @@ func (up *UpSession) recvExMessage(e EventRecvExMessage) {
 
 func (up *UpSession) downSessionBroken(e EventDownSessionBroken) {
 	delete(up.downSessions, e.SessionID)
+	up.unregisterWorker(e.SessionID)
 
 	if up.disconnectedMinerCounter == 0 {
 		go func() {

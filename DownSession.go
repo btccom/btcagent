@@ -237,7 +237,7 @@ func (down *DownSession) parseMiningSubmit(request *JSONRPCLine) (result interfa
 	}
 
 	// down id
-	msg.Base.SessionID = uint16(down.sessionID)
+	msg.Base.SessionID = down.sessionID
 
 	go down.upSession.SendEvent(EventSubmitShare{request.ID, &msg})
 
