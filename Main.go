@@ -34,6 +34,7 @@ func main() {
 		glog.Fatal("load config failed: ", err)
 		return
 	}
+	config.Init()
 
 	configBytes, _ := json.Marshal(config)
 	glog.Info("config: ", string(configBytes))

@@ -313,9 +313,21 @@ func (down *DownSession) parseAuthorizeRequest(request *JSONRPCLine) (result int
 		down.fullName = down.subAccountName + "." + down.workerName
 	}
 
-	if len(down.subAccountName) < 1 {
-		err = StratumErrSubAccountNameEmpty
-		return
+	if down.manager.config.MultiUserMode {
+		if len(down.subAccountName) < 1 {
+			err = StratumErrSubAccountNameEmpty
+			return
+		}
+	} else {
+		down.subAccountName = ""
+	}
+
+	if down.workerName == "" {
+		down.workerName = down.fullName
+		if down.workerName == "" {
+			down.workerName = DefaultWorkerName
+			down.fullName = down.subAccountName + "." + down.workerName
+		}
 	}
 
 	// 获取矿机名成功

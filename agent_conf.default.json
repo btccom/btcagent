@@ -1,4 +1,5 @@
 {
+    "multi_user_mode": true,
     "agent_type": "btc",
     "always_keep_downconn": false,
     "disconnect_when_lost_asicboost": true,

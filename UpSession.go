@@ -64,6 +64,12 @@ func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, 
 	up.stat = StatDisconnected
 	up.eventChannel = make(chan interface{}, UpSessionChannelCache)
 	up.submitIDs = make(map[uint16]SubmitID)
+
+	// 禁用多用户模式时
+	if up.subAccount == "" {
+		up.subAccount = config.Pools[poolIndex].SubAccount
+	}
+
 	return
 }
 

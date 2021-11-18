@@ -39,6 +39,7 @@ func (r *PoolInfo) MarshalJSON() ([]byte, error) {
 }
 
 type Config struct {
+	MultiUserMode               bool       `json:"multi_user_mode"`
 	AgentType                   string     `json:"agent_type"`
 	AlwaysKeepDownconn          bool       `json:"always_keep_downconn"`
 	DisconnectWhenLostAsicboost bool       `json:"disconnect_when_lost_asicboost"`
@@ -65,4 +66,13 @@ func (conf *Config) LoadFromFile(file string) (err error) {
 	}
 	err = json.Unmarshal(configJSON, conf)
 	return
+}
+
+func (conf *Config) Init() {
+	// 如果启用多用户模式，删除矿池设置中的子账户名
+	if conf.MultiUserMode {
+		for i := range conf.Pools {
+			conf.Pools[i].SubAccount = ""
+		}
+	}
 }
