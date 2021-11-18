@@ -12,7 +12,7 @@ import (
 
 type StratumSession struct {
 	manager   *StratumSessionManager // 会话管理器
-	upSession *UpSession             // 所属的服务器会话
+	upSession EventInterface         // 所属的服务器会话
 
 	sessionID       uint32        // 会话ID
 	clientConn      net.Conn      // 到矿机的TCP连接
@@ -142,6 +142,11 @@ func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result i
 		return
 	}
 
+	if session.upSession == nil {
+		err = StratumErrJobNotFound
+		return
+	}
+
 	// params:
 	// [0] Worker Name
 	// [1] Job ID
@@ -163,12 +168,17 @@ func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result i
 		err = StratumErrIllegalParams
 		return
 	}
-	jobID, convErr := strconv.ParseUint(jobIDStr, 10, 8)
-	if convErr != nil {
-		err = StratumErrIllegalParams
-		return
+
+	if IsFakeJobID(jobIDStr) {
+		msg.IsFakeJob = true
+	} else {
+		jobID, convErr := strconv.ParseUint(jobIDStr, 10, 8)
+		if convErr != nil {
+			err = StratumErrIllegalParams
+			return
+		}
+		msg.Base.JobID = uint8(jobID)
 	}
-	msg.Base.JobID = uint8(jobID)
 
 	// [2] ExtraNonce2
 	extraNonce2Hex, ok := request.Params[2].(string)
@@ -354,8 +364,9 @@ func (session *StratumSession) versionMaskStr() string {
 	return fmt.Sprintf("%08x", session.versionMask)
 }
 
-func (session *StratumSession) SetUpSession(upSession *UpSession) {
-	session.upSession = upSession
+func (session *StratumSession) setUpSession(e EventSetUpSession) {
+	session.upSession = e.Session
+	session.upSession.SendEvent(EventAddStratumSession{session})
 }
 
 func (session *StratumSession) handleRequest() {
@@ -446,6 +457,8 @@ func (session *StratumSession) handleEvent() {
 		event := <-session.eventChannel
 
 		switch e := event.(type) {
+		case EventSetUpSession:
+			session.setUpSession(e)
 		case EventRecvJSONRPC:
 			session.recvJSONRPC(e)
 		case EventSendBytes:

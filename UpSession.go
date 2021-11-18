@@ -148,6 +148,11 @@ func (up *UpSession) sendInitRequest() (err error) {
 	return
 }
 
+func (up *UpSession) exit() {
+	up.stat = StatExit
+	up.close()
+}
+
 func (up *UpSession) close() {
 	if up.stat == StatAuthorized {
 		up.manager.SendEvent(EventUpSessionBroken{up.slot})
@@ -393,9 +398,6 @@ func (up *UpSession) addStratumSession(e EventAddStratumSession) {
 	up.stratumSessions[e.Session.sessionID] = e.Session
 	up.registerWorker(e.Session)
 
-	e.Session.SetUpSession(up)
-	go e.Session.Run()
-
 	if up.rpcSetVersionMask != nil && e.Session.versionMask != 0 {
 		e.Session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
 	}
@@ -476,6 +478,11 @@ func (up *UpSession) recvJSONRPC(e EventRecvJSONRPC) {
 }
 
 func (up *UpSession) handleSubmitShare(e EventSubmitShare) {
+	if e.Message.IsFakeJob {
+		up.sendSubmitResponse(uint32(e.Message.Base.SessionID), e.ID, STATUS_ACCEPT)
+		return
+	}
+
 	data := e.Message.Serialize()
 	_, err := up.serverConn.Write(data)
 
@@ -562,6 +569,10 @@ func (up *UpSession) handleEvent() {
 			up.addStratumSession(e)
 		case EventSubmitShare:
 			up.handleSubmitShare(e)
+		case EventStratumSessionBroken:
+			up.stratumSessionBroken(e)
+		case EventSendUpdateMinerNum:
+			up.sendUpdateMinerNum()
 		case EventRecvJSONRPC:
 			up.recvJSONRPC(e)
 		case EventRecvExMessage:
@@ -569,11 +580,7 @@ func (up *UpSession) handleEvent() {
 		case EventConnBroken:
 			up.close()
 		case EventExit:
-			up.close()
-		case EventStratumSessionBroken:
-			up.stratumSessionBroken(e)
-		case EventSendUpdateMinerNum:
-			up.sendUpdateMinerNum()
+			up.exit()
 		default:
 			glog.Error("Unknown event: ", e)
 		}

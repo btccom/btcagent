@@ -51,6 +51,8 @@ var (
 )
 
 var (
+	// StratumErrJobNotFound 任务不存在
+	StratumErrJobNotFound = NewStratumError(21, "Job not found (=stale)")
 	// StratumErrNeedAuthorized 需要认证
 	StratumErrNeedAuthorized = NewStratumError(24, "Unauthorized worker")
 	// StratumErrNeedSubscribed 需要订阅

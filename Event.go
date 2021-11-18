@@ -15,6 +15,10 @@ type EventUpSessionInitFailed struct {
 	Slot int
 }
 
+type EventSetUpSession struct {
+	Session EventInterface
+}
+
 type EventAddStratumSession struct {
 	Session *StratumSession
 }
@@ -62,3 +66,11 @@ type EventSendUpdateMinerNum struct{}
 type EventStopUpSessionManager struct {
 	SubAccount string
 }
+
+type EventUpdateFakeJob struct {
+	FakeJob StratumJob
+}
+
+type EventTransferStratumSessions struct{}
+
+type EventSendFakeNotify struct{}

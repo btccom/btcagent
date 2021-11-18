@@ -32,6 +32,13 @@ func Long2IP(ipLong uint32) string {
 	return b0 + "." + b1 + "." + b2 + "." + b3
 }
 
+// Uint64ToHex unit64 转 hex
+func Uint64ToHex(num uint64) string {
+	bytesBuffer := bytes.NewBuffer([]byte{})
+	binary.Write(bytesBuffer, binary.BigEndian, num)
+	return hex.EncodeToString(bytesBuffer.Bytes())
+}
+
 // Uint32ToHex unit32 转 hex
 func Uint32ToHex(num uint32) string {
 	bytesBuffer := bytes.NewBuffer([]byte{})

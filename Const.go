@@ -36,3 +36,5 @@ const (
 
 var UpSessionTLSConf = &tls.Config{
 	InsecureSkipVerify: true}
+
+const FakeJobNotifyInterval = 30 * time.Second

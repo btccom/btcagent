@@ -17,8 +17,8 @@ type UpSessionManager struct {
 	config     *Config
 	parent     *StratumSessionManager
 
-	upSessions             []UpSessionInfo
-	unboundStratumSessions []*StratumSession
+	upSessions    []UpSessionInfo
+	fakeUpSession *FakeUpSession
 
 	eventChannel chan interface{}
 
@@ -34,12 +34,15 @@ func NewUpSessionManager(subAccount string, config *Config, parent *StratumSessi
 
 	upSessions := [UpSessionNumPerSubAccount]UpSessionInfo{}
 	manager.upSessions = upSessions[:]
+	manager.fakeUpSession = NewFakeUpSession(manager)
 
 	manager.eventChannel = make(chan interface{}, UpSessionManagerChannelCache)
 	return
 }
 
 func (manager *UpSessionManager) Run() {
+	go manager.fakeUpSession.Run()
+
 	for i := range manager.upSessions {
 		go manager.connect(i)
 	}
@@ -76,14 +79,14 @@ func (manager *UpSessionManager) addStratumSession(e EventAddStratumSession) {
 		}
 	}
 
-	// 服务器均未就绪，把连接暂存起来
-	if selected == nil {
-		manager.unboundStratumSessions = append(manager.unboundStratumSessions, e.Session)
+	if selected != nil {
+		selected.minerNum++
+		e.Session.SendEvent(EventSetUpSession{selected.upSession})
 		return
 	}
 
-	selected.upSession.SendEvent(e)
-	selected.minerNum++
+	// 服务器均未就绪，把矿机托管给 FakeUpSession
+	e.Session.SendEvent(EventSetUpSession{manager.fakeUpSession})
 }
 
 func (manager *UpSessionManager) upSessionReady(e EventUpSessionReady) {
@@ -93,12 +96,8 @@ func (manager *UpSessionManager) upSessionReady(e EventUpSessionReady) {
 	info.upSession = e.Session
 	info.ready = true
 
-	// 绑定暂存的连接
-	for _, session := range manager.unboundStratumSessions {
-		info.upSession.SendEvent(EventAddStratumSession{session})
-	}
-	info.minerNum += len(manager.unboundStratumSessions)
-	manager.unboundStratumSessions = nil
+	// 从 FakeUpSession 拿回矿机
+	manager.fakeUpSession.SendEvent(EventTransferStratumSessions{})
 }
 
 func (manager *UpSessionManager) upSessionInitFailed(e EventUpSessionInitFailed) {
@@ -122,6 +121,10 @@ func (manager *UpSessionManager) upSessionInitFailed(e EventUpSessionInitFailed)
 }
 
 func (manager *UpSessionManager) upSessionBroken(e EventUpSessionBroken) {
+	info := &manager.upSessions[e.Slot]
+	info.ready = false
+	info.minerNum = 0
+
 	go manager.connect(e.Slot)
 }
 
@@ -131,11 +134,8 @@ func (manager *UpSessionManager) updateMinerNum(e EventUpdateMinerNum) {
 }
 
 func (manager *UpSessionManager) exit() {
-	for _, session := range manager.unboundStratumSessions {
-		// 这些 session 没有启动事件循环，所以不能用 SendEvent(EventExit{})。
-		// 这里直接 close()。
-		session.close()
-	}
+	manager.fakeUpSession.SendEvent(EventExit{})
+
 	for _, up := range manager.upSessions {
 		if up.ready {
 			up.upSession.SendEvent(EventExit{})

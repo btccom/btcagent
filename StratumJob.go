@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"time"
 )
 
 type StratumJob struct {
@@ -49,4 +50,21 @@ func (job *StratumJob) ToNotifyLine(firstJob bool) (bytes []byte, err error) {
 	}
 
 	return job.ToJSONBytesLine()
+}
+
+func IsFakeJobID(id string) bool {
+	return len(id) < 1 || id[0] == 'f'
+}
+
+func (job *StratumJob) ToNewFakeJob() {
+	now := uint64(time.Now().Unix())
+	job.ID = fmt.Sprintf("f%04d", now)
+
+	coinbase1, _ := job.Params[2].(string)
+	pos := len(coinbase1) - 8
+	if pos < 0 {
+		pos = 0
+	}
+
+	job.Params[2] = coinbase1[:pos] + Uint64ToHex(now)
 }

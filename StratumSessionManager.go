@@ -95,6 +95,8 @@ func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
 		return
 	}
 
+	go session.Run()
+
 	manager.SendEvent(EventAddStratumSession{session})
 }
 
@@ -109,7 +111,7 @@ func (manager *StratumSessionManager) addStratumSession(e EventAddStratumSession
 		go upManager.Run()
 		manager.upSessionManagers[e.Session.subAccountName] = upManager
 	}
-	upManager.SendEvent(EventAddStratumSession{e.Session})
+	upManager.SendEvent(e)
 }
 
 func (manager *StratumSessionManager) stopUpSessionManager(e EventStopUpSessionManager) {

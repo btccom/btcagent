@@ -85,6 +85,8 @@ type ExMessageSubmitShare struct {
 
 	Time        uint32
 	VersionMask uint32
+
+	IsFakeJob bool
 }
 
 func (msg *ExMessageSubmitShare) Serialize() []byte {
