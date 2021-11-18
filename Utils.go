@@ -136,7 +136,7 @@ func StripEthAddrFromFullName(fullNameStr string) string {
 
 // FilterWorkerName 过滤矿工名
 func FilterWorkerName(workerName string) string {
-	pattren := regexp.MustCompile("[^a-zA-Z0-9._:|^/-]")
+	pattren := regexp.MustCompile(`[^a-zA-Z0-9,=/.\-_:|^]`)
 	return pattren.ReplaceAllString(workerName, "")
 }
 
