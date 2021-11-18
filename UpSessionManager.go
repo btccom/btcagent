@@ -131,6 +131,17 @@ func (manager *UpSessionManager) upSessionBroken(e EventUpSessionBroken) {
 func (manager *UpSessionManager) updateMinerNum(e EventUpdateMinerNum) {
 	manager.upSessions[e.Slot].minerNum -= e.DisconnectedMinerCounter
 	glog.Info("miner num update, slot: ", e.Slot, ", miners: ", manager.upSessions[e.Slot].minerNum)
+
+	if manager.config.MultiUserMode {
+		minerNum := 0
+		for i := range manager.upSessions {
+			minerNum += manager.upSessions[i].minerNum
+		}
+		if minerNum < 1 {
+			glog.Info("no miners on sub-account ", manager.subAccount, ", close pool connections")
+			manager.parent.SendEvent(EventStopUpSessionManager{manager.subAccount})
+		}
+	}
 }
 
 func (manager *UpSessionManager) updateFakeJob(e EventUpdateFakeJob) {
