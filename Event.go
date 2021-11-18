@@ -19,8 +19,8 @@ type EventSetUpSession struct {
 	Session EventInterface
 }
 
-type EventAddStratumSession struct {
-	Session *StratumSession
+type EventAddDownSession struct {
+	Session *DownSession
 }
 
 type EventConnBroken struct{}
@@ -38,7 +38,7 @@ type EventSendBytes struct {
 	Content []byte
 }
 
-type EventStratumSessionBroken struct {
+type EventDownSessionBroken struct {
 	SessionID uint32
 }
 
@@ -71,6 +71,6 @@ type EventUpdateFakeJob struct {
 	FakeJob StratumJob
 }
 
-type EventTransferStratumSessions struct{}
+type EventTransferDownSessions struct{}
 
 type EventSendFakeNotify struct{}

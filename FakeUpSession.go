@@ -7,9 +7,9 @@ import (
 )
 
 type FakeUpSession struct {
-	manager         *UpSessionManager
-	stratumSessions map[uint32]*StratumSession
-	eventChannel    chan interface{}
+	manager      *UpSessionManager
+	downSessions map[uint32]*DownSession
+	eventChannel chan interface{}
 
 	fakeJob     *StratumJob
 	exitChannel chan bool
@@ -18,7 +18,7 @@ type FakeUpSession struct {
 func NewFakeUpSession(manager *UpSessionManager) (up *FakeUpSession) {
 	up = new(FakeUpSession)
 	up.manager = manager
-	up.stratumSessions = make(map[uint32]*StratumSession)
+	up.downSessions = make(map[uint32]*DownSession)
 	up.eventChannel = make(chan interface{}, UpSessionChannelCache)
 	up.exitChannel = make(chan bool, 1)
 	return
@@ -36,8 +36,8 @@ func (up *FakeUpSession) SendEvent(event interface{}) {
 	up.eventChannel <- event
 }
 
-func (up *FakeUpSession) addStratumSession(e EventAddStratumSession) {
-	up.stratumSessions[e.Session.sessionID] = e.Session
+func (up *FakeUpSession) addDownSession(e EventAddDownSession) {
+	up.downSessions[e.Session.sessionID] = e.Session
 
 	if up.manager.config.AlwaysKeepDownconn && up.fakeJob != nil {
 		up.fakeJob.ToNewFakeJob()
@@ -50,12 +50,12 @@ func (up *FakeUpSession) addStratumSession(e EventAddStratumSession) {
 	}
 }
 
-func (up *FakeUpSession) transferStratumSessions() {
-	for _, session := range up.stratumSessions {
-		up.manager.SendEvent(EventAddStratumSession{session})
+func (up *FakeUpSession) transferDownSessions() {
+	for _, down := range up.downSessions {
+		up.manager.SendEvent(EventAddDownSession{down})
 	}
 	// 清空map
-	up.stratumSessions = make(map[uint32]*StratumSession)
+	up.downSessions = make(map[uint32]*DownSession)
 }
 
 func (up *FakeUpSession) exit() {
@@ -63,27 +63,27 @@ func (up *FakeUpSession) exit() {
 		up.exitChannel <- true
 	}
 
-	for _, session := range up.stratumSessions {
-		go session.SendEvent(EventExit{})
+	for _, down := range up.downSessions {
+		go down.SendEvent(EventExit{})
 	}
 }
 
 func (up *FakeUpSession) sendSubmitResponse(sessionID uint32, id interface{}, status StratumStatus) {
-	session, ok := up.stratumSessions[sessionID]
+	down, ok := up.downSessions[sessionID]
 	if !ok {
 		// 客户端已断开，忽略
-		glog.Info("cannot find session ", sessionID)
+		glog.Info("cannot find down session ", sessionID)
 		return
 	}
-	go session.SendEvent(EventSubmitResponse{id, status})
+	go down.SendEvent(EventSubmitResponse{id, status})
 }
 
 func (up *FakeUpSession) handleSubmitShare(e EventSubmitShare) {
 	up.sendSubmitResponse(uint32(e.Message.Base.SessionID), e.ID, STATUS_ACCEPT)
 }
 
-func (up *FakeUpSession) stratumSessionBroken(e EventStratumSessionBroken) {
-	delete(up.stratumSessions, e.SessionID)
+func (up *FakeUpSession) downSessionBroken(e EventDownSessionBroken) {
+	delete(up.downSessions, e.SessionID)
 }
 
 func (up *FakeUpSession) updateFakeJob(e EventUpdateFakeJob) {
@@ -105,7 +105,7 @@ func (up *FakeUpSession) fakeNotifyTicker() {
 }
 
 func (up *FakeUpSession) sendFakeNotify() {
-	if up.fakeJob == nil || len(up.stratumSessions) < 1 {
+	if up.fakeJob == nil || len(up.downSessions) < 1 {
 		return
 	}
 
@@ -117,8 +117,8 @@ func (up *FakeUpSession) sendFakeNotify() {
 		return
 	}
 
-	for _, session := range up.stratumSessions {
-		go session.SendEvent(EventSendBytes{bytes})
+	for _, down := range up.downSessions {
+		go down.SendEvent(EventSendBytes{bytes})
 	}
 }
 
@@ -127,14 +127,14 @@ func (up *FakeUpSession) handleEvent() {
 		event := <-up.eventChannel
 
 		switch e := event.(type) {
-		case EventAddStratumSession:
-			up.addStratumSession(e)
+		case EventAddDownSession:
+			up.addDownSession(e)
 		case EventSubmitShare:
 			up.handleSubmitShare(e)
-		case EventStratumSessionBroken:
-			up.stratumSessionBroken(e)
-		case EventTransferStratumSessions:
-			up.transferStratumSessions()
+		case EventDownSessionBroken:
+			up.downSessionBroken(e)
+		case EventTransferDownSessions:
+			up.transferDownSessions()
 		case EventUpdateFakeJob:
 			up.updateFakeJob(e)
 		case EventSendFakeNotify:

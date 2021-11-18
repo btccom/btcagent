@@ -7,7 +7,7 @@ import (
 	"github.com/golang/glog"
 )
 
-type StratumSessionManager struct {
+type SessionManager struct {
 	config            *Config                      // 配置
 	tcpListener       net.Listener                 // TCP监听对象
 	sessionIDManager  *SessionIDManager            // 会话ID管理器
@@ -16,16 +16,16 @@ type StratumSessionManager struct {
 	eventChannel      chan interface{}             // 事件循环
 }
 
-func NewStratumSessionManager(config *Config) (manager *StratumSessionManager) {
-	manager = new(StratumSessionManager)
+func NewSessionManager(config *Config) (manager *SessionManager) {
+	manager = new(SessionManager)
 	manager.config = config
 	manager.upSessionManagers = make(map[string]*UpSessionManager)
 	manager.exitChannel = make(chan bool, 1)
-	manager.eventChannel = make(chan interface{}, StratumSessionManagerChannelCache)
+	manager.eventChannel = make(chan interface{}, SessionManagerChannelCache)
 	return
 }
 
-func (manager *StratumSessionManager) Run() {
+func (manager *SessionManager) Run() {
 	var err error
 
 	// 初始化会话管理器
@@ -58,11 +58,11 @@ func (manager *StratumSessionManager) Run() {
 				continue
 			}
 		}
-		go manager.RunStratumSession(conn)
+		go manager.RunDownSession(conn)
 	}
 }
 
-func (manager *StratumSessionManager) Stop() {
+func (manager *SessionManager) Stop() {
 	// 退出TCP监听
 	manager.exitChannel <- true
 	manager.tcpListener.Close()
@@ -71,14 +71,14 @@ func (manager *StratumSessionManager) Stop() {
 	manager.SendEvent(EventExit{})
 }
 
-func (manager *StratumSessionManager) exit() {
+func (manager *SessionManager) exit() {
 	// 要求所有连接退出
 	for _, up := range manager.upSessionManagers {
 		up.SendEvent(EventExit{})
 	}
 }
 
-func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
+func (manager *SessionManager) RunDownSession(conn net.Conn) {
 	// 产生 sessionID （Extranonce1）
 	sessionID, err := manager.sessionIDManager.AllocSessionID()
 
@@ -88,23 +88,23 @@ func (manager *StratumSessionManager) RunStratumSession(conn net.Conn) {
 		return
 	}
 
-	session := NewStratumSession(manager, conn, sessionID)
-	session.Init()
-	if session.stat != StatAuthorized {
+	down := NewDownSession(manager, conn, sessionID)
+	down.Init()
+	if down.stat != StatAuthorized {
 		// 认证失败，放弃连接
 		return
 	}
 
-	go session.Run()
+	go down.Run()
 
-	manager.SendEvent(EventAddStratumSession{session})
+	manager.SendEvent(EventAddDownSession{down})
 }
 
-func (manager *StratumSessionManager) SendEvent(event interface{}) {
+func (manager *SessionManager) SendEvent(event interface{}) {
 	manager.eventChannel <- event
 }
 
-func (manager *StratumSessionManager) addStratumSession(e EventAddStratumSession) {
+func (manager *SessionManager) addDownSession(e EventAddDownSession) {
 	upManager, ok := manager.upSessionManagers[e.Session.subAccountName]
 	if !ok {
 		upManager = NewUpSessionManager(e.Session.subAccountName, manager.config, manager)
@@ -114,7 +114,7 @@ func (manager *StratumSessionManager) addStratumSession(e EventAddStratumSession
 	upManager.SendEvent(e)
 }
 
-func (manager *StratumSessionManager) stopUpSessionManager(e EventStopUpSessionManager) {
+func (manager *SessionManager) stopUpSessionManager(e EventStopUpSessionManager) {
 	child := manager.upSessionManagers[e.SubAccount]
 	if child == nil {
 		glog.Error("StopUpSessionManager: cannot find sub-account: ", e.SubAccount)
@@ -124,13 +124,13 @@ func (manager *StratumSessionManager) stopUpSessionManager(e EventStopUpSessionM
 	child.SendEvent(EventExit{})
 }
 
-func (manager *StratumSessionManager) handleEvent() {
+func (manager *SessionManager) handleEvent() {
 	for {
 		event := <-manager.eventChannel
 
 		switch e := event.(type) {
-		case EventAddStratumSession:
-			manager.addStratumSession(e)
+		case EventAddDownSession:
+			manager.addDownSession(e)
 		case EventStopUpSessionManager:
 			manager.stopUpSessionManager(e)
 		case EventExit:

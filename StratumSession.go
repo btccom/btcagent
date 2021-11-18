@@ -10,9 +10,9 @@ import (
 	"github.com/golang/glog"
 )
 
-type StratumSession struct {
-	manager   *StratumSessionManager // 会话管理器
-	upSession EventInterface         // 所属的服务器会话
+type DownSession struct {
+	manager   *SessionManager // 会话管理器
+	upSession EventInterface  // 所属的服务器会话
 
 	sessionID       uint32        // 会话ID
 	clientConn      net.Conn      // 到矿机的TCP连接
@@ -32,117 +32,117 @@ type StratumSession struct {
 	versionRollingShareCounter uint64 // ASICBoost share 提交数量
 }
 
-// NewStratumSession 创建一个新的 Stratum 会话
-func NewStratumSession(manager *StratumSessionManager, clientConn net.Conn, sessionID uint32) (session *StratumSession) {
-	session = new(StratumSession)
-	session.manager = manager
-	session.sessionID = sessionID
-	session.clientConn = clientConn
-	session.clientReader = bufio.NewReader(clientConn)
-	session.stat = StatConnected
-	session.eventChannel = make(chan interface{}, StratumSessionChannelCache)
+// NewDownSession 创建一个新的 Stratum 会话
+func NewDownSession(manager *SessionManager, clientConn net.Conn, sessionID uint32) (down *DownSession) {
+	down = new(DownSession)
+	down.manager = manager
+	down.sessionID = sessionID
+	down.clientConn = clientConn
+	down.clientReader = bufio.NewReader(clientConn)
+	down.stat = StatConnected
+	down.eventChannel = make(chan interface{}, DownSessionChannelCache)
 
-	glog.Info("miner connected, sessionId: ", sessionID, ", IP: ", session.IP())
+	glog.Info("miner connected, sessionId: ", sessionID, ", IP: ", down.IP())
 	return
 }
 
-func (session *StratumSession) Init() {
-	go session.handleRequest()
-	session.handleEvent()
+func (down *DownSession) Init() {
+	go down.handleRequest()
+	down.handleEvent()
 }
 
-func (session *StratumSession) Run() {
-	session.handleEvent()
+func (down *DownSession) Run() {
+	down.handleEvent()
 }
 
-func (session *StratumSession) close() {
-	if session.upSession != nil && session.stat != StatExit {
-		go session.upSession.SendEvent(EventStratumSessionBroken{session.sessionID})
+func (down *DownSession) close() {
+	if down.upSession != nil && down.stat != StatExit {
+		go down.upSession.SendEvent(EventDownSessionBroken{down.sessionID})
 	}
 
-	session.eventLoopRunning = false
-	session.stat = StatDisconnected
-	session.clientConn.Close()
+	down.eventLoopRunning = false
+	down.stat = StatDisconnected
+	down.clientConn.Close()
 
-	// release session id
-	session.manager.sessionIDManager.FreeSessionID(session.sessionID)
+	// release down id
+	down.manager.sessionIDManager.FreeSessionID(down.sessionID)
 }
 
-func (session *StratumSession) IP() string {
-	return session.clientConn.RemoteAddr().String()
+func (down *DownSession) IP() string {
+	return down.clientConn.RemoteAddr().String()
 }
 
-func (session *StratumSession) ID() string {
-	if session.stat == StatAuthorized {
-		return fmt.Sprintf("%s@%s", session.fullName, session.IP())
+func (down *DownSession) ID() string {
+	if down.stat == StatAuthorized {
+		return fmt.Sprintf("%s@%s", down.fullName, down.IP())
 	}
-	return session.IP()
+	return down.IP()
 }
 
-func (session *StratumSession) writeJSONResponse(jsonData *JSONRPCResponse) (int, error) {
+func (down *DownSession) writeJSONResponse(jsonData *JSONRPCResponse) (int, error) {
 	bytes, err := jsonData.ToJSONBytesLine()
 	if err != nil {
 		return 0, err
 	}
-	return session.clientConn.Write(bytes)
+	return down.clientConn.Write(bytes)
 }
 
-func (session *StratumSession) stratumHandleRequest(request *JSONRPCLine, requestJSON []byte) (result interface{}, err *StratumError) {
+func (down *DownSession) stratumHandleRequest(request *JSONRPCLine, requestJSON []byte) (result interface{}, err *StratumError) {
 	switch request.Method {
 	case "mining.subscribe":
-		if session.stat != StatConnected {
+		if down.stat != StatConnected {
 			err = StratumErrDuplicateSubscribed
 			return
 		}
-		result, err = session.parseSubscribeRequest(request)
+		result, err = down.parseSubscribeRequest(request)
 		if err == nil {
-			session.stat = StatSubScribed
+			down.stat = StatSubScribed
 		}
 		return
 
 	case "mining.authorize":
-		if session.stat != StatSubScribed {
+		if down.stat != StatSubScribed {
 			err = StratumErrNeedSubscribed
 			return
 		}
-		result, err = session.parseAuthorizeRequest(request)
+		result, err = down.parseAuthorizeRequest(request)
 		if err == nil {
-			session.stat = StatAuthorized
+			down.stat = StatAuthorized
 			// 让 Init() 函数返回
-			session.eventLoopRunning = false
+			down.eventLoopRunning = false
 
-			glog.Info("miner authorized, session id: ", session.sessionID, ", IP: ", session.IP(), ", worker name: ", session.fullName)
+			glog.Info("miner authorized, session id: ", down.sessionID, ", IP: ", down.IP(), ", worker name: ", down.fullName)
 		}
 		return
 
 	case "mining.configure":
-		result, err = session.parseConfigureRequest(request)
+		result, err = down.parseConfigureRequest(request)
 		return
 
 	case "mining.submit":
-		result, err = session.parseMiningSubmit(request)
+		result, err = down.parseMiningSubmit(request)
 		if err != nil {
-			glog.Warning("stratum error, IP: ", session.IP(), ", worker: ", session.fullName, ", error: ", err, ", submit: ", string(requestJSON))
+			glog.Warning("stratum error, IP: ", down.IP(), ", worker: ", down.fullName, ", error: ", err, ", submit: ", string(requestJSON))
 		}
 		return
 
 	default:
 		// ignore unimplemented methods
-		glog.Warning("unknown request, IP: ", session.IP(), ", request: ", string(requestJSON))
+		glog.Warning("unknown request, IP: ", down.IP(), ", request: ", string(requestJSON))
 		return
 	}
 }
 
-func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result interface{}, err *StratumError) {
-	if session.stat != StatAuthorized {
+func (down *DownSession) parseMiningSubmit(request *JSONRPCLine) (result interface{}, err *StratumError) {
+	if down.stat != StatAuthorized {
 		err = StratumErrNeedAuthorized
 
 		// there must be something wrong, send reconnect command
-		session.sendReconnectRequest()
+		down.sendReconnectRequest()
 		return
 	}
 
-	if session.upSession == nil {
+	if down.upSession == nil {
 		err = StratumErrJobNotFound
 		return
 	}
@@ -236,26 +236,26 @@ func (session *StratumSession) parseMiningSubmit(request *JSONRPCLine) (result i
 		hasVersionMask = true
 	}
 
-	// session id
-	msg.Base.SessionID = uint16(session.sessionID)
+	// down id
+	msg.Base.SessionID = uint16(down.sessionID)
 
-	go session.upSession.SendEvent(EventSubmitShare{request.ID, &msg})
+	go down.upSession.SendEvent(EventSubmitShare{request.ID, &msg})
 
 	// 如果 AsicBoost 丢失，就发送重连请求
-	if session.manager.config.DisconnectWhenLostAsicboost {
+	if down.manager.config.DisconnectWhenLostAsicboost {
 		if hasVersionMask {
-			session.versionRollingShareCounter++
-		} else if session.versionRollingShareCounter > 100 {
-			glog.Warning("AsicBoost disabled mid-way, send client.reconnect. worker: ", session.ID(), ", version rolling shares: ", session.versionRollingShareCounter)
+			down.versionRollingShareCounter++
+		} else if down.versionRollingShareCounter > 100 {
+			glog.Warning("AsicBoost disabled mid-way, send client.reconnect. worker: ", down.ID(), ", version rolling shares: ", down.versionRollingShareCounter)
 
 			// send reconnect request to miner
-			session.sendReconnectRequest()
+			down.sendReconnectRequest()
 		}
 	}
 	return
 }
 
-func (session *StratumSession) sendReconnectRequest() {
+func (down *DownSession) sendReconnectRequest() {
 	var reconnect JSONRPCRequest
 	reconnect.Method = "client.reconnect"
 	reconnect.Params = JSONRPCArray{}
@@ -264,22 +264,22 @@ func (session *StratumSession) sendReconnectRequest() {
 		glog.Error("convert client.reconnect request to JSON failed, request: ", reconnect, ", error: ", err.Error())
 		return
 	}
-	go session.SendEvent(EventSendBytes{bytes})
+	go down.SendEvent(EventSendBytes{bytes})
 }
 
-func (session *StratumSession) parseSubscribeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSession) parseSubscribeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
 
 	if len(request.Params) >= 1 {
-		session.clientAgent, _ = request.Params[0].(string)
+		down.clientAgent, _ = request.Params[0].(string)
 	}
 
-	sessionIDString := Uint32ToHex(session.sessionID)
+	sessionIDString := Uint32ToHex(down.sessionID)
 
 	result = JSONRPCArray{JSONRPCArray{JSONRPCArray{"mining.set_difficulty", sessionIDString}, JSONRPCArray{"mining.notify", sessionIDString}}, sessionIDString, 4}
 	return
 }
 
-func (session *StratumSession) parseAuthorizeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSession) parseAuthorizeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
 	if len(request.Params) < 1 {
 		err = StratumErrTooFewParams
 		return
@@ -293,27 +293,27 @@ func (session *StratumSession) parseAuthorizeRequest(request *JSONRPCLine) (resu
 	}
 
 	// 矿工名
-	session.fullName = FilterWorkerName(fullWorkerName)
+	down.fullName = FilterWorkerName(fullWorkerName)
 
 	// 截取“.”之前的做为子账户名，“.”及之后的做矿机名
-	pos := strings.IndexByte(session.fullName, '.')
+	pos := strings.IndexByte(down.fullName, '.')
 	if pos >= 0 {
-		session.subAccountName = session.fullName[:pos]
-		session.workerName = session.fullName[pos+1:]
+		down.subAccountName = down.fullName[:pos]
+		down.workerName = down.fullName[pos+1:]
 	} else {
-		session.subAccountName = session.fullName
-		session.workerName = ""
+		down.subAccountName = down.fullName
+		down.workerName = ""
 	}
 
-	if len(session.manager.config.FixedWorkerName) > 0 {
-		session.workerName = session.manager.config.FixedWorkerName
-		session.fullName = session.subAccountName + "." + session.workerName
-	} else if session.manager.config.UseIpAsWorkerName {
-		session.workerName = IPAsWorkerName(session.manager.config.IpWorkerNameFormat, session.clientConn.RemoteAddr().String())
-		session.fullName = session.subAccountName + "." + session.workerName
+	if len(down.manager.config.FixedWorkerName) > 0 {
+		down.workerName = down.manager.config.FixedWorkerName
+		down.fullName = down.subAccountName + "." + down.workerName
+	} else if down.manager.config.UseIpAsWorkerName {
+		down.workerName = IPAsWorkerName(down.manager.config.IpWorkerNameFormat, down.clientConn.RemoteAddr().String())
+		down.fullName = down.subAccountName + "." + down.workerName
 	}
 
-	if len(session.subAccountName) < 1 {
+	if len(down.subAccountName) < 1 {
 		err = StratumErrSubAccountNameEmpty
 		return
 	}
@@ -324,7 +324,7 @@ func (session *StratumSession) parseAuthorizeRequest(request *JSONRPCLine) (resu
 	return
 }
 
-func (session *StratumSession) parseConfigureRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSession) parseConfigureRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
 	// request:
 	//		{"id":3,"method":"mining.configure","params":[["version-rolling"],{"version-rolling.mask":"1fffe000","version-rolling.min-bit-count":2}]}
 	// response:
@@ -341,18 +341,18 @@ func (session *StratumSession) parseConfigureRequest(request *JSONRPCLine) (resu
 			if versionMaskStr, ok := obj.(string); ok {
 				versionMask, err := strconv.ParseUint(versionMaskStr, 16, 32)
 				if err == nil {
-					session.versionMask = uint32(versionMask)
+					down.versionMask = uint32(versionMask)
 				}
 			}
 		}
 	}
 
-	if session.versionMask != 0 {
+	if down.versionMask != 0 {
 		// 这里响应的是虚假的版本掩码。在连接服务器后将通过 mining.set_version_mask
 		// 更新为真实的版本掩码。
 		result = JSONRPCObj{
 			"version-rolling":      true,
-			"version-rolling.mask": session.versionMaskStr()}
+			"version-rolling.mask": down.versionMaskStr()}
 		return
 	}
 
@@ -360,24 +360,24 @@ func (session *StratumSession) parseConfigureRequest(request *JSONRPCLine) (resu
 	return
 }
 
-func (session *StratumSession) versionMaskStr() string {
-	return fmt.Sprintf("%08x", session.versionMask)
+func (down *DownSession) versionMaskStr() string {
+	return fmt.Sprintf("%08x", down.versionMask)
 }
 
-func (session *StratumSession) setUpSession(e EventSetUpSession) {
-	session.upSession = e.Session
-	session.upSession.SendEvent(EventAddStratumSession{session})
+func (down *DownSession) setUpSession(e EventSetUpSession) {
+	down.upSession = e.Session
+	down.upSession.SendEvent(EventAddDownSession{down})
 }
 
-func (session *StratumSession) handleRequest() {
-	session.readLoopRunning = true
+func (down *DownSession) handleRequest() {
+	down.readLoopRunning = true
 
-	for session.readLoopRunning {
-		jsonBytes, err := session.clientReader.ReadBytes('\n')
+	for down.readLoopRunning {
+		jsonBytes, err := down.clientReader.ReadBytes('\n')
 
 		if err != nil {
-			glog.Error("read line failed, IP: ", session.IP(), ", error: ", err.Error())
-			session.connBroken()
+			glog.Error("read line failed, IP: ", down.IP(), ", error: ", err.Error())
+			down.connBroken()
 			return
 		}
 
@@ -385,16 +385,16 @@ func (session *StratumSession) handleRequest() {
 
 		// ignore the json decode error
 		if err != nil {
-			glog.Warning("JSON decode failed, IP: ", session.IP(), err.Error(), string(jsonBytes))
+			glog.Warning("JSON decode failed, IP: ", down.IP(), err.Error(), string(jsonBytes))
 		}
 
-		session.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
+		down.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
 	}
 }
 
-func (session *StratumSession) recvJSONRPC(e EventRecvJSONRPC) {
+func (down *DownSession) recvJSONRPC(e EventRecvJSONRPC) {
 	// stat will be changed in stratumHandleRequest
-	result, stratumErr := session.stratumHandleRequest(e.RPCData, e.JSONBytes)
+	result, stratumErr := down.stratumHandleRequest(e.RPCData, e.JSONBytes)
 
 	// 两个均为空说明没有想要返回的响应
 	if result != nil || stratumErr != nil {
@@ -403,34 +403,34 @@ func (session *StratumSession) recvJSONRPC(e EventRecvJSONRPC) {
 		response.Result = result
 		response.Error = stratumErr.ToJSONRPCArray(nil)
 
-		_, err := session.writeJSONResponse(&response)
+		_, err := down.writeJSONResponse(&response)
 
 		if err != nil {
-			glog.Error("write JSON response failed, IP: ", session.IP(), ", error: ", err.Error())
-			session.close()
+			glog.Error("write JSON response failed, IP: ", down.IP(), ", error: ", err.Error())
+			down.close()
 			return
 		}
 	}
 }
 
-func (session *StratumSession) SendEvent(event interface{}) {
-	session.eventChannel <- event
+func (down *DownSession) SendEvent(event interface{}) {
+	down.eventChannel <- event
 }
 
-func (session *StratumSession) connBroken() {
-	session.readLoopRunning = false
-	session.SendEvent(EventConnBroken{})
+func (down *DownSession) connBroken() {
+	down.readLoopRunning = false
+	down.SendEvent(EventConnBroken{})
 }
 
-func (session *StratumSession) sendBytes(e EventSendBytes) {
-	_, err := session.clientConn.Write(e.Content)
+func (down *DownSession) sendBytes(e EventSendBytes) {
+	_, err := down.clientConn.Write(e.Content)
 	if err != nil {
-		glog.Error("write bytes failed, IP: ", session.IP(), ", error: ", err.Error())
-		session.close()
+		glog.Error("write bytes failed, IP: ", down.IP(), ", error: ", err.Error())
+		down.close()
 	}
 }
 
-func (session *StratumSession) submitResponse(e EventSubmitResponse) {
+func (down *DownSession) submitResponse(e EventSubmitResponse) {
 	var response JSONRPCResponse
 	response.ID = e.ID
 	if e.Status.IsAccepted() {
@@ -439,36 +439,36 @@ func (session *StratumSession) submitResponse(e EventSubmitResponse) {
 		response.Error = e.Status.ToJSONRPCArray(nil)
 	}
 
-	_, err := session.writeJSONResponse(&response)
+	_, err := down.writeJSONResponse(&response)
 	if err != nil {
-		glog.Error("write submit response failed, IP: ", session.IP(), ", error: ", err.Error())
-		session.close()
+		glog.Error("write submit response failed, IP: ", down.IP(), ", error: ", err.Error())
+		down.close()
 	}
 }
 
-func (session *StratumSession) exit() {
-	session.stat = StatExit
-	session.close()
+func (down *DownSession) exit() {
+	down.stat = StatExit
+	down.close()
 }
 
-func (session *StratumSession) handleEvent() {
-	session.eventLoopRunning = true
-	for session.eventLoopRunning {
-		event := <-session.eventChannel
+func (down *DownSession) handleEvent() {
+	down.eventLoopRunning = true
+	for down.eventLoopRunning {
+		event := <-down.eventChannel
 
 		switch e := event.(type) {
 		case EventSetUpSession:
-			session.setUpSession(e)
+			down.setUpSession(e)
 		case EventRecvJSONRPC:
-			session.recvJSONRPC(e)
+			down.recvJSONRPC(e)
 		case EventSendBytes:
-			session.sendBytes(e)
+			down.sendBytes(e)
 		case EventSubmitResponse:
-			session.submitResponse(e)
+			down.submitResponse(e)
 		case EventConnBroken:
-			session.close()
+			down.close()
 		case EventExit:
-			session.exit()
+			down.exit()
 		default:
 			glog.Error("Unknown event: ", e)
 		}

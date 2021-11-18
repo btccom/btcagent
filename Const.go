@@ -16,10 +16,10 @@ const (
 	StatExit
 )
 
-const StratumSessionChannelCache = 64
+const DownSessionChannelCache = 64
 const UpSessionChannelCache = 512
 const UpSessionManagerChannelCache = 64
-const StratumSessionManagerChannelCache = 64
+const SessionManagerChannelCache = 64
 
 const UpSessionDialTimeout = 15 * time.Second
 const UpSessionReadTimeout = 60 * time.Second

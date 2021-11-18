@@ -50,7 +50,7 @@ func main() {
 		}()
 	}
 
-	manager := NewStratumSessionManager(&config)
+	manager := NewSessionManager(&config)
 
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

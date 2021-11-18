@@ -15,7 +15,7 @@ type UpSessionInfo struct {
 type UpSessionManager struct {
 	subAccount string
 	config     *Config
-	parent     *StratumSessionManager
+	parent     *SessionManager
 
 	upSessions    []UpSessionInfo
 	fakeUpSession *FakeUpSession
@@ -26,7 +26,7 @@ type UpSessionManager struct {
 	initFailureCounter int
 }
 
-func NewUpSessionManager(subAccount string, config *Config, parent *StratumSessionManager) (manager *UpSessionManager) {
+func NewUpSessionManager(subAccount string, config *Config, parent *SessionManager) (manager *UpSessionManager) {
 	manager = new(UpSessionManager)
 	manager.subAccount = subAccount
 	manager.config = config
@@ -52,12 +52,12 @@ func (manager *UpSessionManager) Run() {
 
 func (manager *UpSessionManager) connect(slot int) {
 	for i := range manager.config.Pools {
-		session := NewUpSession(manager, manager.config, manager.subAccount, i, slot)
-		session.Init()
+		up := NewUpSession(manager, manager.config, manager.subAccount, i, slot)
+		up.Init()
 
-		if session.stat == StatAuthorized {
-			go session.Run()
-			manager.SendEvent(EventUpSessionReady{slot, session})
+		if up.stat == StatAuthorized {
+			go up.Run()
+			manager.SendEvent(EventUpSessionReady{slot, up})
 			return
 		}
 	}
@@ -68,7 +68,7 @@ func (manager *UpSessionManager) SendEvent(event interface{}) {
 	manager.eventChannel <- event
 }
 
-func (manager *UpSessionManager) addStratumSession(e EventAddStratumSession) {
+func (manager *UpSessionManager) addDownSession(e EventAddDownSession) {
 	var selected *UpSessionInfo
 
 	// 寻找连接数最少的服务器
@@ -97,7 +97,7 @@ func (manager *UpSessionManager) upSessionReady(e EventUpSessionReady) {
 	info.ready = true
 
 	// 从 FakeUpSession 拿回矿机
-	manager.fakeUpSession.SendEvent(EventTransferStratumSessions{})
+	manager.fakeUpSession.SendEvent(EventTransferDownSessions{})
 }
 
 func (manager *UpSessionManager) upSessionInitFailed(e EventUpSessionInitFailed) {
@@ -152,8 +152,8 @@ func (manager *UpSessionManager) handleEvent() {
 			manager.upSessionReady(e)
 		case EventUpSessionInitFailed:
 			manager.upSessionInitFailed(e)
-		case EventAddStratumSession:
-			manager.addStratumSession(e)
+		case EventAddDownSession:
+			manager.addDownSession(e)
 		case EventUpSessionBroken:
 			manager.upSessionBroken(e)
 		case EventUpdateMinerNum:

@@ -26,7 +26,7 @@ type UpSession struct {
 	subAccount string
 	poolIndex  int
 
-	stratumSessions map[uint32]*StratumSession
+	downSessions    map[uint32]*DownSession
 	serverConn      net.Conn
 	serverReader    *bufio.Reader
 	readLoopRunning bool
@@ -60,7 +60,7 @@ func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, 
 	up.slot = slot
 	up.subAccount = subAccount
 	up.poolIndex = poolIndex
-	up.stratumSessions = make(map[uint32]*StratumSession)
+	up.downSessions = make(map[uint32]*DownSession)
 	up.stat = StatDisconnected
 	up.eventChannel = make(chan interface{}, UpSessionChannelCache)
 	up.submitIDs = make(map[uint16]SubmitID)
@@ -155,8 +155,8 @@ func (up *UpSession) close() {
 		up.manager.SendEvent(EventUpSessionBroken{up.slot})
 	}
 
-	for _, session := range up.stratumSessions {
-		go session.SendEvent(EventExit{})
+	for _, down := range up.downSessions {
+		go down.SendEvent(EventExit{})
 	}
 
 	up.eventLoopRunning = false
@@ -210,8 +210,8 @@ func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte
 	}
 
 	e := EventSendBytes{up.rpcSetVersionMask}
-	for _, session := range up.stratumSessions {
-		go session.SendEvent(e)
+	for _, down := range up.downSessions {
+		go down.SendEvent(e)
 	}
 }
 
@@ -393,8 +393,8 @@ func (up *UpSession) SendEvent(event interface{}) {
 	up.eventChannel <- event
 }
 
-func (up *UpSession) addStratumSession(e EventAddStratumSession) {
-	up.stratumSessions[e.Session.sessionID] = e.Session
+func (up *UpSession) addDownSession(e EventAddDownSession) {
+	up.downSessions[e.Session.sessionID] = e.Session
 	up.registerWorker(e.Session)
 
 	if up.rpcSetVersionMask != nil && e.Session.versionMask != 0 {
@@ -415,8 +415,8 @@ func (up *UpSession) addStratumSession(e EventAddStratumSession) {
 	}
 }
 
-func (up *UpSession) registerWorker(session *StratumSession) {
-	msg := ExMessageRegisterWorker{uint16(session.sessionID), session.clientAgent, session.workerName}
+func (up *UpSession) registerWorker(down *DownSession) {
+	msg := ExMessageRegisterWorker{uint16(down.sessionID), down.clientAgent, down.workerName}
 	_, err := up.serverConn.Write(msg.Serialize())
 	if err != nil {
 		glog.Error("register worker to server failed, server: ", up.IP(), ", error: ", err.Error())
@@ -437,8 +437,8 @@ func (up *UpSession) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byte) 
 		return
 	}
 
-	for _, session := range up.stratumSessions {
-		go session.SendEvent(EventSendBytes{bytes})
+	for _, down := range up.downSessions {
+		go down.SendEvent(EventSendBytes{bytes})
 	}
 
 	up.lastJob = job
@@ -500,13 +500,13 @@ func (up *UpSession) handleSubmitShare(e EventSubmitShare) {
 }
 
 func (up *UpSession) sendSubmitResponse(sessionID uint32, id interface{}, status StratumStatus) {
-	session, ok := up.stratumSessions[sessionID]
+	down, ok := up.downSessions[sessionID]
 	if !ok {
 		// 客户端已断开，忽略
-		glog.Info("cannot find session ", sessionID)
+		glog.Info("cannot find down session ", sessionID)
 		return
 	}
-	go session.SendEvent(EventSubmitResponse{id, status})
+	go down.SendEvent(EventSubmitResponse{id, status})
 }
 
 func (up *UpSession) handleExMessageSubmitResponse(ex *ExMessage) {
@@ -541,8 +541,8 @@ func (up *UpSession) recvExMessage(e EventRecvExMessage) {
 	}
 }
 
-func (up *UpSession) stratumSessionBroken(e EventStratumSessionBroken) {
-	delete(up.stratumSessions, e.SessionID)
+func (up *UpSession) downSessionBroken(e EventDownSessionBroken) {
+	delete(up.downSessions, e.SessionID)
 
 	if up.disconnectedMinerCounter == 0 {
 		go func() {
@@ -564,12 +564,12 @@ func (up *UpSession) handleEvent() {
 		event := <-up.eventChannel
 
 		switch e := event.(type) {
-		case EventAddStratumSession:
-			up.addStratumSession(e)
+		case EventAddDownSession:
+			up.addDownSession(e)
 		case EventSubmitShare:
 			up.handleSubmitShare(e)
-		case EventStratumSessionBroken:
-			up.stratumSessionBroken(e)
+		case EventDownSessionBroken:
+			up.downSessionBroken(e)
 		case EventSendUpdateMinerNum:
 			up.sendUpdateMinerNum()
 		case EventRecvJSONRPC:
