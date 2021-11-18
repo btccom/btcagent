@@ -133,6 +133,10 @@ func (manager *UpSessionManager) updateMinerNum(e EventUpdateMinerNum) {
 	glog.Info("miner num update, slot: ", e.Slot, ", miners: ", manager.upSessions[e.Slot].minerNum)
 }
 
+func (manager *UpSessionManager) updateFakeJob(e EventUpdateFakeJob) {
+	manager.fakeUpSession.SendEvent(e)
+}
+
 func (manager *UpSessionManager) exit() {
 	manager.fakeUpSession.SendEvent(EventExit{})
 
@@ -158,6 +162,8 @@ func (manager *UpSessionManager) handleEvent() {
 			manager.upSessionBroken(e)
 		case EventUpdateMinerNum:
 			manager.updateMinerNum(e)
+		case EventUpdateFakeJob:
+			manager.updateFakeJob(e)
 		case EventExit:
 			manager.exit()
 			return

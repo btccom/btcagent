@@ -68,7 +68,7 @@ type EventStopUpSessionManager struct {
 }
 
 type EventUpdateFakeJob struct {
-	FakeJob StratumJob
+	FakeJob *StratumJob
 }
 
 type EventTransferDownSessions struct{}

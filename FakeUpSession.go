@@ -87,7 +87,7 @@ func (up *FakeUpSession) downSessionBroken(e EventDownSessionBroken) {
 }
 
 func (up *FakeUpSession) updateFakeJob(e EventUpdateFakeJob) {
-	up.fakeJob = &e.FakeJob
+	up.fakeJob = e.FakeJob
 }
 
 func (up *FakeUpSession) fakeNotifyTicker() {

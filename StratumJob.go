@@ -58,7 +58,9 @@ func IsFakeJobID(id string) bool {
 
 func (job *StratumJob) ToNewFakeJob() {
 	now := uint64(time.Now().Unix())
-	job.ID = fmt.Sprintf("f%04d", now)
+
+	// job id
+	job.Params[0] = fmt.Sprintf("f%d", now%0xffff)
 
 	coinbase1, _ := job.Params[2].(string)
 	pos := len(coinbase1) - 8
@@ -66,5 +68,6 @@ func (job *StratumJob) ToNewFakeJob() {
 		pos = 0
 	}
 
+	// coinbase1
 	job.Params[2] = coinbase1[:pos] + Uint64ToHex(now)
 }

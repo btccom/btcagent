@@ -155,8 +155,17 @@ func (up *UpSession) close() {
 		up.manager.SendEvent(EventUpSessionBroken{up.slot})
 	}
 
-	for _, down := range up.downSessions {
-		go down.SendEvent(EventExit{})
+	if up.config.AlwaysKeepDownconn {
+		if up.lastJob != nil {
+			up.manager.SendEvent(EventUpdateFakeJob{up.lastJob})
+		}
+		for _, down := range up.downSessions {
+			go up.manager.SendEvent(EventAddDownSession{down})
+		}
+	} else {
+		for _, down := range up.downSessions {
+			go down.SendEvent(EventExit{})
+		}
 	}
 
 	up.eventLoopRunning = false
