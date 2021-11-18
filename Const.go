@@ -9,8 +9,7 @@ import (
 type AuthorizeStat uint8
 
 const (
-	StatConnecting AuthorizeStat = iota
-	StatConnected
+	StatConnected AuthorizeStat = iota
 	StatSubScribed
 	StatAuthorized
 	StatDisconnected

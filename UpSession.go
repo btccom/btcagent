@@ -68,8 +68,6 @@ func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, 
 }
 
 func (up *UpSession) connect() (err error) {
-	up.stat = StatConnecting
-
 	pool := up.config.Pools[up.poolIndex]
 
 	url := fmt.Sprintf("%s:%d", pool.Host, pool.Port)
@@ -79,7 +77,6 @@ func (up *UpSession) connect() (err error) {
 		up.serverConn, err = net.DialTimeout("tcp", url, UpSessionDialTimeout)
 	}
 	if err != nil {
-		up.stat = StatDisconnected
 		return
 	}
 
@@ -168,7 +165,7 @@ func (up *UpSession) close() {
 }
 
 func (up *UpSession) IP() string {
-	if up.serverConn == nil {
+	if up.stat == StatDisconnected {
 		pool := up.config.Pools[up.poolIndex]
 		return fmt.Sprintf("%s:%d", pool.Host, pool.Port)
 	}
