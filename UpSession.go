@@ -555,10 +555,43 @@ func (up *UpSession) handleExMessageSubmitResponse(ex *ExMessage) {
 	up.sendSubmitResponse(submitID.SessionID, submitID.ID, msg.Status)
 }
 
+func (up *UpSession) handleExMessageMiningSetDiff(ex *ExMessage) {
+	var msg ExMessageMiningSetDiff
+	err := msg.Unserialize(ex.Body)
+	if err != nil {
+		glog.Error("decode ex-message failed, server: ", up.IP(), ", error: ", err.Error(), ", ex-message: ", ex)
+		return
+	}
+
+	diff := uint64(1) << msg.Base.DiffExp
+
+	var request JSONRPCRequest
+	request.Method = "mining.set_difficulty"
+	request.SetParams(diff)
+	bytes, err := request.ToJSONBytesLine()
+	if err != nil {
+		glog.Error("convert mining.set_difficulty request to JSON failed, request: ", request, ", error: ", err.Error())
+		return
+	}
+
+	e := EventSendBytes{bytes}
+	for _, sessionID := range msg.SessionIDs {
+		down := up.downSessions[sessionID]
+		if down != nil {
+			go down.SendEvent(e)
+		} else {
+			// 客户端已断开，忽略
+			glog.Info("cannot find down session ", sessionID)
+		}
+	}
+}
+
 func (up *UpSession) recvExMessage(e EventRecvExMessage) {
 	switch e.Message.Type {
 	case CMD_SUBMIT_RESPONSE:
 		up.handleExMessageSubmitResponse(e.Message)
+	case CMD_MINING_SET_DIFF:
+		up.handleExMessageMiningSetDiff(e.Message)
 	default:
 		glog.Error("Unknown ex-message: ", e.Message)
 	}
