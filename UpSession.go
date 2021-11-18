@@ -362,6 +362,7 @@ func (up *UpSession) readExMessage() {
 	}
 
 	up.SendEvent(EventRecvExMessage{message})
+	up.serverConn.SetReadDeadline(time.Now().Add(UpSessionReadTimeout))
 }
 
 func (up *UpSession) readLine() {
@@ -381,6 +382,7 @@ func (up *UpSession) readLine() {
 	}
 
 	up.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
+	up.serverConn.SetReadDeadline(time.Now().Add(UpSessionReadTimeout))
 }
 
 func (up *UpSession) Run() {
