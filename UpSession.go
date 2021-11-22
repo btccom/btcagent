@@ -225,7 +225,9 @@ func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte
 
 	e := EventSendBytes{up.rpcSetVersionMask}
 	for _, down := range up.downSessions {
-		go down.SendEvent(e)
+		if down.versionMask != 0 {
+			go down.SendEvent(e)
+		}
 	}
 }
 
