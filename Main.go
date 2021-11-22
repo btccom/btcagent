@@ -39,9 +39,13 @@ func main() {
 	}
 	config.Init()
 
-	configBytes, _ := json.Marshal(config)
-	glog.Info("config: ", string(configBytes))
+	// 打印加载的配置文件（用于调试）
+	if glog.V(3) {
+		configBytes, _ := json.Marshal(config)
+		glog.Info("config: ", string(configBytes))
+	}
 
+	// 启动 HTTP 调试服务
 	if config.HTTPDebug.Enable {
 		glog.Info("HTTP debug enabled: ", config.HTTPDebug.Listen)
 		waitGroup.Add(1)
@@ -54,8 +58,10 @@ func main() {
 		}()
 	}
 
+	// 会话管理器
 	manager := NewSessionManager(&config)
 
+	// 退出信号
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {

@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"io/ioutil"
+
+	"github.com/golang/glog"
 )
 
 type PoolInfo struct {
@@ -69,10 +71,28 @@ func (conf *Config) LoadFromFile(file string) (err error) {
 }
 
 func (conf *Config) Init() {
-	// 如果启用多用户模式，删除矿池设置中的子账户名
 	if conf.MultiUserMode {
-		for i := range conf.Pools {
-			conf.Pools[i].SubAccount = ""
+		glog.Info("[OPTION] Multi user mode: Enabled. Sub-accounts in config file will be ignored.")
+	} else {
+		glog.Info("[OPTION] Multi user mode: Disabled. Sub-accounts in config file will be used.")
+	}
+
+	glog.Info("[OPTION] Connect to pool server with SSL/TLS encryption: ", IsEnabled(conf.PoolUseTls))
+	glog.Info("[OPTION] Always keep miner connections even if pool disconnected: ", IsEnabled(conf.AlwaysKeepDownconn))
+	glog.Info("[OPTION] Disconnect if a miner lost its AsicBoost mid-way: ", IsEnabled(conf.DisconnectWhenLostAsicboost))
+
+	if len(conf.FixedWorkerName) > 0 {
+		glog.Info("[OPTION] Fixed worker name enabled, all worker name will be replaced to ", conf.FixedWorkerName, " on the server.")
+	}
+
+	for i := range conf.Pools {
+		pool := &conf.Pools[i]
+		if conf.MultiUserMode {
+			// 如果启用多用户模式，删除矿池设置中的子账户名
+			pool.SubAccount = ""
+			glog.Info("add pool: ", pool.Host, ":", pool.Port, ", multi user mode")
+		} else {
+			glog.Info("add pool: ", pool.Host, ":", pool.Port, ", sub-account: ", pool.SubAccount)
 		}
 	}
 }

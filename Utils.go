@@ -168,3 +168,10 @@ func IPAsWorkerName(format string, ip string) string {
 	format = strings.ReplaceAll(format, "{4}", strconv.FormatUint(uint64(addr.IP[len-1]), base))
 	return format
 }
+
+func IsEnabled(option bool) string {
+	if option {
+		return "Enabled"
+	}
+	return "Disabled"
+}
