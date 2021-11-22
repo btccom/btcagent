@@ -61,7 +61,13 @@ type EventUpdateMinerNum struct {
 	DisconnectedMinerCounter int
 }
 
+type EventUpdateFakeMinerNum struct {
+	DisconnectedMinerCounter int
+}
+
 type EventSendUpdateMinerNum struct{}
+
+type EventPrintMinerNum struct{}
 
 type EventStopUpSessionManager struct {
 	SubAccount string

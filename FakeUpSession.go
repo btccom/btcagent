@@ -13,6 +13,9 @@ type FakeUpSession struct {
 
 	fakeJob     *StratumJob
 	exitChannel chan bool
+
+	// 用于统计断开连接的矿机数，并同步给 UpSessionManager
+	disconnectedMinerCounter int
 }
 
 func NewFakeUpSession(manager *UpSessionManager) (up *FakeUpSession) {
@@ -52,8 +55,10 @@ func (up *FakeUpSession) addDownSession(e EventAddDownSession) {
 
 func (up *FakeUpSession) transferDownSessions() {
 	for _, down := range up.downSessions {
-		up.manager.SendEvent(EventAddDownSession{down})
+		go up.manager.SendEvent(EventAddDownSession{down})
 	}
+	// 与 UpSessionManager 同步矿机数量
+	go up.manager.SendEvent(EventUpdateFakeMinerNum{len(up.downSessions)})
 	// 清空map
 	up.downSessions = make(map[uint16]*DownSession)
 }
@@ -86,6 +91,19 @@ func (up *FakeUpSession) handleSubmitShare(e EventSubmitShare) {
 
 func (up *FakeUpSession) downSessionBroken(e EventDownSessionBroken) {
 	delete(up.downSessions, e.SessionID)
+
+	if up.disconnectedMinerCounter == 0 {
+		go func() {
+			time.Sleep(1 * time.Second)
+			up.SendEvent(EventSendUpdateMinerNum{})
+		}()
+	}
+	up.disconnectedMinerCounter++
+}
+
+func (up *FakeUpSession) sendUpdateMinerNum() {
+	go up.manager.SendEvent(EventUpdateFakeMinerNum{up.disconnectedMinerCounter})
+	up.disconnectedMinerCounter = 0
 }
 
 func (up *FakeUpSession) updateFakeJob(e EventUpdateFakeJob) {
@@ -135,6 +153,8 @@ func (up *FakeUpSession) handleEvent() {
 			up.handleSubmitShare(e)
 		case EventDownSessionBroken:
 			up.downSessionBroken(e)
+		case EventSendUpdateMinerNum:
+			up.sendUpdateMinerNum()
 		case EventTransferDownSessions:
 			up.transferDownSessions()
 		case EventUpdateFakeJob:
