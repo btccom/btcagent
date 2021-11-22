@@ -27,6 +27,9 @@ func main() {
 		flag.Lookup("log_dir").Value.Set(*logDir)
 	}
 
+	// 增大文件描述符上限
+	IncreaseFDLimit()
+
 	// 读取配置文件
 	var config Config
 	err := config.LoadFromFile(*configFilePath)
