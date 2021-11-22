@@ -79,12 +79,12 @@ func (up *UpSession) connect() (err error) {
 
 	url := fmt.Sprintf("%s:%d", pool.Host, pool.Port)
 	if up.config.PoolUseTls {
-		up.id = fmt.Sprintf("%s#%d [tls://%s] ", up.subAccount, up.slot, url)
+		up.id = fmt.Sprintf("pool#%d <%s> [tls://%s] ", up.slot, up.subAccount, url)
 		glog.Info(up.id, "connect to pool server...")
 
 		up.serverConn, err = tls.DialWithDialer(&net.Dialer{Timeout: UpSessionDialTimeout}, "tcp", url, UpSessionTLSConf)
 	} else {
-		up.id = fmt.Sprintf("%s#%d [%s] ", up.subAccount, up.slot, url)
+		up.id = fmt.Sprintf("pool#%d <%s> [%s] ", up.slot, up.subAccount, url)
 		glog.Info(up.id, "connect to pool server...")
 
 		up.serverConn, err = net.DialTimeout("tcp", url, UpSessionDialTimeout)

@@ -49,7 +49,7 @@ func NewUpSessionManager(subAccount string, config *Config, parent *SessionManag
 	manager.eventChannel = make(chan interface{}, UpSessionManagerChannelCache)
 
 	if manager.config.MultiUserMode {
-		manager.id = fmt.Sprintf("[%s] ", manager.subAccount)
+		manager.id = fmt.Sprintf("<%s> ", manager.subAccount)
 	}
 	return
 }

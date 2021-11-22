@@ -44,7 +44,7 @@ func NewDownSession(manager *SessionManager, clientConn net.Conn, sessionID uint
 	down.stat = StatConnected
 	down.eventChannel = make(chan interface{}, DownSessionChannelCache)
 
-	down.id = fmt.Sprintf("#%d [%s] ", down.sessionID, down.clientConn.RemoteAddr())
+	down.id = fmt.Sprintf("miner#%d (%s) ", down.sessionID, down.clientConn.RemoteAddr())
 
 	glog.Info(down.id, "miner connected")
 	return
@@ -104,7 +104,7 @@ func (down *DownSession) stratumHandleRequest(request *JSONRPCLine, requestJSON 
 			// 让 Init() 函数返回
 			down.eventLoopRunning = false
 
-			down.id += fmt.Sprintf("(%s) ", down.fullName)
+			down.id += fmt.Sprintf("<%s> ", down.fullName)
 
 			glog.Info(down.id, "miner authorized")
 		}
