@@ -99,42 +99,44 @@ func (up *UpSession) writeJSONRequest(jsonData *JSONRPCRequest) (int, error) {
 }
 
 func (up *UpSession) sendInitRequest() (err error) {
-	var request JSONRPCRequest
-
-	request.ID = "sub"
-	request.Method = "mining.subscribe"
-	request.SetParams(UpSessionUserAgent)
-	up.writeJSONRequest(&request)
+	// send agent.get_capabilities first
+	var capsRequest JSONRPCRequest
+	capsRequest.ID = "caps"
+	capsRequest.Method = "agent.get_capabilities"
+	if up.config.SubmitResponseFromServer {
+		capsRequest.SetParams(JSONRPCArray{CapVersionRolling, CapSubmitResponse})
+	} else {
+		capsRequest.SetParams(JSONRPCArray{CapVersionRolling})
+	}
+	_, err = up.writeJSONRequest(&capsRequest)
 	if err != nil {
 		return
 	}
 
+	// send configure request
+	var request JSONRPCRequest
 	request.ID = "conf"
 	request.Method = "mining.configure"
 	request.SetParams(JSONRPCArray{"version-rolling"}, JSONRPCObj{"version-rolling.mask": "ffffffff", "version-rolling.min-bit-count": 0})
-	up.writeJSONRequest(&request)
+	_, err = up.writeJSONRequest(&request)
 	if err != nil {
 		return
 	}
 
-	// send agent.get_capabilities first
-	request.ID = "caps"
-	request.Method = "agent.get_capabilities"
-	if up.config.SubmitResponseFromServer {
-		request.SetParams(JSONRPCArray{CapVersionRolling, CapSubmitResponse})
-	} else {
-		request.SetParams(JSONRPCArray{CapVersionRolling})
-	}
-	up.writeJSONRequest(&request)
+	// send subscribe request
+	request.ID = "sub"
+	request.Method = "mining.subscribe"
+	request.SetParams(UpSessionUserAgent)
+	_, err = up.writeJSONRequest(&request)
 	if err != nil {
 		return
 	}
-	capsRequestAgain := request
 
+	// send auth request
 	request.ID = "auth"
 	request.Method = "mining.authorize"
 	request.SetParams(up.subAccount, "")
-	up.writeJSONRequest(&request)
+	_, err = up.writeJSONRequest(&request)
 	if err != nil {
 		return
 	}
@@ -142,11 +144,7 @@ func (up *UpSession) sendInitRequest() (err error) {
 	// send agent.get_capabilities again
 	// fix subres (submit_response_from_server)
 	// Subres negotiation must be sent after authentication, or sserver will not send the response.
-	up.writeJSONRequest(&capsRequestAgain)
-	if err != nil {
-		return
-	}
-
+	_, err = up.writeJSONRequest(&capsRequest)
 	return
 }
 
@@ -206,6 +204,11 @@ func (up *UpSession) Init() {
 }
 
 func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte) {
+	if !up.serverCapVersionRolling {
+		// server doesn't support version rolling via BTCAgent
+		return
+	}
+
 	up.rpcSetVersionMask = jsonBytes
 
 	if len(rpcData.Params) > 0 {
