@@ -11,6 +11,8 @@ import (
 )
 
 type DownSession struct {
+	id string // 打印日志用的连接标识符
+
 	manager   *SessionManager // 会话管理器
 	upSession EventInterface  // 所属的服务器会话
 
@@ -42,7 +44,9 @@ func NewDownSession(manager *SessionManager, clientConn net.Conn, sessionID uint
 	down.stat = StatConnected
 	down.eventChannel = make(chan interface{}, DownSessionChannelCache)
 
-	glog.Info("miner connected, sessionId: ", sessionID, ", IP: ", down.IP())
+	down.id = fmt.Sprintf("#%d [%s] ", down.sessionID, down.clientConn.RemoteAddr())
+
+	glog.Info(down.id, "miner connected")
 	return
 }
 
@@ -66,17 +70,6 @@ func (down *DownSession) close() {
 
 	// release down id
 	down.manager.sessionIDManager.FreeSessionID(down.sessionID)
-}
-
-func (down *DownSession) IP() string {
-	return down.clientConn.RemoteAddr().String()
-}
-
-func (down *DownSession) ID() string {
-	if down.stat == StatAuthorized {
-		return fmt.Sprintf("%s@%s", down.fullName, down.IP())
-	}
-	return down.IP()
 }
 
 func (down *DownSession) writeJSONResponse(jsonData *JSONRPCResponse) (int, error) {
@@ -111,7 +104,9 @@ func (down *DownSession) stratumHandleRequest(request *JSONRPCLine, requestJSON 
 			// 让 Init() 函数返回
 			down.eventLoopRunning = false
 
-			glog.Info("miner authorized, session id: ", down.sessionID, ", IP: ", down.IP(), ", worker name: ", down.fullName)
+			down.id += fmt.Sprintf("(%s) ", down.fullName)
+
+			glog.Info(down.id, "miner authorized")
 		}
 		return
 
@@ -122,13 +117,13 @@ func (down *DownSession) stratumHandleRequest(request *JSONRPCLine, requestJSON 
 	case "mining.submit":
 		result, err = down.parseMiningSubmit(request)
 		if err != nil {
-			glog.Warning("stratum error, IP: ", down.IP(), ", worker: ", down.fullName, ", error: ", err, ", submit: ", string(requestJSON))
+			glog.Warning(down.id, "stratum error: ", err, "; ", string(requestJSON))
 		}
 		return
 
 	default:
 		// ignore unimplemented methods
-		glog.Warning("unknown request, IP: ", down.IP(), ", request: ", string(requestJSON))
+		glog.Warning(down.id, "unknown request: ", string(requestJSON))
 		return
 	}
 }
@@ -246,7 +241,7 @@ func (down *DownSession) parseMiningSubmit(request *JSONRPCLine) (result interfa
 		if hasVersionMask {
 			down.versionRollingShareCounter++
 		} else if down.versionRollingShareCounter > 100 {
-			glog.Warning("AsicBoost disabled mid-way, send client.reconnect. worker: ", down.ID(), ", version rolling shares: ", down.versionRollingShareCounter)
+			glog.Warning(down.id, "AsicBoost disabled mid-way after ", down.versionRollingShareCounter, " shares, send client.reconnect")
 
 			// send reconnect request to miner
 			down.sendReconnectRequest()
@@ -261,7 +256,7 @@ func (down *DownSession) sendReconnectRequest() {
 	reconnect.Params = JSONRPCArray{}
 	bytes, err := reconnect.ToJSONBytesLine()
 	if err != nil {
-		glog.Error("convert client.reconnect request to JSON failed, request: ", reconnect, ", error: ", err.Error())
+		glog.Error(down.id, "failed to convert client.reconnect request to JSON: ", err.Error(), "; ", reconnect)
 		return
 	}
 	go down.SendEvent(EventSendBytes{bytes})
@@ -388,7 +383,7 @@ func (down *DownSession) handleRequest() {
 		jsonBytes, err := down.clientReader.ReadBytes('\n')
 
 		if err != nil {
-			glog.Error("read line failed, IP: ", down.IP(), ", error: ", err.Error())
+			glog.Error(down.id, "failed to read request from miner: ", err.Error())
 			down.connBroken()
 			return
 		}
@@ -397,7 +392,7 @@ func (down *DownSession) handleRequest() {
 
 		// ignore the json decode error
 		if err != nil {
-			glog.Warning("JSON decode failed, IP: ", down.IP(), err.Error(), string(jsonBytes))
+			glog.Warning(down.id, "failed to decode JSON from miner: ", err.Error(), "; ", string(jsonBytes))
 		}
 
 		down.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
@@ -418,7 +413,7 @@ func (down *DownSession) recvJSONRPC(e EventRecvJSONRPC) {
 		_, err := down.writeJSONResponse(&response)
 
 		if err != nil {
-			glog.Error("write JSON response failed, IP: ", down.IP(), ", error: ", err.Error())
+			glog.Error(down.id, "failed to send response to miner: ", err.Error())
 			down.close()
 			return
 		}
@@ -437,7 +432,7 @@ func (down *DownSession) connBroken() {
 func (down *DownSession) sendBytes(e EventSendBytes) {
 	_, err := down.clientConn.Write(e.Content)
 	if err != nil {
-		glog.Error("write bytes failed, IP: ", down.IP(), ", error: ", err.Error())
+		glog.Error(down.id, "failed to send notify to miner: ", err.Error())
 		down.close()
 	}
 }
@@ -453,7 +448,7 @@ func (down *DownSession) submitResponse(e EventSubmitResponse) {
 
 	_, err := down.writeJSONResponse(&response)
 	if err != nil {
-		glog.Error("write submit response failed, IP: ", down.IP(), ", error: ", err.Error())
+		glog.Error(down.id, "failed to send share response to miner: ", err.Error())
 		down.close()
 	}
 }
@@ -482,7 +477,7 @@ func (down *DownSession) handleEvent() {
 		case EventExit:
 			down.exit()
 		default:
-			glog.Error("Unknown event: ", e)
+			glog.Error(down.id, "unknown event: ", e)
 		}
 	}
 }

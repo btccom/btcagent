@@ -19,6 +19,8 @@ type SubmitID struct {
 }
 
 type UpSession struct {
+	id string // 打印日志用的连接标识符
+
 	manager *UpSessionManager
 	config  *Config
 	slot    int
@@ -77,13 +79,21 @@ func (up *UpSession) connect() (err error) {
 
 	url := fmt.Sprintf("%s:%d", pool.Host, pool.Port)
 	if up.config.PoolUseTls {
+		up.id = fmt.Sprintf("%s#%d [tls://%s] ", up.subAccount, up.slot, url)
+		glog.Info(up.id, "connect to pool server...")
+
 		up.serverConn, err = tls.DialWithDialer(&net.Dialer{Timeout: UpSessionDialTimeout}, "tcp", url, UpSessionTLSConf)
 	} else {
+		up.id = fmt.Sprintf("%s#%d [%s] ", up.subAccount, up.slot, url)
+		glog.Info(up.id, "connect to pool server...")
+
 		up.serverConn, err = net.DialTimeout("tcp", url, UpSessionDialTimeout)
 	}
 	if err != nil {
 		return
 	}
+
+	up.id += fmt.Sprintf("(%s) ", up.serverConn.RemoteAddr().String())
 
 	up.serverReader = bufio.NewReader(up.serverConn)
 	up.stat = StatConnected
@@ -132,7 +142,7 @@ func (up *UpSession) sendInitRequest() (err error) {
 		return
 	}
 
-	// send auth request
+	// send authorize request
 	request.ID = "auth"
 	request.Method = "mining.authorize"
 	request.SetParams(up.subAccount, "")
@@ -144,6 +154,7 @@ func (up *UpSession) sendInitRequest() (err error) {
 	// send agent.get_capabilities again
 	// fix subres (submit_response_from_server)
 	// Subres negotiation must be sent after authentication, or sserver will not send the response.
+	capsRequest.ID = "caps_again"
 	_, err = up.writeJSONRequest(&capsRequest)
 	return
 }
@@ -176,18 +187,10 @@ func (up *UpSession) close() {
 	up.serverConn.Close()
 }
 
-func (up *UpSession) IP() string {
-	if up.stat == StatDisconnected {
-		pool := up.config.Pools[up.poolIndex]
-		return fmt.Sprintf("%s:%d", pool.Host, pool.Port)
-	}
-	return up.serverConn.RemoteAddr().String()
-}
-
 func (up *UpSession) Init() {
 	err := up.connect()
 	if err != nil {
-		glog.Error("connect failed, server: ", up.IP(), ", error: ", err.Error())
+		glog.Error(up.id, "failed to connect to pool server: ", err.Error())
 		return
 	}
 
@@ -195,7 +198,7 @@ func (up *UpSession) Init() {
 
 	err = up.sendInitRequest()
 	if err != nil {
-		glog.Error("write JSON request failed, server: ", up.IP(), ", error: ", err.Error())
+		glog.Error(up.id, "failed to send request to pool server: ", err.Error())
 		up.close()
 		return
 	}
@@ -214,16 +217,19 @@ func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte
 	if len(rpcData.Params) > 0 {
 		versionMaskHex, ok := rpcData.Params[0].(string)
 		if !ok {
-			glog.Error("version mask is not a string, server: ", up.IP(), ", response: ", string(jsonBytes))
+			glog.Error(up.id, "version mask is not a string: ", string(jsonBytes))
 			return
 		}
 		versionMask, err := strconv.ParseUint(versionMaskHex, 16, 32)
 		if err != nil {
-			glog.Error("version mask is not a hex, server: ", up.IP(), ", response: ", string(jsonBytes))
+			glog.Error(up.id, "version mask is not a hex: ", string(jsonBytes))
 			return
 		}
 		up.versionMask = uint32(versionMask)
-		glog.Info("version mask update, server: ", up.IP(), ", version mask: ", versionMaskHex)
+
+		if glog.V(1) {
+			glog.Info(up.id, "AsicBoost via BTCAgent enabled, allowed version mask: ", versionMaskHex)
+		}
 	}
 
 	e := EventSendBytes{up.rpcSetVersionMask}
@@ -243,24 +249,24 @@ func (up *UpSession) handleSetDifficulty(rpcData *JSONRPCLine, jsonBytes []byte)
 func (up *UpSession) handleSubScribeResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
 	result, ok := rpcData.Result.([]interface{})
 	if !ok {
-		glog.Error("subscribe result is not an array, server: ", up.IP(), ", response: ", string(jsonBytes))
+		glog.Error(up.id, "subscribe result is not an array: ", string(jsonBytes))
 		up.close()
 		return
 	}
 	if len(result) < 3 {
-		glog.Error("subscribe result missing items, server: ", up.IP(), ", response: ", string(jsonBytes))
+		glog.Error(up.id, "subscribe result missing items: ", string(jsonBytes))
 		up.close()
 		return
 	}
 	sessionIDHex, ok := result[1].(string)
 	if !ok {
-		glog.Error("session id is not a string, server: ", up.IP(), ", response: ", string(jsonBytes))
+		glog.Error(up.id, "session id is not a string: ", string(jsonBytes))
 		up.close()
 		return
 	}
 	sessionID, err := strconv.ParseUint(sessionIDHex, 16, 32)
 	if err != nil {
-		glog.Error("session id is not a hex, server: ", up.IP(), ", response: ", string(jsonBytes))
+		glog.Error(up.id, "session id is not a hex: ", string(jsonBytes))
 		up.close()
 		return
 	}
@@ -268,13 +274,13 @@ func (up *UpSession) handleSubScribeResponse(rpcData *JSONRPCLine, jsonBytes []b
 
 	extraNonce2SizeFloat, ok := result[2].(float64)
 	if !ok {
-		glog.Error("extra nonce 2 size is not an integer, server: ", up.IP(), ", response: ", string(jsonBytes))
+		glog.Error(up.id, "extra nonce 2 size is not an integer: ", string(jsonBytes))
 		up.close()
 		return
 	}
 	up.extraNonce2Size = int(extraNonce2SizeFloat)
-	if up.extraNonce2Size < 6 {
-		glog.Error("BTCAgent is not compatible with this server: ", up.IP(), ", extra nonce 2 is too short (only ", up.extraNonce2Size, " bytes), should be at least 6 bytes")
+	if up.extraNonce2Size != 8 {
+		glog.Error(up.id, "BTCAgent is not compatible with this server, extra nonce 2 should be 8 bytes but only ", up.extraNonce2Size, " bytes")
 		up.close()
 		return
 	}
@@ -282,22 +288,21 @@ func (up *UpSession) handleSubScribeResponse(rpcData *JSONRPCLine, jsonBytes []b
 }
 
 func (up *UpSession) handleConfigureResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
-	//glog.Info("TODO: finish handleConfigureResponse, ", string(jsonBytes))
 	// ignore
 }
 
 func (up *UpSession) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
 	result, ok := rpcData.Result.(map[string]interface{})
 	if !ok {
-		glog.Error("get server capabilities failed, result is not an object, server: ", up.IP(), ", response: ", string(jsonBytes))
+		glog.Error(up.id, "get server capabilities failed, result is not an object: ", string(jsonBytes))
 	}
 	caps, ok := result["capabilities"]
 	if !ok {
-		glog.Error("get server capabilities failed, missing field capabilities, server: ", up.IP(), ", response: ", string(jsonBytes))
+		glog.Error(up.id, "get server capabilities failed, missing field capabilities: ", string(jsonBytes))
 	}
 	capsArr, ok := caps.([]interface{})
 	if !ok {
-		glog.Error("get server capabilities failed, capabilities is not an array, server: ", up.IP(), ", response: ", string(jsonBytes))
+		glog.Error(up.id, "get server capabilities failed, capabilities is not an array: ", string(jsonBytes))
 	}
 	for _, capability := range capsArr {
 		switch capability {
@@ -308,21 +313,27 @@ func (up *UpSession) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []byt
 		}
 	}
 	if !up.serverCapVersionRolling {
-		glog.Warning("[WARNING] pool server ", up.IP(), " does not support ASICBoost")
+		glog.Warning(up.id, "[WARNING] pool server does not support ASICBoost")
 	}
-	if up.config.SubmitResponseFromServer && !up.serverCapSubmitResponse {
-		glog.Warning("[WARNING] pool server does not support sendding response to BTCAgent")
+	if up.config.SubmitResponseFromServer {
+		if up.serverCapSubmitResponse {
+			if glog.V(1) {
+				glog.Info(up.id, "pool server will send share response to BTCAgent")
+			}
+		} else {
+			glog.Warning(up.id, "[WARNING] pool server does not support sendding share response to BTCAgent")
+		}
 	}
 }
 
 func (up *UpSession) handleAuthorizeResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
 	result, ok := rpcData.Result.(bool)
 	if !ok || !result {
-		glog.Error("authorize failed, server: ", up.IP(), ", sub-account: ", up.subAccount, ", error: ", rpcData.Error)
+		glog.Error(up.id, "authorize failed: ", rpcData.Error)
 		up.close()
 		return
 	}
-	glog.Info("authorize success, server: ", up.IP(), ", sub-account: ", up.subAccount)
+	glog.Info(up.id, "authorize success, session id: ", up.sessionID)
 	up.stat = StatAuthorized
 	// 让 Init() 函数返回
 	up.eventLoopRunning = false
@@ -338,7 +349,7 @@ func (up *UpSession) handleResponse() {
 	for up.readLoopRunning {
 		magicNum, err := up.serverReader.Peek(1)
 		if err != nil {
-			glog.Error("peek failed, server: ", up.IP(), ", error: ", err.Error())
+			glog.Error(up.id, "failed to read pool server response: ", err.Error())
 			up.connBroken()
 			return
 		}
@@ -359,12 +370,12 @@ func (up *UpSession) readExMessage() {
 	message := new(ExMessage)
 	err := binary.Read(up.serverReader, binary.LittleEndian, &message.ExMessageHeader)
 	if err != nil {
-		glog.Error("read ex-message failed, server: ", up.IP(), ", error: ", err.Error())
+		glog.Error(up.id, "failed to read ex-message header from pool server: ", err.Error())
 		up.connBroken()
 		return
 	}
 	if message.Size < 4 {
-		glog.Warning("Broken ex-message header from server: ", up.IP(), ", content: ", message.ExMessageHeader)
+		glog.Warning(up.id, "broken ex-message header from pool server: ", message.ExMessageHeader)
 		up.connBroken()
 		return
 	}
@@ -374,7 +385,7 @@ func (up *UpSession) readExMessage() {
 		message.Body = make([]byte, size)
 		_, err = io.ReadFull(up.serverReader, message.Body)
 		if err != nil {
-			glog.Error("read ex-message failed, server: ", up.IP(), ", error: ", err.Error())
+			glog.Error(up.id, "failed to read ex-message body from pool server: ", err.Error())
 			up.connBroken()
 			return
 		}
@@ -387,7 +398,7 @@ func (up *UpSession) readExMessage() {
 func (up *UpSession) readLine() {
 	jsonBytes, err := up.serverReader.ReadBytes('\n')
 	if err != nil {
-		glog.Error("read line failed, server: ", up.IP(), ", error: ", err.Error())
+		glog.Error(up.id, "failed to read JSON line from pool server: ", err.Error())
 		up.connBroken()
 		return
 	}
@@ -396,7 +407,7 @@ func (up *UpSession) readLine() {
 
 	// ignore the json decode error
 	if err != nil {
-		glog.Info("JSON decode failed, server: ", up.IP(), err.Error(), string(jsonBytes))
+		glog.Info(up.id, "failed to decode JSON line from pool server: ", err.Error(), "; ", string(jsonBytes))
 		return
 	}
 
@@ -429,7 +440,7 @@ func (up *UpSession) addDownSession(e EventAddDownSession) {
 		if err == nil {
 			e.Session.SendEvent(EventSendBytes{bytes})
 		} else {
-			glog.Warning("create notify bytes failed, ", err.Error(), ", struct: ", up.lastJob)
+			glog.Warning(up.id, "failed to convert job to JSON: ", err.Error(), "; ", up.lastJob)
 		}
 	}
 }
@@ -438,7 +449,7 @@ func (up *UpSession) registerWorker(down *DownSession) {
 	msg := ExMessageRegisterWorker{down.sessionID, down.clientAgent, down.workerName}
 	_, err := up.serverConn.Write(msg.Serialize())
 	if err != nil {
-		glog.Error("register worker to server failed, server: ", up.IP(), ", error: ", err.Error())
+		glog.Error(up.id, "failed to register worker to pool server: ", err.Error())
 		up.close()
 	}
 }
@@ -447,7 +458,7 @@ func (up *UpSession) unregisterWorker(sessionID uint16) {
 	msg := ExMessageUnregisterWorker{sessionID}
 	_, err := up.serverConn.Write(msg.Serialize())
 	if err != nil {
-		glog.Error("unregister worker to server failed, server: ", up.IP(), ", error: ", err.Error())
+		glog.Error(up.id, "failed to unregister worker from pool server: ", err.Error())
 		up.close()
 	}
 }
@@ -455,13 +466,13 @@ func (up *UpSession) unregisterWorker(sessionID uint16) {
 func (up *UpSession) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byte) {
 	job, err := NewStratumJob(rpcData, up.sessionID)
 	if err != nil {
-		glog.Warning(err.Error(), ": ", string(jsonBytes))
+		glog.Warning(up.id, err.Error(), ": ", string(jsonBytes))
 		return
 	}
 
 	bytes, err := job.ToNotifyLine(false)
 	if err != nil {
-		glog.Warning("create notify bytes failed, ", err.Error(), ", content: ", string(jsonBytes))
+		glog.Warning(up.id, "failed to convert job to JSON: ", err.Error(), "; ", string(jsonBytes))
 		return
 	}
 
@@ -485,22 +496,24 @@ func (up *UpSession) recvJSONRPC(e EventRecvJSONRPC) {
 		case "mining.notify":
 			up.handleMiningNotify(rpcData, jsonBytes)
 		default:
-			glog.Info("[TODO] pool request: ", rpcData)
+			glog.Info(up.id, "[TODO] pool request: ", rpcData)
 		}
 		return
 	}
 
 	switch rpcData.ID {
-	case "sub":
-		up.handleSubScribeResponse(rpcData, jsonBytes)
-	case "conf":
-		up.handleConfigureResponse(rpcData, jsonBytes)
 	case "caps":
 		up.handleGetCapsResponse(rpcData, jsonBytes)
+	case "conf":
+		up.handleConfigureResponse(rpcData, jsonBytes)
+	case "sub":
+		up.handleSubScribeResponse(rpcData, jsonBytes)
 	case "auth":
 		up.handleAuthorizeResponse(rpcData, jsonBytes)
+	case "caps_again":
+		// ignore
 	default:
-		glog.Info("[TODO] pool response: ", rpcData)
+		glog.Info(up.id, "[TODO] pool response: ", rpcData)
 	}
 }
 
@@ -521,7 +534,7 @@ func (up *UpSession) handleSubmitShare(e EventSubmitShare) {
 	}
 
 	if err != nil {
-		glog.Error("submit share failed, server: ", up.IP(), ", error: ", err.Error())
+		glog.Error(up.id, "failed to submit share: ", err.Error())
 		up.close()
 		return
 	}
@@ -531,7 +544,9 @@ func (up *UpSession) sendSubmitResponse(sessionID uint16, id interface{}, status
 	down, ok := up.downSessions[sessionID]
 	if !ok {
 		// 客户端已断开，忽略
-		glog.Info("cannot find down session ", sessionID)
+		if glog.V(3) {
+			glog.Info(up.id, "cannot find down session: ", sessionID)
+		}
 		return
 	}
 	go down.SendEvent(EventSubmitResponse{id, status})
@@ -539,20 +554,20 @@ func (up *UpSession) sendSubmitResponse(sessionID uint16, id interface{}, status
 
 func (up *UpSession) handleExMessageSubmitResponse(ex *ExMessage) {
 	if !up.config.SubmitResponseFromServer || !up.serverCapSubmitResponse {
-		glog.Error("unexpected ex-message CMD_SUBMIT_RESPONSE, server: ", up.IP())
+		glog.Error(up.id, "unexpected ex-message CMD_SUBMIT_RESPONSE from pool server")
 		return
 	}
 
 	var msg ExMessageSubmitResponse
 	err := msg.Unserialize(ex.Body)
 	if err != nil {
-		glog.Error("decode ex-message failed, server: ", up.IP(), ", error: ", err.Error(), ", ex-message: ", ex)
+		glog.Error(up.id, "failed to decode ex-message CMD_SUBMIT_RESPONSE: ", err.Error(), "; ", ex)
 		return
 	}
 
 	submitID, ok := up.submitIDs[msg.Index]
 	if !ok {
-		glog.Error("cannot find submit id ", msg.Index, " in ex-message CMD_SUBMIT_RESPONSE, server: ", up.IP(), ", ex-message: ", msg)
+		glog.Error(up.id, "cannot find submit id ", msg.Index, " in ex-message CMD_SUBMIT_RESPONSE: ", msg)
 		return
 	}
 	delete(up.submitIDs, msg.Index)
@@ -564,7 +579,7 @@ func (up *UpSession) handleExMessageMiningSetDiff(ex *ExMessage) {
 	var msg ExMessageMiningSetDiff
 	err := msg.Unserialize(ex.Body)
 	if err != nil {
-		glog.Error("decode ex-message failed, server: ", up.IP(), ", error: ", err.Error(), ", ex-message: ", ex)
+		glog.Error(up.id, "failed to decode ex-message CMD_MINING_SET_DIFF: ", err.Error(), "; ", ex)
 		return
 	}
 
@@ -575,7 +590,7 @@ func (up *UpSession) handleExMessageMiningSetDiff(ex *ExMessage) {
 	request.SetParams(diff)
 	bytes, err := request.ToJSONBytesLine()
 	if err != nil {
-		glog.Error("convert mining.set_difficulty request to JSON failed, request: ", request, ", error: ", err.Error())
+		glog.Error(up.id, "failed to convert mining.set_difficulty request to JSON: ", err.Error(), "; ", request)
 		return
 	}
 
@@ -586,7 +601,9 @@ func (up *UpSession) handleExMessageMiningSetDiff(ex *ExMessage) {
 			go down.SendEvent(e)
 		} else {
 			// 客户端已断开，忽略
-			glog.Info("cannot find down session ", sessionID)
+			if glog.V(3) {
+				glog.Info(up.id, "cannot find down session: ", sessionID)
+			}
 		}
 	}
 }
@@ -598,7 +615,7 @@ func (up *UpSession) recvExMessage(e EventRecvExMessage) {
 	case CMD_MINING_SET_DIFF:
 		up.handleExMessageMiningSetDiff(e.Message)
 	default:
-		glog.Error("Unknown ex-message: ", e.Message)
+		glog.Error(up.id, "unknown ex-message: ", e.Message)
 	}
 }
 
@@ -643,7 +660,7 @@ func (up *UpSession) handleEvent() {
 		case EventExit:
 			up.exit()
 		default:
-			glog.Error("Unknown event: ", e)
+			glog.Error(up.id, "unknown event: ", e)
 		}
 	}
 }

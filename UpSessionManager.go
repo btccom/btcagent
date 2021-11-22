@@ -130,7 +130,10 @@ func (manager *UpSessionManager) upSessionBroken(e EventUpSessionBroken) {
 
 func (manager *UpSessionManager) updateMinerNum(e EventUpdateMinerNum) {
 	manager.upSessions[e.Slot].minerNum -= e.DisconnectedMinerCounter
-	glog.Info("miner num update, slot: ", e.Slot, ", miners: ", manager.upSessions[e.Slot].minerNum)
+
+	if glog.V(3) {
+		glog.Info("miner num update, slot: ", e.Slot, ", miners: ", manager.upSessions[e.Slot].minerNum)
+	}
 
 	if manager.config.MultiUserMode {
 		minerNum := 0
@@ -179,7 +182,7 @@ func (manager *UpSessionManager) handleEvent() {
 			manager.exit()
 			return
 		default:
-			glog.Error("Unknown event: ", event)
+			glog.Error("[UpSessionManager] unknown event: ", event)
 		}
 	}
 }

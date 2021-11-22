@@ -45,7 +45,7 @@ func (up *FakeUpSession) addDownSession(e EventAddDownSession) {
 		if err == nil {
 			e.Session.SendEvent(EventSendBytes{bytes})
 		} else {
-			glog.Warning("create notify bytes failed, ", err.Error(), ", fake job: ", up.fakeJob)
+			glog.Warning("[fake-pool-connection] failed to convert fake job to JSON:", err.Error(), "; ", up.fakeJob)
 		}
 	}
 }
@@ -72,7 +72,9 @@ func (up *FakeUpSession) sendSubmitResponse(sessionID uint16, id interface{}, st
 	down, ok := up.downSessions[sessionID]
 	if !ok {
 		// 客户端已断开，忽略
-		glog.Info("cannot find down session ", sessionID)
+		if glog.V(3) {
+			glog.Info("[fake-pool-connection] cannot find down session: ", sessionID)
+		}
 		return
 	}
 	go down.SendEvent(EventSubmitResponse{id, status})
@@ -113,7 +115,7 @@ func (up *FakeUpSession) sendFakeNotify() {
 
 	bytes, err := up.fakeJob.ToNotifyLine(false)
 	if err != nil {
-		glog.Warning("create notify bytes failed, ", err.Error(), ", fake job: ", up.fakeJob)
+		glog.Warning("[fake-pool-connection] failed to convert fake job to JSON:", err.Error(), "; ", up.fakeJob)
 		return
 	}
 
@@ -144,7 +146,7 @@ func (up *FakeUpSession) handleEvent() {
 			return
 
 		default:
-			glog.Error("Unknown event: ", e)
+			glog.Error("[fake-pool-connection] unknown event: ", e)
 		}
 	}
 }

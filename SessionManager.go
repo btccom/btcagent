@@ -43,7 +43,7 @@ func (manager *SessionManager) Run() {
 	glog.Info("startup is successful, listening: ", listenAddr)
 	manager.tcpListener, err = net.Listen("tcp", listenAddr)
 	if err != nil {
-		glog.Fatal("listen failed: ", err)
+		glog.Fatal("failed to listen on ", listenAddr, ": ", err)
 		return
 	}
 
@@ -54,7 +54,7 @@ func (manager *SessionManager) Run() {
 			case <-manager.exitChannel:
 				return
 			default:
-				glog.Warning("accept miner connection failed: ", err.Error())
+				glog.Warning("failed to accept miner connection: ", err.Error())
 				continue
 			}
 		}
@@ -83,7 +83,7 @@ func (manager *SessionManager) RunDownSession(conn net.Conn) {
 	sessionID, err := manager.sessionIDManager.AllocSessionID()
 
 	if err != nil {
-		glog.Warning("session id allocation failed: ", err)
+		glog.Warning("failed to allocate session id : ", err)
 		conn.Close()
 		return
 	}
@@ -137,7 +137,7 @@ func (manager *SessionManager) handleEvent() {
 			manager.exit()
 			return
 		default:
-			glog.Error("Unknown event: ", event)
+			glog.Error("[SessionManager] unknown event: ", event)
 		}
 	}
 }
