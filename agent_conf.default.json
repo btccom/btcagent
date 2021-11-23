@@ -9,7 +9,6 @@
     "agent_listen_ip": "0.0.0.0",
     "agent_listen_port": 3333,
     "pool_use_tls": false,
-    "use_iocp": false,
     "fixed_worker_name": "",
     "pools": [
         ["cn.ss.btc.com", 1800, "testpool"],
