@@ -60,6 +60,14 @@ type Config struct {
 	} `json:"http_debug"`
 }
 
+// NewConfig 创建配置对象并设置默认值
+func NewConfig() (config *Config) {
+	config = new(Config)
+	config.DisconnectWhenLostAsicboost = true
+	config.IpWorkerNameFormat = DefaultIpWorkerNameFormat
+	return
+}
+
 // LoadFromFile 从文件载入配置
 func (conf *Config) LoadFromFile(file string) (err error) {
 	configJSON, err := ioutil.ReadFile(file)

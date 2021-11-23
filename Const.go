@@ -26,6 +26,7 @@ const UpSessionReadTimeout = 60 * time.Second
 
 const UpSessionUserAgent = "btccom-agent/2.0.0-mu"
 const DefaultWorkerName = "__default__"
+const DefaultIpWorkerNameFormat = "{1}x{2}x{3}x{4}"
 
 // UpSessionNumPerSubAccount 每个子账户的矿池连接数量
 const UpSessionNumPerSubAccount = 5

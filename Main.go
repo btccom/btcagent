@@ -31,7 +31,7 @@ func main() {
 	IncreaseFDLimit()
 
 	// 读取配置文件
-	var config Config
+	config := NewConfig()
 	err := config.LoadFromFile(*configFilePath)
 	if err != nil {
 		glog.Fatal("load config failed: ", err)
@@ -59,7 +59,7 @@ func main() {
 	}
 
 	// 会话管理器
-	manager := NewSessionManager(&config)
+	manager := NewSessionManager(config)
 
 	// 退出信号
 	c := make(chan os.Signal)
