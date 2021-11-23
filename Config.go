@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"io/ioutil"
+	"time"
 
 	"github.com/golang/glog"
 )
@@ -40,6 +41,12 @@ func (r *PoolInfo) MarshalJSON() ([]byte, error) {
 	return json.Marshal([]interface{}{r.Host, r.Port, r.SubAccount})
 }
 
+type Seconds uint32
+
+func (s Seconds) Get() time.Duration {
+	return time.Duration(s) * time.Second
+}
+
 type Config struct {
 	MultiUserMode               bool       `json:"multi_user_mode"`
 	AgentType                   string     `json:"agent_type"`
@@ -58,13 +65,46 @@ type Config struct {
 		Enable bool   `json:"enable"`
 		Listen string `json:"listen"`
 	} `json:"http_debug"`
+	Advanced struct {
+		// 每个子账户的矿池连接数量
+		PoolConnectionNumberPerSubAccount uint8 `json:"pool_connection_number_per_subaccount"`
+		// 矿池连接超时时间
+		PoolConnectionDialTimeoutSeconds Seconds `json:"pool_connection_dial_timeout_seconds"`
+		// 矿池读取超时时间
+		PoolConnectionReadTimeoutSeconds Seconds `json:"pool_connection_read_timeout_seconds"`
+		// 假任务的发送周期（秒）
+		FakeJobNotifyIntervalSeconds Seconds `json:"fake_job_notify_interval_seconds"`
+		// 不进行 TLS 证书校验
+		TLSSkipCertificateVerify bool `json:"tls_skip_certificate_verify"`
+
+		// 消息队列大小
+		MessageQueueSize struct {
+			SessionManager     uint `json:"session_manager"`
+			PoolSessionManager uint `json:"pool_session_manager"`
+			PoolSession        uint `json:"pool_session"`
+			MinerSession       uint `json:"miner_session"`
+		} `json:"message_queue_size"`
+	} `json:"advanced"`
 }
 
 // NewConfig 创建配置对象并设置默认值
 func NewConfig() (config *Config) {
 	config = new(Config)
-	config.DisconnectWhenLostAsicboost = true
+
+	config.DisconnectWhenLostAsicboost = DownSessionDisconnectWhenLostAsicboost
 	config.IpWorkerNameFormat = DefaultIpWorkerNameFormat
+
+	config.Advanced.PoolConnectionNumberPerSubAccount = UpSessionNumPerSubAccount
+	config.Advanced.PoolConnectionDialTimeoutSeconds = UpSessionDialTimeoutSeconds
+	config.Advanced.PoolConnectionReadTimeoutSeconds = UpSessionReadTimeoutSeconds
+	config.Advanced.FakeJobNotifyIntervalSeconds = FakeJobNotifyIntervalSeconds
+	config.Advanced.TLSSkipCertificateVerify = UpSessionTLSInsecureSkipVerify
+
+	config.Advanced.MessageQueueSize.SessionManager = SessionManagerChannelCache
+	config.Advanced.MessageQueueSize.PoolSessionManager = UpSessionManagerChannelCache
+	config.Advanced.MessageQueueSize.PoolSession = UpSessionChannelCache
+	config.Advanced.MessageQueueSize.MinerSession = DownSessionChannelCache
+
 	return
 }
 

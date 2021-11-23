@@ -22,7 +22,7 @@ func NewFakeUpSession(manager *UpSessionManager) (up *FakeUpSession) {
 	up = new(FakeUpSession)
 	up.manager = manager
 	up.downSessions = make(map[uint16]*DownSession)
-	up.eventChannel = make(chan interface{}, UpSessionChannelCache)
+	up.eventChannel = make(chan interface{}, manager.config.Advanced.MessageQueueSize.PoolSession)
 	up.exitChannel = make(chan bool, 1)
 	return
 }
@@ -111,7 +111,7 @@ func (up *FakeUpSession) updateFakeJob(e EventUpdateFakeJob) {
 }
 
 func (up *FakeUpSession) fakeNotifyTicker() {
-	ticker := time.NewTicker(FakeJobNotifyInterval)
+	ticker := time.NewTicker(up.manager.config.Advanced.FakeJobNotifyIntervalSeconds.Get())
 	defer ticker.Stop()
 
 	for {

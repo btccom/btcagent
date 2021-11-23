@@ -42,7 +42,7 @@ func NewDownSession(manager *SessionManager, clientConn net.Conn, sessionID uint
 	down.clientConn = clientConn
 	down.clientReader = bufio.NewReader(clientConn)
 	down.stat = StatConnected
-	down.eventChannel = make(chan interface{}, DownSessionChannelCache)
+	down.eventChannel = make(chan interface{}, manager.config.Advanced.MessageQueueSize.MinerSession)
 
 	down.id = fmt.Sprintf("miner#%d (%s) ", down.sessionID, down.clientConn.RemoteAddr())
 

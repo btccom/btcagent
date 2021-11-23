@@ -64,7 +64,7 @@ func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, 
 	up.poolIndex = poolIndex
 	up.downSessions = make(map[uint16]*DownSession)
 	up.stat = StatDisconnected
-	up.eventChannel = make(chan interface{}, UpSessionChannelCache)
+	up.eventChannel = make(chan interface{}, manager.config.Advanced.MessageQueueSize.PoolSession)
 	up.submitIDs = make(map[uint16]SubmitID)
 
 	if !up.config.MultiUserMode {
@@ -82,12 +82,25 @@ func (up *UpSession) connect() (err error) {
 		up.id = fmt.Sprintf("pool#%d <%s> [tls://%s] ", up.slot, up.subAccount, url)
 		glog.Info(up.id, "connect to pool server...")
 
-		up.serverConn, err = tls.DialWithDialer(&net.Dialer{Timeout: UpSessionDialTimeout}, "tcp", url, UpSessionTLSConf)
+		up.serverConn, err = tls.DialWithDialer(
+			&net.Dialer{
+				Timeout: up.config.Advanced.PoolConnectionDialTimeoutSeconds.Get(),
+			},
+			"tcp",
+			url,
+			&tls.Config{
+				InsecureSkipVerify: up.config.Advanced.TLSSkipCertificateVerify,
+			},
+		)
 	} else {
 		up.id = fmt.Sprintf("pool#%d <%s> [%s] ", up.slot, up.subAccount, url)
 		glog.Info(up.id, "connect to pool server...")
 
-		up.serverConn, err = net.DialTimeout("tcp", url, UpSessionDialTimeout)
+		up.serverConn, err = net.DialTimeout(
+			"tcp",
+			url,
+			up.config.Advanced.PoolConnectionDialTimeoutSeconds.Get(),
+		)
 	}
 	if err != nil {
 		return
@@ -392,7 +405,7 @@ func (up *UpSession) readExMessage() {
 	}
 
 	up.SendEvent(EventRecvExMessage{message})
-	up.serverConn.SetReadDeadline(time.Now().Add(UpSessionReadTimeout))
+	up.serverConn.SetReadDeadline(time.Now().Add(up.config.Advanced.PoolConnectionReadTimeoutSeconds.Get()))
 }
 
 func (up *UpSession) readLine() {
@@ -412,7 +425,7 @@ func (up *UpSession) readLine() {
 	}
 
 	up.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
-	up.serverConn.SetReadDeadline(time.Now().Add(UpSessionReadTimeout))
+	up.serverConn.SetReadDeadline(time.Now().Add(up.config.Advanced.PoolConnectionReadTimeoutSeconds.Get()))
 }
 
 func (up *UpSession) Run() {

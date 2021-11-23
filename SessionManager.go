@@ -21,7 +21,7 @@ func NewSessionManager(config *Config) (manager *SessionManager) {
 	manager.config = config
 	manager.upSessionManagers = make(map[string]*UpSessionManager)
 	manager.exitChannel = make(chan bool, 1)
-	manager.eventChannel = make(chan interface{}, SessionManagerChannelCache)
+	manager.eventChannel = make(chan interface{}, manager.config.Advanced.MessageQueueSize.SessionManager)
 	return
 }
 

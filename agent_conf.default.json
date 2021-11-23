@@ -19,5 +19,18 @@
     "http_debug": {
         "enable": false,
         "listen": "127.0.0.1:9999"
+    },
+    "advanced": {
+        "pool_connection_number_per_subaccount": 5,
+        "pool_connection_dial_timeout_seconds": 15,
+        "pool_connection_read_timeout_seconds": 60,
+        "fake_job_notify_interval_seconds": 30,
+        "tls_skip_certificate_verify": true,
+        "message_queue_size": {
+            "session_manager": 64,
+            "pool_session_manager": 64,
+            "pool_session": 512,
+            "miner_session": 64
+        }
     }
 }
