@@ -74,5 +74,5 @@ func main() {
 	manager.Run()
 
 	// 等待所有服务结束
-	waitGroup.Done()
+	waitGroup.Wait()
 }
