@@ -47,6 +47,11 @@ func (manager *SessionManager) Run() {
 		return
 	}
 
+	// 为单用户模式连接矿池
+	if !manager.config.MultiUserMode {
+		manager.createUpSessionManager("")
+	}
+
 	for {
 		conn, err := manager.tcpListener.Accept()
 		if err != nil {
@@ -104,12 +109,17 @@ func (manager *SessionManager) SendEvent(event interface{}) {
 	manager.eventChannel <- event
 }
 
+func (manager *SessionManager) createUpSessionManager(subAccount string) (upManager *UpSessionManager) {
+	upManager = NewUpSessionManager(subAccount, manager.config, manager)
+	go upManager.Run()
+	manager.upSessionManagers[subAccount] = upManager
+	return
+}
+
 func (manager *SessionManager) addDownSession(e EventAddDownSession) {
 	upManager, ok := manager.upSessionManagers[e.Session.subAccountName]
 	if !ok {
-		upManager = NewUpSessionManager(e.Session.subAccountName, manager.config, manager)
-		go upManager.Run()
-		manager.upSessionManagers[e.Session.subAccountName] = upManager
+		upManager = manager.createUpSessionManager(e.Session.subAccountName)
 	}
 	upManager.SendEvent(e)
 }
