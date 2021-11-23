@@ -121,6 +121,10 @@ func (down *DownSession) stratumHandleRequest(request *JSONRPCLine, requestJSON 
 		}
 		return
 
+	case "mining.suggest_difficulty":
+		// ignore
+		return
+
 	default:
 		// ignore unimplemented methods
 		glog.Warning(down.id, "unknown request: ", string(requestJSON))
