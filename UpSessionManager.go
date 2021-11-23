@@ -42,7 +42,7 @@ func NewUpSessionManager(subAccount string, config *Config, parent *SessionManag
 	manager.config = config
 	manager.parent = parent
 
-	upSessions := [UpSessionNumPerSubAccount]UpSessionInfo{}
+	upSessions := make([]UpSessionInfo, manager.config.Advanced.PoolConnectionNumberPerSubAccount)
 	manager.upSessions = upSessions[:]
 	manager.fakeUpSession.upSession = NewFakeUpSession(manager)
 
