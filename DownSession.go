@@ -121,13 +121,19 @@ func (down *DownSession) stratumHandleRequest(request *JSONRPCLine, requestJSON 
 		}
 		return
 
+	// ignore unimplemented methods
+	case "mining.multi_version":
+		fallthrough
 	case "mining.suggest_difficulty":
-		// ignore
+		// If no response, the miner may wait indefinitely
+		err = StratumErrIllegalParams
 		return
 
 	default:
-		// ignore unimplemented methods
 		glog.Warning(down.id, "unknown request: ", string(requestJSON))
+
+		// If no response, the miner may wait indefinitely
+		err = StratumErrIllegalParams
 		return
 	}
 }
