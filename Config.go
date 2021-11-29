@@ -95,6 +95,7 @@ func NewConfig() (config *Config) {
 
 	config.DisconnectWhenLostAsicboost = DownSessionDisconnectWhenLostAsicboost
 	config.IpWorkerNameFormat = DefaultIpWorkerNameFormat
+	config.DirectConnectAfterProxy = true
 
 	config.Advanced.PoolConnectionNumberPerSubAccount = UpSessionNumPerSubAccount
 	config.Advanced.PoolConnectionDialTimeoutSeconds = UpSessionDialTimeoutSeconds
