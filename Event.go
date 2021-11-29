@@ -1,5 +1,10 @@
 package main
 
+import (
+	"bufio"
+	"net"
+)
+
 type EventType uint8
 
 type EventExit struct{}
@@ -80,3 +85,10 @@ type EventUpdateFakeJob struct {
 type EventTransferDownSessions struct{}
 
 type EventSendFakeNotify struct{}
+
+type EventUpSessionConnection struct {
+	ProxyURL string
+	Conn     net.Conn
+	Reader   *bufio.Reader
+	Error    error
+}

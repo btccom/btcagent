@@ -9,7 +9,9 @@
     "submit_response_from_server": false,
     "agent_listen_ip": "0.0.0.0",
     "agent_listen_port": 3333,
-    "proxy": "",
+    "proxy": [],
+    "direct_connect_with_proxy": false,
+    "direct_connect_after_proxy": true,
     "pool_use_tls": false,
     "pools": [
         ["cn.ss.btc.com", 1800, "testpool"],

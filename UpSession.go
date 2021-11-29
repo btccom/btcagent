@@ -75,7 +75,7 @@ func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, 
 	return
 }
 
-func (up *UpSession) connect() (err error) {
+func (up *UpSession) connect() {
 	pool := up.config.Pools[up.poolIndex]
 	url := fmt.Sprintf("%s:%d", pool.Host, pool.Port)
 
@@ -85,76 +85,127 @@ func (up *UpSession) connect() (err error) {
 		up.id = fmt.Sprintf("pool#%d <%s> [%s] ", up.slot, up.subAccount, url)
 	}
 
+	// Try to connect to all proxies and find the fastest one
+	counter := len(up.config.Proxy)
+	for i := 0; i < counter; i++ {
+		go up.tryConnect(pool.Host, url, up.config.Proxy[i])
+	}
+	if up.config.DirectConnectWithProxy {
+		counter++
+		go up.tryConnect(pool.Host, url, "")
+	}
+
+	// 接收连接事件
+	for i := 0; i < counter; i++ {
+		event := <-up.eventChannel
+		switch e := event.(type) {
+		case EventUpSessionConnection:
+			up.upSessionConnection(e)
+			if up.stat == StatConnected {
+				return
+			}
+		default:
+			glog.Error(up.id, "unknown event: ", e)
+		}
+	}
+
+	// 无需尝试直连
+	if counter > 0 && !up.config.DirectConnectAfterProxy {
+		return
+	}
+
+	// 尝试直连
+	go up.tryConnect(pool.Host, url, "")
+	event := <-up.eventChannel
+	switch e := event.(type) {
+	case EventUpSessionConnection:
+		up.upSessionConnection(e)
+	default:
+		glog.Error(up.id, "unknown event: ", e)
+	}
+}
+
+func (up *UpSession) upSessionConnection(e EventUpSessionConnection) {
+	if e.Error != nil {
+		if len(e.ProxyURL) > 0 {
+			glog.Warning(up.id, "proxy [", e.ProxyURL, "] failed: ", e.Error.Error())
+		} else {
+			glog.Warning(up.id, "direct connection failed: ", e.Error.Error())
+		}
+
+		if e.Conn != nil {
+			e.Conn.Close()
+		}
+		return
+	}
+
+	up.serverConn = e.Conn
+	up.serverReader = e.Reader
+	up.stat = StatConnected
+	up.id += fmt.Sprintf("(%s) ", up.serverConn.RemoteAddr().String())
+
+	if len(e.ProxyURL) > 0 {
+		glog.Info(up.id, "successfully connected with proxy [", e.ProxyURL, "]")
+	} else {
+		glog.Info(up.id, "successfully connected directly")
+	}
+}
+
+func (up *UpSession) tryConnect(poolHost, poolURL, proxyURL string) {
 	timeout := up.config.Advanced.PoolConnectionDialTimeoutSeconds.Get()
 	insecureSkipVerify := up.config.Advanced.TLSSkipCertificateVerify
 
-	// proxy connection
-	dialer, err := GetProxyDialer(up.config.Proxy, timeout, insecureSkipVerify)
-	if dialer != nil && err == nil {
-		glog.Info(up.id, "connect to pool server with proxy [", up.config.Proxy, "]...")
-		up.serverConn, err = dialer.Dial("tcp", url)
+	var err error
+	var dialer Dialer
+	var conn net.Conn
+	var reader *bufio.Reader
+
+	if len(proxyURL) > 0 {
+		glog.Info(up.id, "connect to pool server with proxy [", proxyURL, "]...")
+		dialer, err = GetProxyDialer(proxyURL, timeout, insecureSkipVerify)
+	} else {
+		glog.Info(up.id, "connect to pool server directly...")
+		dialer = &net.Dialer{Timeout: timeout}
+	}
+
+	if err == nil {
+		conn, err = dialer.Dial("tcp", poolURL)
 		if err == nil {
 			if up.config.PoolUseTls {
-				up.serverConn = tls.Client(up.serverConn, &tls.Config{
-					ServerName:         pool.Host,
+				conn = tls.Client(conn, &tls.Config{
+					ServerName:         poolHost,
 					InsecureSkipVerify: insecureSkipVerify,
 				})
 			}
-			up.serverReader = bufio.NewReader(up.serverConn)
-			// test proxy connection
-			err = up.testConnection()
+			reader, err = up.testConnection(conn)
 		}
-	}
-	if err != nil {
-		glog.Warning(up.id, "ignore proxy [", up.config.Proxy, "]: ", err.Error())
-		up.serverConn = nil
 	}
 
-	// direct connection
-	if up.serverConn == nil {
-		glog.Info(up.id, "connect to pool server...")
-		up.serverConn, err = net.DialTimeout("tcp", url, timeout)
-		if err != nil {
-			return
-		}
-		if up.config.PoolUseTls {
-			up.serverConn = tls.Client(up.serverConn, &tls.Config{
-				ServerName:         pool.Host,
-				InsecureSkipVerify: insecureSkipVerify,
-			})
-		}
-		up.serverReader = bufio.NewReader(up.serverConn)
-	}
-
-	up.id += fmt.Sprintf("(%s) ", up.serverConn.RemoteAddr().String())
-	up.stat = StatConnected
-	return
+	up.SendEvent(EventUpSessionConnection{proxyURL, conn, reader, err})
 }
 
-func (up *UpSession) testConnection() (err error) {
+func (up *UpSession) testConnection(conn net.Conn) (reader *bufio.Reader, err error) {
 	ch := make(chan error, 1)
+	reader = bufio.NewReader(conn)
 
 	go func() {
-		var capsRequest JSONRPCRequest
-		capsRequest.ID = "conn_test"
-		capsRequest.Method = "agent.get_capabilities"
-		if up.config.SubmitResponseFromServer {
-			capsRequest.SetParams(JSONRPCArray{CapVersionRolling, CapSubmitResponse})
-		} else {
-			capsRequest.SetParams(JSONRPCArray{CapVersionRolling})
-		}
-		_, e := up.writeJSONRequest(&capsRequest)
+		capsRequest := up.getAgentGetCapsRequest("conn_test")
+		bytes, e := capsRequest.ToJSONBytesLine()
 		if e == nil {
-			up.setReadDeadline()
-			_, e = up.serverReader.ReadBytes('\n')
+			conn.SetWriteDeadline(up.getIODeadLine())
+			_, e = conn.Write(bytes)
+			if e == nil {
+				conn.SetReadDeadline(up.getIODeadLine())
+				_, e = reader.ReadBytes('\n')
+			}
 		}
 		ch <- e
 	}()
 
 	select {
 	case <-time.After(up.config.Advanced.PoolConnectionDialTimeoutSeconds.Get()):
-		err = errors.New("proxy connection timeout")
-		up.serverConn.Close()
+		err = errors.New("connection timeout")
+		conn.Close()
 	case err = <-ch:
 	}
 
@@ -174,16 +225,20 @@ func (up *UpSession) writeBytes(bytes []byte) (int, error) {
 	return up.serverConn.Write(bytes)
 }
 
+func (up *UpSession) getAgentGetCapsRequest(id string) (req JSONRPCRequest) {
+	req.ID = id
+	req.Method = "agent.get_capabilities"
+	if up.config.SubmitResponseFromServer {
+		req.SetParams(JSONRPCArray{CapVersionRolling, CapSubmitResponse})
+	} else {
+		req.SetParams(JSONRPCArray{CapVersionRolling})
+	}
+	return
+}
+
 func (up *UpSession) sendInitRequest() (err error) {
 	// send agent.get_capabilities first
-	var capsRequest JSONRPCRequest
-	capsRequest.ID = "caps"
-	capsRequest.Method = "agent.get_capabilities"
-	if up.config.SubmitResponseFromServer {
-		capsRequest.SetParams(JSONRPCArray{CapVersionRolling, CapSubmitResponse})
-	} else {
-		capsRequest.SetParams(JSONRPCArray{CapVersionRolling})
-	}
+	capsRequest := up.getAgentGetCapsRequest("caps")
 	_, err = up.writeJSONRequest(&capsRequest)
 	if err != nil {
 		return
@@ -254,15 +309,19 @@ func (up *UpSession) close() {
 }
 
 func (up *UpSession) Init() {
-	err := up.connect()
-	if err != nil {
-		glog.Error(up.id, "failed to connect to pool server: ", err.Error())
+	up.connect()
+	if up.stat != StatConnected {
+		if len(up.config.Proxy) > 0 && (up.config.DirectConnectWithProxy || up.config.DirectConnectAfterProxy) {
+			glog.Error(up.id, "all connections both proxy and direct failed")
+		} else if len(up.config.Proxy) > 1 {
+			glog.Error(up.id, "all proxy connections failed")
+		}
 		return
 	}
 
 	go up.handleResponse()
 
-	err = up.sendInitRequest()
+	err := up.sendInitRequest()
 	if err != nil {
 		glog.Error(up.id, "failed to send request to pool server: ", err.Error())
 		up.close()
@@ -410,22 +469,22 @@ func (up *UpSession) connBroken() {
 	up.SendEvent(EventConnBroken{})
 }
 
-func (up *UpSession) getIODeadLine() time.Duration {
+func (up *UpSession) getIODeadLine() time.Time {
 	var timeout Seconds
 	if up.stat == StatAuthorized {
 		timeout = up.config.Advanced.PoolConnectionReadTimeoutSeconds
 	} else {
 		timeout = up.config.Advanced.PoolConnectionDialTimeoutSeconds
 	}
-	return timeout.Get()
+	return time.Now().Add(timeout.Get())
 }
 
 func (up *UpSession) setReadDeadline() {
-	up.serverConn.SetReadDeadline(time.Now().Add(up.getIODeadLine()))
+	up.serverConn.SetReadDeadline(up.getIODeadLine())
 }
 
 func (up *UpSession) setWriteDeadline() {
-	up.serverConn.SetWriteDeadline(time.Now().Add(up.getIODeadLine()))
+	up.serverConn.SetWriteDeadline(up.getIODeadLine())
 }
 
 func (up *UpSession) handleResponse() {
@@ -722,6 +781,14 @@ func (up *UpSession) sendUpdateMinerNum() {
 	up.disconnectedMinerCounter = 0
 }
 
+func (up *UpSession) outdatedUpSessionConnection(e EventUpSessionConnection) {
+	// up.connect() 方法有自己的事件循环来接收连接，
+	// 所以到达这里的连接都是多余的，可以直接关闭。
+	if e.Conn != nil {
+		e.Conn.Close()
+	}
+}
+
 func (up *UpSession) handleEvent() {
 	up.eventLoopRunning = true
 	for up.eventLoopRunning {
@@ -742,6 +809,8 @@ func (up *UpSession) handleEvent() {
 			up.recvExMessage(e)
 		case EventConnBroken:
 			up.close()
+		case EventUpSessionConnection:
+			up.outdatedUpSessionConnection(e)
 		case EventExit:
 			up.exit()
 		default:

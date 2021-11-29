@@ -58,7 +58,9 @@ type Config struct {
 	SubmitResponseFromServer    bool       `json:"submit_response_from_server"`
 	AgentListenIp               string     `json:"agent_listen_ip"`
 	AgentListenPort             uint16     `json:"agent_listen_port"`
-	Proxy                       string     `json:"proxy"`
+	Proxy                       []string   `json:"proxy"`
+	DirectConnectWithProxy      bool       `json:"direct_connect_with_proxy"`
+	DirectConnectAfterProxy     bool       `json:"direct_connect_after_proxy"`
 	PoolUseTls                  bool       `json:"pool_use_tls"`
 	Pools                       []PoolInfo `json:"pools"`
 	HTTPDebug                   struct {
@@ -133,11 +135,13 @@ func (conf *Config) Init() {
 		glog.Info("[OPTION] Fixed worker name enabled, all worker name will be replaced to ", conf.FixedWorkerName, " on the server.")
 	}
 
-	if conf.Proxy == "system" {
-		conf.Proxy = GetProxyURLFromEnv()
+	for i := range conf.Proxy {
+		if conf.Proxy[i] == "system" {
+			conf.Proxy[i] = GetProxyURLFromEnv()
+		}
 	}
 	if len(conf.Proxy) > 0 {
-		glog.Info("[OPTION] Connect to pool server with proxy [", conf.Proxy, "]")
+		glog.Info("[OPTION] Connect to pool server with proxy ", conf.Proxy)
 	}
 
 	for i := range conf.Pools {
