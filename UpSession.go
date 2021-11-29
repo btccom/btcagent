@@ -87,44 +87,76 @@ func (up *UpSession) connect() (err error) {
 
 	timeout := up.config.Advanced.PoolConnectionDialTimeoutSeconds.Get()
 	insecureSkipVerify := up.config.Advanced.TLSSkipCertificateVerify
+
+	// proxy connection
 	dialer, err := GetProxyDialer(up.config.Proxy, timeout, insecureSkipVerify)
 	if dialer != nil && err == nil {
 		glog.Info(up.id, "connect to pool server with proxy [", up.config.Proxy, "]...")
-		select {
-		case <-time.After(timeout):
-			err = errors.New("connection timeout")
-		default:
-			up.serverConn, err = dialer.Dial("tcp", url)
+		up.serverConn, err = dialer.Dial("tcp", url)
+		if err == nil {
+			if up.config.PoolUseTls {
+				up.serverConn = tls.Client(up.serverConn, &tls.Config{
+					ServerName:         pool.Host,
+					InsecureSkipVerify: insecureSkipVerify,
+				})
+			}
+			up.serverReader = bufio.NewReader(up.serverConn)
+			// test proxy connection
+			err = up.testConnection()
 		}
 	}
 	if err != nil {
 		glog.Warning(up.id, "ignore proxy [", up.config.Proxy, "]: ", err.Error())
 		up.serverConn = nil
 	}
+
+	// direct connection
 	if up.serverConn == nil {
 		glog.Info(up.id, "connect to pool server...")
-		select {
-		case <-time.After(timeout):
-			err = errors.New("connection timeout")
-		default:
-			up.serverConn, err = net.DialTimeout("tcp", url, timeout)
-		}
+		up.serverConn, err = net.DialTimeout("tcp", url, timeout)
 		if err != nil {
 			return
 		}
-	}
-
-	if up.config.PoolUseTls {
-		up.serverConn = tls.Client(up.serverConn, &tls.Config{
-			ServerName:         pool.Host,
-			InsecureSkipVerify: insecureSkipVerify,
-		})
+		if up.config.PoolUseTls {
+			up.serverConn = tls.Client(up.serverConn, &tls.Config{
+				ServerName:         pool.Host,
+				InsecureSkipVerify: insecureSkipVerify,
+			})
+		}
+		up.serverReader = bufio.NewReader(up.serverConn)
 	}
 
 	up.id += fmt.Sprintf("(%s) ", up.serverConn.RemoteAddr().String())
-
-	up.serverReader = bufio.NewReader(up.serverConn)
 	up.stat = StatConnected
+	return
+}
+
+func (up *UpSession) testConnection() (err error) {
+	ch := make(chan error, 1)
+
+	go func() {
+		var capsRequest JSONRPCRequest
+		capsRequest.ID = "conn_test"
+		capsRequest.Method = "agent.get_capabilities"
+		if up.config.SubmitResponseFromServer {
+			capsRequest.SetParams(JSONRPCArray{CapVersionRolling, CapSubmitResponse})
+		} else {
+			capsRequest.SetParams(JSONRPCArray{CapVersionRolling})
+		}
+		_, e := up.writeJSONRequest(&capsRequest)
+		if e == nil {
+			up.setReadDeadline()
+			_, e = up.serverReader.ReadBytes('\n')
+		}
+		ch <- e
+	}()
+
+	select {
+	case <-time.After(up.config.Advanced.PoolConnectionDialTimeoutSeconds.Get()):
+		err = errors.New("proxy connection timeout")
+	case err = <-ch:
+	}
+
 	return
 }
 
@@ -133,6 +165,11 @@ func (up *UpSession) writeJSONRequest(jsonData *JSONRPCRequest) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	return up.writeBytes(bytes)
+}
+
+func (up *UpSession) writeBytes(bytes []byte) (int, error) {
+	up.setWriteDeadline()
 	return up.serverConn.Write(bytes)
 }
 
@@ -372,14 +409,22 @@ func (up *UpSession) connBroken() {
 	up.SendEvent(EventConnBroken{})
 }
 
-func (up *UpSession) setReadDeadline() {
+func (up *UpSession) getIODeadLine() time.Duration {
 	var timeout Seconds
 	if up.stat == StatAuthorized {
 		timeout = up.config.Advanced.PoolConnectionReadTimeoutSeconds
 	} else {
 		timeout = up.config.Advanced.PoolConnectionDialTimeoutSeconds
 	}
-	up.serverConn.SetReadDeadline(time.Now().Add(timeout.Get()))
+	return timeout.Get()
+}
+
+func (up *UpSession) setReadDeadline() {
+	up.serverConn.SetReadDeadline(time.Now().Add(up.getIODeadLine()))
+}
+
+func (up *UpSession) setWriteDeadline() {
+	up.serverConn.SetWriteDeadline(time.Now().Add(up.getIODeadLine()))
 }
 
 func (up *UpSession) handleResponse() {
@@ -484,7 +529,7 @@ func (up *UpSession) addDownSession(e EventAddDownSession) {
 
 func (up *UpSession) registerWorker(down *DownSession) {
 	msg := ExMessageRegisterWorker{down.sessionID, down.clientAgent, down.workerName}
-	_, err := up.serverConn.Write(msg.Serialize())
+	_, err := up.writeBytes(msg.Serialize())
 	if err != nil {
 		glog.Error(up.id, "failed to register worker to pool server: ", err.Error())
 		up.close()
@@ -493,7 +538,7 @@ func (up *UpSession) registerWorker(down *DownSession) {
 
 func (up *UpSession) unregisterWorker(sessionID uint16) {
 	msg := ExMessageUnregisterWorker{sessionID}
-	_, err := up.serverConn.Write(msg.Serialize())
+	_, err := up.writeBytes(msg.Serialize())
 	if err != nil {
 		glog.Error(up.id, "failed to unregister worker from pool server: ", err.Error())
 		up.close()
@@ -549,6 +594,8 @@ func (up *UpSession) recvJSONRPC(e EventRecvJSONRPC) {
 		up.handleAuthorizeResponse(rpcData, jsonBytes)
 	case "caps_again":
 		// ignore
+	case "conn_test":
+		// ignore
 	default:
 		glog.Info(up.id, "[TODO] pool response: ", rpcData)
 	}
@@ -561,7 +608,7 @@ func (up *UpSession) handleSubmitShare(e EventSubmitShare) {
 	}
 
 	data := e.Message.Serialize()
-	_, err := up.serverConn.Write(data)
+	_, err := up.writeBytes(data)
 
 	if up.config.SubmitResponseFromServer && up.serverCapSubmitResponse {
 		up.submitIDs[up.submitIndex] = SubmitID{e.ID, e.Message.Base.SessionID}
