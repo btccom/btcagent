@@ -372,9 +372,20 @@ func (up *UpSession) connBroken() {
 	up.SendEvent(EventConnBroken{})
 }
 
+func (up *UpSession) setReadDeadline() {
+	var timeout Seconds
+	if up.stat == StatAuthorized {
+		timeout = up.config.Advanced.PoolConnectionReadTimeoutSeconds
+	} else {
+		timeout = up.config.Advanced.PoolConnectionDialTimeoutSeconds
+	}
+	up.serverConn.SetReadDeadline(time.Now().Add(timeout.Get()))
+}
+
 func (up *UpSession) handleResponse() {
 	up.readLoopRunning = true
 	for up.readLoopRunning {
+		up.setReadDeadline()
 		magicNum, err := up.serverReader.Peek(1)
 		if err != nil {
 			glog.Error(up.id, "failed to read pool server response: ", err.Error())
@@ -420,7 +431,6 @@ func (up *UpSession) readExMessage() {
 	}
 
 	up.SendEvent(EventRecvExMessage{message})
-	up.serverConn.SetReadDeadline(time.Now().Add(up.config.Advanced.PoolConnectionReadTimeoutSeconds.Get()))
 }
 
 func (up *UpSession) readLine() {
@@ -440,7 +450,6 @@ func (up *UpSession) readLine() {
 	}
 
 	up.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
-	up.serverConn.SetReadDeadline(time.Now().Add(up.config.Advanced.PoolConnectionReadTimeoutSeconds.Get()))
 }
 
 func (up *UpSession) Run() {
