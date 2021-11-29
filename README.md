@@ -26,3 +26,28 @@ mkdir log
 
 ./btcagent -c agent_conf.json -l log -alsologtostderr
 ```
+
+## Use proxy
+
+In [agent_conf.json](agent_conf.default.json):
+
+* socks5 proxy
+   ```
+   "proxy": "socks5://127.0.0.1:1089",
+   ```
+* http proxy
+   ```
+   "proxy": "http://127.0.0.1:8089",
+   ```
+* https proxy (http proxy with SSL/TLS)
+   ```
+   "proxy": "http://127.0.0.1:4433",
+   ```
+* find proxy from system environment variables
+   ```
+   "proxy": "system",
+   ```
+* disable proxy
+   ```
+   "proxy": "",
+   ```

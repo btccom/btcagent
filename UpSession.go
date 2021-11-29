@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -76,34 +77,48 @@ func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, 
 
 func (up *UpSession) connect() (err error) {
 	pool := up.config.Pools[up.poolIndex]
-
 	url := fmt.Sprintf("%s:%d", pool.Host, pool.Port)
+
 	if up.config.PoolUseTls {
 		up.id = fmt.Sprintf("pool#%d <%s> [tls://%s] ", up.slot, up.subAccount, url)
-		glog.Info(up.id, "connect to pool server...")
-
-		up.serverConn, err = tls.DialWithDialer(
-			&net.Dialer{
-				Timeout: up.config.Advanced.PoolConnectionDialTimeoutSeconds.Get(),
-			},
-			"tcp",
-			url,
-			&tls.Config{
-				InsecureSkipVerify: up.config.Advanced.TLSSkipCertificateVerify,
-			},
-		)
 	} else {
 		up.id = fmt.Sprintf("pool#%d <%s> [%s] ", up.slot, up.subAccount, url)
-		glog.Info(up.id, "connect to pool server...")
+	}
 
-		up.serverConn, err = net.DialTimeout(
-			"tcp",
-			url,
-			up.config.Advanced.PoolConnectionDialTimeoutSeconds.Get(),
-		)
+	timeout := up.config.Advanced.PoolConnectionDialTimeoutSeconds.Get()
+	insecureSkipVerify := up.config.Advanced.TLSSkipCertificateVerify
+	dialer, err := GetProxyDialer(up.config.Proxy, timeout, insecureSkipVerify)
+	if dialer != nil && err == nil {
+		glog.Info(up.id, "connect to pool server with proxy [", up.config.Proxy, "]...")
+		select {
+		case <-time.After(timeout):
+			err = errors.New("connection timeout")
+		default:
+			up.serverConn, err = dialer.Dial("tcp", url)
+		}
 	}
 	if err != nil {
-		return
+		glog.Warning(up.id, "ignore proxy [", up.config.Proxy, "]: ", err.Error())
+		up.serverConn = nil
+	}
+	if up.serverConn == nil {
+		glog.Info(up.id, "connect to pool server...")
+		select {
+		case <-time.After(timeout):
+			err = errors.New("connection timeout")
+		default:
+			up.serverConn, err = net.DialTimeout("tcp", url, timeout)
+		}
+		if err != nil {
+			return
+		}
+	}
+
+	if up.config.PoolUseTls {
+		up.serverConn = tls.Client(up.serverConn, &tls.Config{
+			ServerName:         pool.Host,
+			InsecureSkipVerify: insecureSkipVerify,
+		})
 	}
 
 	up.id += fmt.Sprintf("(%s) ", up.serverConn.RemoteAddr().String())
