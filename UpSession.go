@@ -154,6 +154,7 @@ func (up *UpSession) testConnection() (err error) {
 	select {
 	case <-time.After(up.config.Advanced.PoolConnectionDialTimeoutSeconds.Get()):
 		err = errors.New("proxy connection timeout")
+		up.serverConn.Close()
 	case err = <-ch:
 	}
 
