@@ -54,7 +54,7 @@ You can delete the `http_debug` and `advanced` configuration sections from the c
 
 ## Use proxy
 
-In [agent_conf.json](agent_conf.default.json):
+In [agent_conf.json](../agent_conf.default.json#L12):
 
 * socks5 proxy
    ```
