@@ -37,6 +37,30 @@ Note:
 
 4. You will get the executable file `btcagent` (or `btcagent.exe` on Windows).
 
+## Download
+
+If you don't want to build it yourself, you can also download the built binary here:
+
+https://github.com/btccom/btcagent/releases
+
+Download `agent_conf.default.json` (configuration file template) and `btcagent-xxx-xxx` binary suitable for your platform, give `btcagent-xxx-xxx` execution permission (Linux/macOS), and rename it to `btcagent`.
+
+Example of granting execution permissions and renaming:
+```bash
+chmod +x btcagent-linux-x64
+mv btcagent-linux-x64 btcagent
+```
+
+Which binary should I download?
+* 32-bit Windows system: `btcagent-windows-x86.exe`
+* 64-bit Windows system: `btcagent-windows-x64.exe`
+* 32-bit Linux system: `btcagent-linux-x86`
+* 64-bit Linux system: `btcagent-linux-x64`
+* Raspberry Pi running a 32-bit system: `btcagent-linux-arm`
+* Raspberry Pi running a 64-bit system: `btcagent-linux-arm64`
+* Mac with Intel CPU: `btcagent-macos-x64`
+* Mac with M1 chip: `btcagent-macos-arm64`
+
 ## Run
 
 ```bash

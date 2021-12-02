@@ -44,6 +44,30 @@ BTCAgent是定制的高效的专用矿池代理系统。其采用了自定义[�
 
 4. 然后就能得到可执行文件`btcagent`（Windows中为`btcagent.exe`）。
 
+## 下载
+
+如果不想自行编译安装，也可以去这里下载编译好的可执行文件：
+
+https://github.com/btccom/btcagent/releases
+
+下载 `agent_conf.default.json`（配置文件模板）和适用于你系统的`btcagent-xxx-xxx`可执行文件，然后给`btcagent-xxx-xxx`执行权限（Linux/macOS需要）并重命名为`btcagent`。
+
+给执行权限和重命名示例：
+```bash
+chmod +x btcagent-linux-x64
+mv btcagent-linux-x64 btcagent
+```
+
+我该下载哪个可执行文件？
+* 32位Windows系统：`btcagent-windows-x86.exe`
+* 64位Windows系统：`btcagent-windows-x64.exe`
+* 32位Linux系统：`btcagent-linux-x86`
+* 64位Linux系统：`btcagent-linux-x64`
+* 运行32位系统的树莓派：`btcagent-linux-arm`
+* 运行64位系统的树莓派：`btcagent-linux-arm64`
+* 英特尔CPU的macOS：`btcagent-macos-x64`
+* M1芯片的macOS：`btcagent-macos-arm64`
+
 ## 运行
 
 ```bash
