@@ -37,7 +37,7 @@ BTCAgent是定制的高效的专用矿池代理系统。其采用了自定义[�
 
 3. 运行以下命令:
    ```bash
-   git clone -b golang https://github.com/btccom/btcagent.git
+   git clone https://github.com/btccom/btcagent.git
    cd btcagent
    go build
    ```

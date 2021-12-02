@@ -30,7 +30,7 @@ Note:
 
 3. Run the following commands:
    ```bash
-   git clone -b golang https://github.com/btccom/btcagent.git
+   git clone https://github.com/btccom/btcagent.git
    cd btcagent
    go build
    ```
