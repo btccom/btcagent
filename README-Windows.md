@@ -82,8 +82,9 @@ config json file example:
 }
 ```
 
-Config file Details: [ConfigFileDetails.md](ConfigFileDetails.md).
-配置文件详解：[ConfigFileDetails-zhCN.md](ConfigFileDetails-zhCN.md)
+Config file Details: [ConfigFileDetails.md](docs/ConfigFileDetails.md).
+
+配置文件详解：[ConfigFileDetails-zhCN.md](docs/ConfigFileDetails-zhCN.md)
 
 run:
 ```cmd

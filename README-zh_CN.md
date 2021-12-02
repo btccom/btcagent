@@ -104,7 +104,7 @@ mkdir -p log_btcagent
 
 **注意**：矿机的用户会被自动替换为agent配置里的用户名，例如矿机为 `john.a001`，则在矿池端为：`kevin.a001`，矿机名称保持不变。
 
-配置文件详解：[ConfigFileDetails-zhCN.md](ConfigFileDetails-zhCN.md)
+配置文件详解：[ConfigFileDetails-zhCN.md](docs/ConfigFileDetails-zhCN.md)
 
 **启动 / 停止**
 

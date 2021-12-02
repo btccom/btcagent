@@ -93,7 +93,7 @@ mkdir -p log_btcagent
 
   * `["<stratum_server_host>", <stratum_server_port>, "<pool_username>"]`
 
-More details see [ConfigFileDetails.md](ConfigFileDetails.md).
+More details see [ConfigFileDetails.md](docs/ConfigFileDetails.md).
 
 **start / stop**
 
