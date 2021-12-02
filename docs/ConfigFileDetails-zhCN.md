@@ -54,7 +54,7 @@
 
 ## 使用网络代理
 
-在[agent_conf.json](../agent_conf.default.json#L12)配置文件中可设置网络代理：
+在[agent_conf.json](../agent_conf.default.json#L12)配置文件中可设置连接矿池时使用的网络代理：
 
 * socks5 代理
    ```
