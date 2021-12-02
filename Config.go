@@ -54,12 +54,14 @@ type Config struct {
 	DisconnectWhenLostAsicboost bool       `json:"disconnect_when_lost_asicboost"`
 	UseIpAsWorkerName           bool       `json:"use_ip_as_worker_name"`
 	IpWorkerNameFormat          string     `json:"ip_worker_name_format"`
+	FixedWorkerName             string     `json:"fixed_worker_name"`
 	SubmitResponseFromServer    bool       `json:"submit_response_from_server"`
 	AgentListenIp               string     `json:"agent_listen_ip"`
 	AgentListenPort             uint16     `json:"agent_listen_port"`
+	Proxy                       []string   `json:"proxy"`
+	DirectConnectWithProxy      bool       `json:"direct_connect_with_proxy"`
+	DirectConnectAfterProxy     bool       `json:"direct_connect_after_proxy"`
 	PoolUseTls                  bool       `json:"pool_use_tls"`
-	UseIocp                     bool       `json:"use_iocp"`
-	FixedWorkerName             string     `json:"fixed_worker_name"`
 	Pools                       []PoolInfo `json:"pools"`
 	HTTPDebug                   struct {
 		Enable bool   `json:"enable"`
@@ -93,6 +95,7 @@ func NewConfig() (config *Config) {
 
 	config.DisconnectWhenLostAsicboost = DownSessionDisconnectWhenLostAsicboost
 	config.IpWorkerNameFormat = DefaultIpWorkerNameFormat
+	config.DirectConnectAfterProxy = true
 
 	config.Advanced.PoolConnectionNumberPerSubAccount = UpSessionNumPerSubAccount
 	config.Advanced.PoolConnectionDialTimeoutSeconds = UpSessionDialTimeoutSeconds
@@ -131,6 +134,15 @@ func (conf *Config) Init() {
 
 	if len(conf.FixedWorkerName) > 0 {
 		glog.Info("[OPTION] Fixed worker name enabled, all worker name will be replaced to ", conf.FixedWorkerName, " on the server.")
+	}
+
+	for i := range conf.Proxy {
+		if conf.Proxy[i] == "system" {
+			conf.Proxy[i] = GetProxyURLFromEnv()
+		}
+	}
+	if len(conf.Proxy) > 0 {
+		glog.Info("[OPTION] Connect to pool server with proxy ", conf.Proxy)
 	}
 
 	for i := range conf.Pools {
