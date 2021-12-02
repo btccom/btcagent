@@ -35,3 +35,5 @@ build windows arm64
 
 build darwin amd64
 build darwin arm64
+
+cp agent_conf.default.json build/
