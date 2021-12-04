@@ -65,8 +65,8 @@ mv btcagent-linux-x64 btcagent
 * 64位Linux系统：`btcagent-linux-x64`
 * 运行32位系统的树莓派：`btcagent-linux-arm`
 * 运行64位系统的树莓派：`btcagent-linux-arm64`
-* 英特尔CPU的macOS：`btcagent-macos-x64`
-* M1芯片的macOS：`btcagent-macos-arm64`
+* 英特尔CPU的Mac：`btcagent-macos-x64`
+* M1芯片的Mac：`btcagent-macos-arm64`
 
 ## 运行
 
