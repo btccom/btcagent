@@ -22,24 +22,9 @@ Note:
 
 ![Architecture](docs/architecture.png)
 
-## Build
-
-1. Install golang from https://go.dev/
-
-2. Install git from https://git-scm.com/
-
-3. Run the following commands:
-   ```bash
-   git clone https://github.com/btccom/btcagent.git
-   cd btcagent
-   go build
-   ```
-
-4. You will get the executable file `btcagent` (or `btcagent.exe` on Windows).
-
 ## Download
 
-If you don't want to build it yourself, you can also download the built binary here:
+You can download the binary of BTCAgent here:
 
 https://github.com/btccom/btcagent/releases
 
@@ -63,6 +48,10 @@ Which binary should I download?
 
 ## Run
 
+Run following commands in the folder with `btcagent` and `agent_conf.default.json`.
+
+If you use GUI, you can right-click on a blank space in the file manager and select "Open terminal here".
+
 ```bash
 # Create a config file from the template
 cp agent_conf.default.json agent_conf.json
@@ -76,14 +65,22 @@ mkdir log
 ./btcagent -c agent_conf.json -l log -alsologtostderr
 ```
 
+Press Ctrl + C to stop `btcagent`.
+
+## Configuration file details
+
 See [ConfigFileDetails.md](docs/ConfigFileDetails.md) for more details about [agent_conf.json](agent_conf.default.json).
 
-## Run as a systemd service
+## Run as a systemd service (Auto-start in Linux)
 
 **Only for Linux with systemd.**
 
+Run in the folder with `btcagent`, `agent_conf.json` and the folder `log`.
+
+If you use GUI, you can right-click on a blank space in the file manager and select "Open terminal here".
+
 ```bash
-# Create a systemd service file
+# Create a systemd service file.
 cat << EOF | sudo tee /etc/systemd/system/btcagent.service >/dev/null
 [Unit]
 Description=BTCAgent
@@ -95,7 +92,7 @@ Type=simple
 Restart=always
 RestartSec=1
 User=root
-ExecStart=$PWD/btcagent -c $PWD/agent_conf.json -l $PWD/log
+ExecStart="$PWD/btcagent" -c "$PWD/agent_conf.json" -l "$PWD/log"
 
 [Install]
 WantedBy=multi-user.target
@@ -115,7 +112,12 @@ sudo journalctl -u btcagent
 
 # View log
 less log/*INFO
+
+# Monitor log (continuously print log changes)
+tail -F log/*INFO
 ```
+
+Note: After registering as a systemd service, you cannot move the location of above files, otherwise you need to delete the service and register again.
 
 If you no longer use btcagent service, you can delete it like this:
 
@@ -129,3 +131,22 @@ sudo systemctl disable btcagent
 # Remove service
 sudo rm /etc/systemd/system/btcagent.service
 ```
+
+## Build
+
+For developers.
+
+If you can [download a binary](https://github.com/btccom/btcagent/releases) suitable for your system, you don't need to build it.
+
+1. Install golang from https://go.dev/
+
+2. Install git from https://git-scm.com/
+
+3. Run the following commands:
+   ```bash
+   git clone https://github.com/btccom/btcagent.git
+   cd btcagent
+   go build
+   ```
+
+4. You will get the executable file `btcagent` (or `btcagent.exe` on Windows).

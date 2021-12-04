@@ -29,28 +29,13 @@ BTCAgent是定制的高效的专用矿池代理系统。其采用了自定义[�
 
 ![架构图](docs/architecture.png)
 
-## 编译安装
-
-1. 从 https://go.dev/ 安装 golang
-
-2. 从 https://git-scm.com/ 安装 git
-
-3. 运行以下命令:
-   ```bash
-   git clone https://github.com/btccom/btcagent.git
-   cd btcagent
-   go build
-   ```
-
-4. 然后就能得到可执行文件`btcagent`（Windows中为`btcagent.exe`）。
-
 ## 下载
 
-如果不想自行编译安装，也可以去这里下载编译好的可执行文件：
+你可以在此处下载 BTCAgent 的可执行文件：
 
 https://github.com/btccom/btcagent/releases
 
-下载 `agent_conf.default.json`（配置文件模板）和适用于你系统的`btcagent-xxx-xxx`可执行文件，然后给`btcagent-xxx-xxx`执行权限（Linux/macOS需要）并重命名为`btcagent`。
+下载`agent_conf.default.json`（配置文件模板）和适用于你系统的`btcagent-xxx-xxx`可执行文件，然后给`btcagent-xxx-xxx`执行权限（Linux/macOS需要）并重命名为`btcagent`。
 
 给执行权限和重命名示例：
 ```bash
@@ -70,6 +55,10 @@ mv btcagent-linux-x64 btcagent
 
 ## 运行
 
+在包含`btcagent`和`agent_conf.default.json`的文件夹中运行以下命令。
+
+如果你使用图形界面，你可以在文件管理器空白处右击，选择“在此处打开终端”。
+
 ```bash
 # 从模板创建配置文件
 cp agent_conf.default.json agent_conf.json
@@ -83,14 +72,22 @@ mkdir log
 ./btcagent -c agent_conf.json -l log -alsologtostderr
 ```
 
+按 Ctrl + C 可停止`btcagent`。
+
+## 配置文件详情
+
 欲了解配置文件[agent_conf.json](agent_conf.default.json)中每个选项的作用，请看：[配置文件详情](docs/ConfigFileDetails-zhCN.md)。
 
-## 作为 systemd 服务运行（Linux 开机自启动）
+## 注册为 systemd 系统服务（Linux 开机自启动）
 
 **仅适用于运行 systemd 的 Linux 发行版**
 
+在包含`btcagent`，`agent_conf.json`和文件夹`log`的文件夹中运行以下命令。
+
+如果你使用图形界面，你可以在文件管理器空白处右击，选择“在此处打开终端”。
+
 ```bash
-# 创建 systemd 服务文件
+# 创建 systemd 服务文件。
 cat << EOF | sudo tee /etc/systemd/system/btcagent.service >/dev/null
 [Unit]
 Description=BTCAgent
@@ -102,7 +99,7 @@ Type=simple
 Restart=always
 RestartSec=1
 User=root
-ExecStart=$PWD/btcagent -c $PWD/agent_conf.json -l $PWD/log
+ExecStart="$PWD/btcagent" -c "$PWD/agent_conf.json" -l "$PWD/log"
 
 [Install]
 WantedBy=multi-user.target
@@ -122,7 +119,12 @@ sudo journalctl -u btcagent
 
 # 查看日志
 less log/*INFO
+
+# 监视日志（日志有变化会自动刷新）
+tail -F log/*INFO
 ```
+
+注意：注册为系统服务之后，**不能移动文件的位置**，否则需要把服务删了重新注册一次才行。
 
 如果不再使用btcagent服务，可以这样删除：
 
@@ -136,3 +138,22 @@ sudo systemctl disable btcagent
 # 删除服务
 sudo rm /etc/systemd/system/btcagent.service
 ```
+
+## 编译安装
+
+适用于开发者。
+
+如果能[下载](https://github.com/btccom/btcagent/releases)到适合自己系统的可执行文件，就不需要编译安装。
+
+1. 从 https://go.dev/ 安装 golang
+
+2. 从 https://git-scm.com/ 安装 git
+
+3. 运行以下命令:
+   ```bash
+   git clone https://github.com/btccom/btcagent.git
+   cd btcagent
+   go build
+   ```
+
+4. 然后就能得到可执行文件`btcagent`（Windows中为`btcagent.exe`）。
