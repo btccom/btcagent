@@ -59,6 +59,7 @@ type Config struct {
 	AgentListenIp               string     `json:"agent_listen_ip"`
 	AgentListenPort             uint16     `json:"agent_listen_port"`
 	Proxy                       []string   `json:"proxy"`
+	UseProxy                    bool       `json:"use_proxy"`
 	DirectConnectWithProxy      bool       `json:"direct_connect_with_proxy"`
 	DirectConnectAfterProxy     bool       `json:"direct_connect_after_proxy"`
 	PoolUseTls                  bool       `json:"pool_use_tls"`
@@ -95,6 +96,7 @@ func NewConfig() (config *Config) {
 
 	config.DisconnectWhenLostAsicboost = DownSessionDisconnectWhenLostAsicboost
 	config.IpWorkerNameFormat = DefaultIpWorkerNameFormat
+	config.UseProxy = true
 	config.DirectConnectAfterProxy = true
 
 	config.Advanced.PoolConnectionNumberPerSubAccount = UpSessionNumPerSubAccount
@@ -136,6 +138,10 @@ func (conf *Config) Init() {
 		glog.Info("[OPTION] Fixed worker name enabled, all worker name will be replaced to ", conf.FixedWorkerName, " on the server.")
 	}
 
+	if !conf.UseProxy && len(conf.Proxy) > 0 {
+		conf.Proxy = []string{}
+		glog.Info("[OPTION] Proxy disabled")
+	}
 	for i := range conf.Proxy {
 		if conf.Proxy[i] == "system" {
 			conf.Proxy[i] = GetProxyURLFromEnv()

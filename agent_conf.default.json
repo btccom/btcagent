@@ -10,6 +10,7 @@
     "agent_listen_ip": "0.0.0.0",
     "agent_listen_port": 3333,
     "proxy": [],
+    "use_proxy": true,
     "direct_connect_with_proxy": false,
     "direct_connect_after_proxy": true,
     "pool_use_tls": false,

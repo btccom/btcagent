@@ -17,6 +17,7 @@
     "agent_listen_ip": "0.0.0.0",
     "agent_listen_port": 3333,
     "proxy": [],
+    "use_proxy": true,
     "direct_connect_with_proxy": false,
     "direct_connect_after_proxy": true,
     "pool_use_tls": false,
@@ -47,8 +48,9 @@ You can delete the `http_debug` and `advanced` configuration sections from the c
 | agent_listen_ip | BTCAgent listen IP | The listen IP of BTCAgent, miners should connect to your BTCAgent via this IP. It should be an IP address assigned to the computer running BTCAgent, or `0.0.0.0`. The `0.0.0.0` means "all possible IP addresses" and we recommend using it. |
 | agent_listen_port | BTCAgent listen port | The listen port of BTCAgent, miners should connect to your BTCAgent via this port. If you run multiple BTCAgent processes on one computer, each process should use a different port.<br><br>The valid range of the port is 1 to 65535, and the recommended range is 2000 to 5000. Use of ports lower than 1024 requires root privileges, and ports higher than 5000 may be randomly occupied by other programs. |
 | proxy | Network proxy | The network proxy used when connecting to the mining pool.<br><br>String array, each string is a proxy, the fastest will be used.<br><br>See the "Use proxy" section below to understand the format of the proxy string. |
-| direct_connect_with_proxy | Try to connect directly when using a proxy | While connecting to the mining pool through a proxy, it also tries to connect directly to the mining pool (not through a proxy). If the direct connection is faster, it will be used. If it is not possible to connect directly to the mining pool or it's slower, the proxy will be used. |
-| direct_connect_after_proxy | Try to connect directly after the proxy connection fails | If you cannot connect to the mining pool through a proxy, try to connect to the mining pool directly (not through a proxy). This may help when the proxy fails. Of course, you can also set up multiple proxies to reduce the possibility of failure. |
+| use_proxy | Use network proxy | The switch of the network proxy, the default is `true` (use proxy if not empty), set to `false` to disable the network proxy. |
+| direct_connect_with_proxy | Use direct connection if it is faster than all proxies | While connecting to the mining pool through proxies, it also tries to connect directly to the mining pool (not through any proxy). If the direct connection is faster than all proxies, it will be used. If it is not possible to connect directly to the mining pool or it's slower, the fastest proxy will be used. |
+| direct_connect_after_proxy | Use direct connection after all proxies fail | If BTCAgent cannot connect to the mining pool through any proxy, it will try to connect to the mining pool directly (not through a proxy). This may help when proxy fails. Of course, you can also set up multiple proxies to reduce the possibility of failure. |
 | pool_use_tls | Use SSL/TLS encrypted connection to pool | Connect to the mining pool server encrypted with SSL/TLS to prevent network traffic from being monitored by the middleman.<br><br>Note: The address and port of the server that supports SSL/TLS encryption may be different from the normal server. If the server address and port you fill in does not support SSL/TLS encryption, enabling this option will cause BTCAgent to fail to connect to the server.<br><br>In addition, after enabling this option, the connection from your miners to this BTCAgent is still in plain text and will not be encrypted by SSL/TLS. So you don&apos;t need to change the miner settings. |
 | pools | Mining pool server host, port, sub-account | [<br>&nbsp;&nbsp;&nbsp;&nbsp;["pool-server-host-1", server-port1, "sub-account-1"],<br>&nbsp;&nbsp;&nbsp;&nbsp;["pool-server-host-2", server-port2, "sub-account-2"],<br>&nbsp;&nbsp;&nbsp;&nbsp;["pool-server-host-3", server-port3, "sub-account-3"]<br>] |
 
@@ -65,7 +67,7 @@ In [agent_conf.json](../agent_conf.default.json#L12):
 * http proxy
    ```
    "proxy": [
-      "http://127.0.0.1:8089"
+      "http://127.0.0.1:8889"
    ],
    ```
 * https proxy (http proxy with SSL/TLS)
@@ -89,14 +91,14 @@ In [agent_conf.json](../agent_conf.default.json#L12):
    "proxy": [
       "socks5://127.0.0.1:1089",
       "socks5://192.168.1.1:1089",
-      "http://127.0.0.1:8089"
+      "http://127.0.0.1:8889"
    ],
    ```
 * proxy that requires authentication
    ```
    "proxy": [
       "socks5://username:password@127.0.0.1:1089",
-      "http://username:password@192.168.1.1:8089",
+      "http://username:password@192.168.1.1:8889",
       "https://username:password@127.0.0.1:4433"
    ],
    ```
