@@ -350,28 +350,29 @@ func (up *UpSession) Init() {
 }
 
 func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte) {
-	if !up.serverCapVersionRolling {
-		// server doesn't support version rolling via BTCAgent
-		return
-	}
-
 	up.rpcSetVersionMask = jsonBytes
 
 	if len(rpcData.Params) > 0 {
-		versionMaskHex, ok := rpcData.Params[0].(string)
-		if !ok {
-			glog.Error(up.id, "version mask is not a string: ", string(jsonBytes))
-			return
-		}
-		versionMask, err := strconv.ParseUint(versionMaskHex, 16, 32)
-		if err != nil {
-			glog.Error(up.id, "version mask is not a hex: ", string(jsonBytes))
-			return
-		}
-		up.versionMask = uint32(versionMask)
+		if up.serverCapVersionRolling {
+			versionMaskHex, ok := rpcData.Params[0].(string)
+			if !ok {
+				glog.Error(up.id, "version mask is not a string: ", string(jsonBytes))
+				return
+			}
+			versionMask, err := strconv.ParseUint(versionMaskHex, 16, 32)
+			if err != nil {
+				glog.Error(up.id, "version mask is not a hex: ", string(jsonBytes))
+				return
+			}
+			up.versionMask = uint32(versionMask)
 
-		if glog.V(1) {
-			glog.Info(up.id, "AsicBoost via BTCAgent enabled, allowed version mask: ", versionMaskHex)
+			if glog.V(1) {
+				glog.Info(up.id, "AsicBoost via BTCAgent enabled, allowed version mask: ", versionMaskHex)
+			}
+		} else {
+			// server doesn't support version rolling via BTCAgent
+			up.versionMask = 0
+			rpcData.Params[0] = "00000000"
 		}
 	}
 
