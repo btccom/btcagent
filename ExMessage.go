@@ -22,6 +22,14 @@ const (
 	CMD_SET_NONCE_PREFIX           uint8 = 0x22 // Pool  -> Agent, pool nonce prefix allocation result (Ethereum)
 )
 
+type SerializableExMessage interface {
+	Serialize() []byte
+}
+
+type UnserializableExMessage interface {
+	Unserialize(data []byte) (err error)
+}
+
 type ExMessageHeader struct {
 	MagicNumber uint8
 	Type        uint8

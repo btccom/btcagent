@@ -77,6 +77,9 @@ func (down *DownSession) writeJSONResponse(jsonData *JSONRPCResponse) (int, erro
 	if err != nil {
 		return 0, err
 	}
+	if glog.V(12) {
+		glog.Info(down.id, "writeJSONResponse: ", string(bytes))
+	}
 	return down.clientConn.Write(bytes)
 }
 
@@ -391,11 +394,13 @@ func (down *DownSession) handleRequest() {
 
 	for down.readLoopRunning {
 		jsonBytes, err := down.clientReader.ReadBytes('\n')
-
 		if err != nil {
 			glog.Error(down.id, "failed to read request from miner: ", err.Error())
 			down.connBroken()
 			return
+		}
+		if glog.V(11) {
+			glog.Info(down.id, "handleRequest: ", string(jsonBytes))
 		}
 
 		rpcData, err := NewJSONRPCLine(jsonBytes)
@@ -440,6 +445,9 @@ func (down *DownSession) connBroken() {
 }
 
 func (down *DownSession) sendBytes(e EventSendBytes) {
+	if glog.V(12) {
+		glog.Info(down.id, "sendBytes: ", string(e.Content))
+	}
 	_, err := down.clientConn.Write(e.Content)
 	if err != nil {
 		glog.Error(down.id, "failed to send notify to miner: ", err.Error())

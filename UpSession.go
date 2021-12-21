@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -192,11 +193,17 @@ func (up *UpSession) testConnection(conn net.Conn) (reader *bufio.Reader, err er
 		capsRequest := up.getAgentGetCapsRequest("conn_test")
 		bytes, e := capsRequest.ToJSONBytesLine()
 		if e == nil {
+			if glog.V(10) {
+				glog.Info(up.id, "testConnection send: ", string(bytes))
+			}
 			conn.SetWriteDeadline(up.getIODeadLine())
 			_, e = conn.Write(bytes)
 			if e == nil {
 				conn.SetReadDeadline(up.getIODeadLine())
-				_, e = reader.ReadBytes('\n')
+				bytes, e = reader.ReadBytes('\n')
+				if glog.V(9) {
+					glog.Info(up.id, "testConnection recv: ", string(bytes))
+				}
 			}
 		}
 		ch <- e
@@ -216,6 +223,17 @@ func (up *UpSession) writeJSONRequest(jsonData *JSONRPCRequest) (int, error) {
 	bytes, err := jsonData.ToJSONBytesLine()
 	if err != nil {
 		return 0, err
+	}
+	if glog.V(10) {
+		glog.Info(up.id, "writeJSONRequest: ", string(bytes))
+	}
+	return up.writeBytes(bytes)
+}
+
+func (up *UpSession) writeExMessage(msg SerializableExMessage) (int, error) {
+	bytes := msg.Serialize()
+	if glog.V(10) && len(bytes) > 1 {
+		glog.Info(up.id, "writeExMessage: ", bytes[1], msg, " ", hex.EncodeToString(bytes))
 	}
 	return up.writeBytes(bytes)
 }
@@ -535,6 +553,9 @@ func (up *UpSession) readExMessage() {
 		}
 	}
 
+	if glog.V(9) {
+		glog.Info(up.id, "readExMessage: ", message.ExMessageHeader.Type, " ", hex.EncodeToString(message.Body))
+	}
 	up.SendEvent(EventRecvExMessage{message})
 }
 
@@ -544,6 +565,9 @@ func (up *UpSession) readLine() {
 		glog.Error(up.id, "failed to read JSON line from pool server: ", err.Error())
 		up.connBroken()
 		return
+	}
+	if glog.V(9) {
+		glog.Info(up.id, "readLine: ", string(jsonBytes))
 	}
 
 	rpcData, err := NewJSONRPCLine(jsonBytes)
@@ -589,7 +613,7 @@ func (up *UpSession) addDownSession(e EventAddDownSession) {
 
 func (up *UpSession) registerWorker(down *DownSession) {
 	msg := ExMessageRegisterWorker{down.sessionID, down.clientAgent, down.workerName}
-	_, err := up.writeBytes(msg.Serialize())
+	_, err := up.writeExMessage(&msg)
 	if err != nil {
 		glog.Error(up.id, "failed to register worker to pool server: ", err.Error())
 		up.close()
@@ -598,7 +622,7 @@ func (up *UpSession) registerWorker(down *DownSession) {
 
 func (up *UpSession) unregisterWorker(sessionID uint16) {
 	msg := ExMessageUnregisterWorker{sessionID}
-	_, err := up.writeBytes(msg.Serialize())
+	_, err := up.writeExMessage(&msg)
 	if err != nil {
 		glog.Error(up.id, "failed to unregister worker from pool server: ", err.Error())
 		up.close()
@@ -667,8 +691,7 @@ func (up *UpSession) handleSubmitShare(e EventSubmitShare) {
 		return
 	}
 
-	data := e.Message.Serialize()
-	_, err := up.writeBytes(data)
+	_, err := up.writeExMessage(e.Message)
 
 	if up.config.SubmitResponseFromServer && up.serverCapSubmitResponse {
 		up.submitIDs[up.submitIndex] = SubmitID{e.ID, e.Message.Base.SessionID}
