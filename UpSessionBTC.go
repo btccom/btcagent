@@ -15,12 +15,7 @@ import (
 	"github.com/golang/glog"
 )
 
-type SubmitID struct {
-	ID        interface{}
-	SessionID uint16
-}
-
-type UpSession struct {
+type UpSessionBTC struct {
 	id string // 打印日志用的连接标识符
 
 	manager *UpSessionManager
@@ -30,7 +25,7 @@ type UpSession struct {
 	subAccount string
 	poolIndex  int
 
-	downSessions    map[uint16]*DownSession
+	downSessions    map[uint16]*DownSessionBTC
 	serverConn      net.Conn
 	serverReader    *bufio.Reader
 	readLoopRunning bool
@@ -57,26 +52,30 @@ type UpSession struct {
 	disconnectedMinerCounter int
 }
 
-func NewUpSession(manager *UpSessionManager, config *Config, subAccount string, poolIndex int, slot int) (up *UpSession) {
-	up = new(UpSession)
+func NewUpSessionBTC(manager *UpSessionManager, poolIndex int, slot int) (up *UpSessionBTC) {
+	up = new(UpSessionBTC)
 	up.manager = manager
-	up.config = config
+	up.config = manager.config
 	up.slot = slot
-	up.subAccount = subAccount
+	up.subAccount = manager.subAccount
 	up.poolIndex = poolIndex
-	up.downSessions = make(map[uint16]*DownSession)
+	up.downSessions = make(map[uint16]*DownSessionBTC)
 	up.stat = StatDisconnected
 	up.eventChannel = make(chan interface{}, manager.config.Advanced.MessageQueueSize.PoolSession)
 	up.submitIDs = make(map[uint16]SubmitID)
 
 	if !up.config.MultiUserMode {
-		up.subAccount = config.Pools[poolIndex].SubAccount
+		up.subAccount = manager.config.Pools[poolIndex].SubAccount
 	}
 
 	return
 }
 
-func (up *UpSession) connect() {
+func (up *UpSessionBTC) Stat() AuthorizeStat {
+	return up.stat
+}
+
+func (up *UpSessionBTC) connect() {
 	pool := up.config.Pools[up.poolIndex]
 	url := fmt.Sprintf("%s:%d", pool.Host, pool.Port)
 
@@ -126,7 +125,7 @@ func (up *UpSession) connect() {
 	}
 }
 
-func (up *UpSession) upSessionConnection(e EventUpSessionConnection) {
+func (up *UpSessionBTC) upSessionConnection(e EventUpSessionConnection) {
 	if e.Error != nil {
 		if len(e.ProxyURL) > 0 {
 			glog.Warning(up.id, "proxy [", e.ProxyURL, "] failed: ", e.Error.Error())
@@ -152,7 +151,7 @@ func (up *UpSession) upSessionConnection(e EventUpSessionConnection) {
 	}
 }
 
-func (up *UpSession) tryConnect(poolHost, poolURL, proxyURL string) {
+func (up *UpSessionBTC) tryConnect(poolHost, poolURL, proxyURL string) {
 	timeout := up.config.Advanced.PoolConnectionDialTimeoutSeconds.Get()
 	insecureSkipVerify := up.config.Advanced.TLSSkipCertificateVerify
 
@@ -185,7 +184,7 @@ func (up *UpSession) tryConnect(poolHost, poolURL, proxyURL string) {
 	up.SendEvent(EventUpSessionConnection{proxyURL, conn, reader, err})
 }
 
-func (up *UpSession) testConnection(conn net.Conn) (reader *bufio.Reader, err error) {
+func (up *UpSessionBTC) testConnection(conn net.Conn) (reader *bufio.Reader, err error) {
 	ch := make(chan error, 1)
 	reader = bufio.NewReader(conn)
 
@@ -219,7 +218,7 @@ func (up *UpSession) testConnection(conn net.Conn) (reader *bufio.Reader, err er
 	return
 }
 
-func (up *UpSession) writeJSONRequest(jsonData *JSONRPCRequest) (int, error) {
+func (up *UpSessionBTC) writeJSONRequest(jsonData *JSONRPCRequest) (int, error) {
 	bytes, err := jsonData.ToJSONBytesLine()
 	if err != nil {
 		return 0, err
@@ -230,7 +229,7 @@ func (up *UpSession) writeJSONRequest(jsonData *JSONRPCRequest) (int, error) {
 	return up.writeBytes(bytes)
 }
 
-func (up *UpSession) writeExMessage(msg SerializableExMessage) (int, error) {
+func (up *UpSessionBTC) writeExMessage(msg SerializableExMessage) (int, error) {
 	bytes := msg.Serialize()
 	if glog.V(10) && len(bytes) > 1 {
 		glog.Info(up.id, "writeExMessage: ", bytes[1], msg, " ", hex.EncodeToString(bytes))
@@ -238,12 +237,12 @@ func (up *UpSession) writeExMessage(msg SerializableExMessage) (int, error) {
 	return up.writeBytes(bytes)
 }
 
-func (up *UpSession) writeBytes(bytes []byte) (int, error) {
+func (up *UpSessionBTC) writeBytes(bytes []byte) (int, error) {
 	up.setWriteDeadline()
 	return up.serverConn.Write(bytes)
 }
 
-func (up *UpSession) getAgentGetCapsRequest(id string) (req JSONRPCRequest) {
+func (up *UpSessionBTC) getAgentGetCapsRequest(id string) (req JSONRPCRequest) {
 	req.ID = id
 	req.Method = "agent.get_capabilities"
 	if up.config.SubmitResponseFromServer {
@@ -254,7 +253,7 @@ func (up *UpSession) getAgentGetCapsRequest(id string) (req JSONRPCRequest) {
 	return
 }
 
-func (up *UpSession) sendInitRequest() (err error) {
+func (up *UpSessionBTC) sendInitRequest() (err error) {
 	// send agent.get_capabilities first
 	capsRequest := up.getAgentGetCapsRequest("caps")
 	_, err = up.writeJSONRequest(&capsRequest)
@@ -298,12 +297,12 @@ func (up *UpSession) sendInitRequest() (err error) {
 	return
 }
 
-func (up *UpSession) exit() {
+func (up *UpSessionBTC) exit() {
 	up.stat = StatExit
 	up.close()
 }
 
-func (up *UpSession) close() {
+func (up *UpSessionBTC) close() {
 	if up.stat == StatAuthorized {
 		up.manager.SendEvent(EventUpSessionBroken{up.slot})
 	}
@@ -326,7 +325,7 @@ func (up *UpSession) close() {
 	up.serverConn.Close()
 }
 
-func (up *UpSession) Init() {
+func (up *UpSessionBTC) Init() {
 	up.connect()
 	if up.stat != StatConnected {
 		if len(up.config.Proxy) > 0 && (up.config.DirectConnectWithProxy || up.config.DirectConnectAfterProxy) {
@@ -349,7 +348,7 @@ func (up *UpSession) Init() {
 	up.handleEvent()
 }
 
-func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte) {
 	up.rpcSetVersionMask = jsonBytes
 
 	if len(rpcData.Params) > 0 {
@@ -384,13 +383,13 @@ func (up *UpSession) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte
 	}
 }
 
-func (up *UpSession) handleSetDifficulty(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleSetDifficulty(rpcData *JSONRPCLine, jsonBytes []byte) {
 	if up.rpcSetDifficulty == nil {
 		up.rpcSetDifficulty = jsonBytes
 	}
 }
 
-func (up *UpSession) handleSubScribeResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleSubScribeResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
 	result, ok := rpcData.Result.([]interface{})
 	if !ok {
 		glog.Error(up.id, "subscribe result is not an array: ", string(jsonBytes))
@@ -431,11 +430,11 @@ func (up *UpSession) handleSubScribeResponse(rpcData *JSONRPCLine, jsonBytes []b
 	up.stat = StatSubScribed
 }
 
-func (up *UpSession) handleConfigureResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleConfigureResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
 	// ignore
 }
 
-func (up *UpSession) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
 	result, ok := rpcData.Result.(map[string]interface{})
 	if !ok {
 		glog.Error(up.id, "get server capabilities failed, result is not an object: ", string(jsonBytes))
@@ -470,7 +469,7 @@ func (up *UpSession) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []byt
 	}
 }
 
-func (up *UpSession) handleAuthorizeResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleAuthorizeResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
 	result, ok := rpcData.Result.(bool)
 	if !ok || !result {
 		glog.Error(up.id, "authorize failed: ", rpcData.Error)
@@ -483,12 +482,12 @@ func (up *UpSession) handleAuthorizeResponse(rpcData *JSONRPCLine, jsonBytes []b
 	up.eventLoopRunning = false
 }
 
-func (up *UpSession) connBroken() {
+func (up *UpSessionBTC) connBroken() {
 	up.readLoopRunning = false
 	up.SendEvent(EventConnBroken{})
 }
 
-func (up *UpSession) getIODeadLine() time.Time {
+func (up *UpSessionBTC) getIODeadLine() time.Time {
 	var timeout Seconds
 	if up.stat == StatAuthorized {
 		timeout = up.config.Advanced.PoolConnectionReadTimeoutSeconds
@@ -498,15 +497,15 @@ func (up *UpSession) getIODeadLine() time.Time {
 	return time.Now().Add(timeout.Get())
 }
 
-func (up *UpSession) setReadDeadline() {
+func (up *UpSessionBTC) setReadDeadline() {
 	up.serverConn.SetReadDeadline(up.getIODeadLine())
 }
 
-func (up *UpSession) setWriteDeadline() {
+func (up *UpSessionBTC) setWriteDeadline() {
 	up.serverConn.SetWriteDeadline(up.getIODeadLine())
 }
 
-func (up *UpSession) handleResponse() {
+func (up *UpSessionBTC) handleResponse() {
 	up.readLoopRunning = true
 	for up.readLoopRunning {
 		up.setReadDeadline()
@@ -524,7 +523,7 @@ func (up *UpSession) handleResponse() {
 	}
 }
 
-func (up *UpSession) readExMessage() {
+func (up *UpSessionBTC) readExMessage() {
 	// ex-message:
 	//   magic_number	uint8_t		magic number for Ex-Message, always 0x7F
 	//   type/cmd		uint8_t		message type
@@ -560,7 +559,7 @@ func (up *UpSession) readExMessage() {
 	up.SendEvent(EventRecvExMessage{message})
 }
 
-func (up *UpSession) readLine() {
+func (up *UpSessionBTC) readLine() {
 	jsonBytes, err := up.serverReader.ReadBytes('\n')
 	if err != nil {
 		glog.Error(up.id, "failed to read JSON line from pool server: ", err.Error())
@@ -582,37 +581,38 @@ func (up *UpSession) readLine() {
 	up.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
 }
 
-func (up *UpSession) Run() {
+func (up *UpSessionBTC) Run() {
 	up.handleEvent()
 }
 
-func (up *UpSession) SendEvent(event interface{}) {
+func (up *UpSessionBTC) SendEvent(event interface{}) {
 	up.eventChannel <- event
 }
 
-func (up *UpSession) addDownSession(e EventAddDownSession) {
-	up.downSessions[e.Session.sessionID] = e.Session
-	up.registerWorker(e.Session)
+func (up *UpSessionBTC) addDownSession(e EventAddDownSession) {
+	session := e.Session.(*DownSessionBTC)
+	up.downSessions[session.sessionID] = session
+	up.registerWorker(session)
 
-	if up.rpcSetVersionMask != nil && e.Session.versionMask != 0 {
-		e.Session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
+	if up.rpcSetVersionMask != nil && session.versionMask != 0 {
+		session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
 	}
 
 	if up.rpcSetDifficulty != nil {
-		e.Session.SendEvent(EventSendBytes{up.rpcSetDifficulty})
+		session.SendEvent(EventSendBytes{up.rpcSetDifficulty})
 	}
 
 	if up.lastJob != nil {
 		bytes, err := up.lastJob.ToNotifyLine(true)
 		if err == nil {
-			e.Session.SendEvent(EventSendBytes{bytes})
+			session.SendEvent(EventSendBytes{bytes})
 		} else {
 			glog.Warning(up.id, "failed to convert job to JSON: ", err.Error(), "; ", up.lastJob)
 		}
 	}
 }
 
-func (up *UpSession) registerWorker(down *DownSession) {
+func (up *UpSessionBTC) registerWorker(down *DownSessionBTC) {
 	msg := ExMessageRegisterWorker{down.sessionID, down.clientAgent, down.workerName}
 	_, err := up.writeExMessage(&msg)
 	if err != nil {
@@ -621,7 +621,7 @@ func (up *UpSession) registerWorker(down *DownSession) {
 	}
 }
 
-func (up *UpSession) unregisterWorker(sessionID uint16) {
+func (up *UpSessionBTC) unregisterWorker(sessionID uint16) {
 	msg := ExMessageUnregisterWorker{sessionID}
 	_, err := up.writeExMessage(&msg)
 	if err != nil {
@@ -630,7 +630,7 @@ func (up *UpSession) unregisterWorker(sessionID uint16) {
 	}
 }
 
-func (up *UpSession) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byte) {
 	job, err := NewStratumJob(rpcData, up.sessionID)
 	if err != nil {
 		glog.Warning(up.id, err.Error(), ": ", string(jsonBytes))
@@ -650,7 +650,7 @@ func (up *UpSession) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byte) 
 	up.lastJob = job
 }
 
-func (up *UpSession) recvJSONRPC(e EventRecvJSONRPC) {
+func (up *UpSessionBTC) recvJSONRPC(e EventRecvJSONRPC) {
 	rpcData := e.RPCData
 	jsonBytes := e.JSONBytes
 
@@ -686,7 +686,7 @@ func (up *UpSession) recvJSONRPC(e EventRecvJSONRPC) {
 	}
 }
 
-func (up *UpSession) handleSubmitShare(e EventSubmitShare) {
+func (up *UpSessionBTC) handleSubmitShare(e EventSubmitShare) {
 	if e.Message.IsFakeJob {
 		up.sendSubmitResponse(e.Message.Base.SessionID, e.ID, STATUS_ACCEPT)
 		return
@@ -708,7 +708,7 @@ func (up *UpSession) handleSubmitShare(e EventSubmitShare) {
 	}
 }
 
-func (up *UpSession) sendSubmitResponse(sessionID uint16, id interface{}, status StratumStatus) {
+func (up *UpSessionBTC) sendSubmitResponse(sessionID uint16, id interface{}, status StratumStatus) {
 	down, ok := up.downSessions[sessionID]
 	if !ok {
 		// 客户端已断开，忽略
@@ -720,7 +720,7 @@ func (up *UpSession) sendSubmitResponse(sessionID uint16, id interface{}, status
 	go down.SendEvent(EventSubmitResponse{id, status})
 }
 
-func (up *UpSession) handleExMessageSubmitResponse(ex *ExMessage) {
+func (up *UpSessionBTC) handleExMessageSubmitResponse(ex *ExMessage) {
 	if !up.config.SubmitResponseFromServer || !up.serverCapSubmitResponse {
 		glog.Error(up.id, "unexpected ex-message CMD_SUBMIT_RESPONSE from pool server")
 		return
@@ -743,7 +743,7 @@ func (up *UpSession) handleExMessageSubmitResponse(ex *ExMessage) {
 	up.sendSubmitResponse(submitID.SessionID, submitID.ID, msg.Status)
 }
 
-func (up *UpSession) handleExMessageMiningSetDiff(ex *ExMessage) {
+func (up *UpSessionBTC) handleExMessageMiningSetDiff(ex *ExMessage) {
 	var msg ExMessageMiningSetDiff
 	err := msg.Unserialize(ex.Body)
 	if err != nil {
@@ -776,7 +776,7 @@ func (up *UpSession) handleExMessageMiningSetDiff(ex *ExMessage) {
 	}
 }
 
-func (up *UpSession) recvExMessage(e EventRecvExMessage) {
+func (up *UpSessionBTC) recvExMessage(e EventRecvExMessage) {
 	switch e.Message.Type {
 	case CMD_SUBMIT_RESPONSE:
 		up.handleExMessageSubmitResponse(e.Message)
@@ -787,7 +787,7 @@ func (up *UpSession) recvExMessage(e EventRecvExMessage) {
 	}
 }
 
-func (up *UpSession) downSessionBroken(e EventDownSessionBroken) {
+func (up *UpSessionBTC) downSessionBroken(e EventDownSessionBroken) {
 	delete(up.downSessions, e.SessionID)
 	up.unregisterWorker(e.SessionID)
 
@@ -800,12 +800,12 @@ func (up *UpSession) downSessionBroken(e EventDownSessionBroken) {
 	up.disconnectedMinerCounter++
 }
 
-func (up *UpSession) sendUpdateMinerNum() {
+func (up *UpSessionBTC) sendUpdateMinerNum() {
 	go up.manager.SendEvent(EventUpdateMinerNum{up.slot, up.disconnectedMinerCounter})
 	up.disconnectedMinerCounter = 0
 }
 
-func (up *UpSession) outdatedUpSessionConnection(e EventUpSessionConnection) {
+func (up *UpSessionBTC) outdatedUpSessionConnection(e EventUpSessionConnection) {
 	// up.connect() 方法有自己的事件循环来接收连接，
 	// 所以到达这里的连接都是多余的，可以直接关闭。
 	if e.Conn != nil {
@@ -813,7 +813,7 @@ func (up *UpSession) outdatedUpSessionConnection(e EventUpSessionConnection) {
 	}
 }
 
-func (up *UpSession) handleEvent() {
+func (up *UpSessionBTC) handleEvent() {
 	up.eventLoopRunning = true
 	for up.eventLoopRunning {
 		event := <-up.eventChannel

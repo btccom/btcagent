@@ -93,9 +93,9 @@ func (manager *SessionManager) RunDownSession(conn net.Conn) {
 		return
 	}
 
-	down := NewDownSession(manager, conn, sessionID)
+	down := manager.config.sessionFactory.NewDownSession(manager, conn, sessionID)
 	down.Init()
-	if down.stat != StatAuthorized {
+	if down.Stat() != StatAuthorized {
 		// 认证失败，放弃连接
 		return
 	}
@@ -117,9 +117,9 @@ func (manager *SessionManager) createUpSessionManager(subAccount string) (upMana
 }
 
 func (manager *SessionManager) addDownSession(e EventAddDownSession) {
-	upManager, ok := manager.upSessionManagers[e.Session.subAccountName]
+	upManager, ok := manager.upSessionManagers[e.Session.SubAccountName()]
 	if !ok {
-		upManager = manager.createUpSessionManager(e.Session.subAccountName)
+		upManager = manager.createUpSessionManager(e.Session.SubAccountName())
 	}
 	upManager.SendEvent(e)
 }

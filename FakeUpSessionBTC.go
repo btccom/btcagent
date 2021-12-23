@@ -6,9 +6,9 @@ import (
 	"github.com/golang/glog"
 )
 
-type FakeUpSession struct {
+type FakeUpSessionBTC struct {
 	manager      *UpSessionManager
-	downSessions map[uint16]*DownSession
+	downSessions map[uint16]DownSession
 	eventChannel chan interface{}
 
 	fakeJob     *StratumJob
@@ -18,16 +18,16 @@ type FakeUpSession struct {
 	disconnectedMinerCounter int
 }
 
-func NewFakeUpSession(manager *UpSessionManager) (up *FakeUpSession) {
-	up = new(FakeUpSession)
+func NewFakeUpSessionBTC(manager *UpSessionManager) (up *FakeUpSessionBTC) {
+	up = new(FakeUpSessionBTC)
 	up.manager = manager
-	up.downSessions = make(map[uint16]*DownSession)
+	up.downSessions = make(map[uint16]DownSession)
 	up.eventChannel = make(chan interface{}, manager.config.Advanced.MessageQueueSize.PoolSession)
 	up.exitChannel = make(chan bool, 1)
 	return
 }
 
-func (up *FakeUpSession) Run() {
+func (up *FakeUpSessionBTC) Run() {
 	if up.manager.config.AlwaysKeepDownconn {
 		go up.fakeNotifyTicker()
 	}
@@ -35,12 +35,12 @@ func (up *FakeUpSession) Run() {
 	up.handleEvent()
 }
 
-func (up *FakeUpSession) SendEvent(event interface{}) {
+func (up *FakeUpSessionBTC) SendEvent(event interface{}) {
 	up.eventChannel <- event
 }
 
-func (up *FakeUpSession) addDownSession(e EventAddDownSession) {
-	up.downSessions[e.Session.sessionID] = e.Session
+func (up *FakeUpSessionBTC) addDownSession(e EventAddDownSession) {
+	up.downSessions[e.Session.SessionID()] = e.Session
 
 	if up.manager.config.AlwaysKeepDownconn && up.fakeJob != nil {
 		up.fakeJob.ToNewFakeJob()
@@ -53,17 +53,17 @@ func (up *FakeUpSession) addDownSession(e EventAddDownSession) {
 	}
 }
 
-func (up *FakeUpSession) transferDownSessions() {
+func (up *FakeUpSessionBTC) transferDownSessions() {
 	for _, down := range up.downSessions {
 		go up.manager.SendEvent(EventAddDownSession{down})
 	}
 	// 与 UpSessionManager 同步矿机数量
 	go up.manager.SendEvent(EventUpdateFakeMinerNum{len(up.downSessions)})
 	// 清空map
-	up.downSessions = make(map[uint16]*DownSession)
+	up.downSessions = make(map[uint16]DownSession)
 }
 
-func (up *FakeUpSession) exit() {
+func (up *FakeUpSessionBTC) exit() {
 	if up.manager.config.AlwaysKeepDownconn {
 		up.exitChannel <- true
 	}
@@ -73,7 +73,7 @@ func (up *FakeUpSession) exit() {
 	}
 }
 
-func (up *FakeUpSession) sendSubmitResponse(sessionID uint16, id interface{}, status StratumStatus) {
+func (up *FakeUpSessionBTC) sendSubmitResponse(sessionID uint16, id interface{}, status StratumStatus) {
 	down, ok := up.downSessions[sessionID]
 	if !ok {
 		// 客户端已断开，忽略
@@ -85,11 +85,11 @@ func (up *FakeUpSession) sendSubmitResponse(sessionID uint16, id interface{}, st
 	go down.SendEvent(EventSubmitResponse{id, status})
 }
 
-func (up *FakeUpSession) handleSubmitShare(e EventSubmitShare) {
+func (up *FakeUpSessionBTC) handleSubmitShare(e EventSubmitShare) {
 	up.sendSubmitResponse(e.Message.Base.SessionID, e.ID, STATUS_ACCEPT)
 }
 
-func (up *FakeUpSession) downSessionBroken(e EventDownSessionBroken) {
+func (up *FakeUpSessionBTC) downSessionBroken(e EventDownSessionBroken) {
 	delete(up.downSessions, e.SessionID)
 
 	if up.disconnectedMinerCounter == 0 {
@@ -101,16 +101,16 @@ func (up *FakeUpSession) downSessionBroken(e EventDownSessionBroken) {
 	up.disconnectedMinerCounter++
 }
 
-func (up *FakeUpSession) sendUpdateMinerNum() {
+func (up *FakeUpSessionBTC) sendUpdateMinerNum() {
 	go up.manager.SendEvent(EventUpdateFakeMinerNum{up.disconnectedMinerCounter})
 	up.disconnectedMinerCounter = 0
 }
 
-func (up *FakeUpSession) updateFakeJob(e EventUpdateFakeJob) {
+func (up *FakeUpSessionBTC) updateFakeJob(e EventUpdateFakeJob) {
 	up.fakeJob = e.FakeJob
 }
 
-func (up *FakeUpSession) fakeNotifyTicker() {
+func (up *FakeUpSessionBTC) fakeNotifyTicker() {
 	ticker := time.NewTicker(up.manager.config.Advanced.FakeJobNotifyIntervalSeconds.Get())
 	defer ticker.Stop()
 
@@ -124,7 +124,7 @@ func (up *FakeUpSession) fakeNotifyTicker() {
 	}
 }
 
-func (up *FakeUpSession) sendFakeNotify() {
+func (up *FakeUpSessionBTC) sendFakeNotify() {
 	if up.fakeJob == nil || len(up.downSessions) < 1 {
 		return
 	}
@@ -142,7 +142,7 @@ func (up *FakeUpSession) sendFakeNotify() {
 	}
 }
 
-func (up *FakeUpSession) handleEvent() {
+func (up *FakeUpSessionBTC) handleEvent() {
 	for {
 		event := <-up.eventChannel
 

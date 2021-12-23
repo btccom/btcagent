@@ -10,7 +10,7 @@ import (
 	"github.com/golang/glog"
 )
 
-type DownSession struct {
+type DownSessionBTC struct {
 	id string // 打印日志用的连接标识符
 
 	manager   *SessionManager // 会话管理器
@@ -34,9 +34,9 @@ type DownSession struct {
 	versionRollingShareCounter uint64 // ASICBoost share 提交数量
 }
 
-// NewDownSession 创建一个新的 Stratum 会话
-func NewDownSession(manager *SessionManager, clientConn net.Conn, sessionID uint16) (down *DownSession) {
-	down = new(DownSession)
+// NewDownSessionBTC 创建一个新的 Stratum 会话
+func NewDownSessionBTC(manager *SessionManager, clientConn net.Conn, sessionID uint16) (down *DownSessionBTC) {
+	down = new(DownSessionBTC)
 	down.manager = manager
 	down.sessionID = sessionID
 	down.clientConn = clientConn
@@ -50,16 +50,28 @@ func NewDownSession(manager *SessionManager, clientConn net.Conn, sessionID uint
 	return
 }
 
-func (down *DownSession) Init() {
+func (down *DownSessionBTC) SessionID() uint16 {
+	return down.sessionID
+}
+
+func (down *DownSessionBTC) SubAccountName() string {
+	return down.subAccountName
+}
+
+func (down *DownSessionBTC) Stat() AuthorizeStat {
+	return down.stat
+}
+
+func (down *DownSessionBTC) Init() {
 	go down.handleRequest()
 	down.handleEvent()
 }
 
-func (down *DownSession) Run() {
+func (down *DownSessionBTC) Run() {
 	down.handleEvent()
 }
 
-func (down *DownSession) close() {
+func (down *DownSessionBTC) close() {
 	if down.upSession != nil && down.stat != StatExit {
 		go down.upSession.SendEvent(EventDownSessionBroken{down.sessionID})
 	}
@@ -72,7 +84,7 @@ func (down *DownSession) close() {
 	down.manager.sessionIDManager.FreeSessionID(down.sessionID)
 }
 
-func (down *DownSession) writeJSONResponse(jsonData *JSONRPCResponse) (int, error) {
+func (down *DownSessionBTC) writeJSONResponse(jsonData *JSONRPCResponse) (int, error) {
 	bytes, err := jsonData.ToJSONBytesLine()
 	if err != nil {
 		return 0, err
@@ -83,7 +95,7 @@ func (down *DownSession) writeJSONResponse(jsonData *JSONRPCResponse) (int, erro
 	return down.clientConn.Write(bytes)
 }
 
-func (down *DownSession) stratumHandleRequest(request *JSONRPCLine, requestJSON []byte) (result interface{}, err *StratumError) {
+func (down *DownSessionBTC) stratumHandleRequest(request *JSONRPCLine, requestJSON []byte) (result interface{}, err *StratumError) {
 	switch request.Method {
 	case "mining.subscribe":
 		if down.stat != StatConnected {
@@ -141,7 +153,7 @@ func (down *DownSession) stratumHandleRequest(request *JSONRPCLine, requestJSON 
 	}
 }
 
-func (down *DownSession) parseMiningSubmit(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSessionBTC) parseMiningSubmit(request *JSONRPCLine) (result interface{}, err *StratumError) {
 	if down.stat != StatAuthorized {
 		err = StratumErrNeedAuthorized
 
@@ -263,7 +275,7 @@ func (down *DownSession) parseMiningSubmit(request *JSONRPCLine) (result interfa
 	return
 }
 
-func (down *DownSession) sendReconnectRequest() {
+func (down *DownSessionBTC) sendReconnectRequest() {
 	var reconnect JSONRPCRequest
 	reconnect.Method = "client.reconnect"
 	reconnect.Params = JSONRPCArray{}
@@ -275,7 +287,7 @@ func (down *DownSession) sendReconnectRequest() {
 	go down.SendEvent(EventSendBytes{bytes})
 }
 
-func (down *DownSession) parseSubscribeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSessionBTC) parseSubscribeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
 
 	if len(request.Params) >= 1 {
 		down.clientAgent, _ = request.Params[0].(string)
@@ -287,7 +299,7 @@ func (down *DownSession) parseSubscribeRequest(request *JSONRPCLine) (result int
 	return
 }
 
-func (down *DownSession) parseAuthorizeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSessionBTC) parseAuthorizeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
 	if len(request.Params) < 1 {
 		err = StratumErrTooFewParams
 		return
@@ -344,7 +356,7 @@ func (down *DownSession) parseAuthorizeRequest(request *JSONRPCLine) (result int
 	return
 }
 
-func (down *DownSession) parseConfigureRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSessionBTC) parseConfigureRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
 	// request:
 	//		{"id":3,"method":"mining.configure","params":[["version-rolling"],{"version-rolling.mask":"1fffe000","version-rolling.min-bit-count":2}]}
 	// response:
@@ -380,16 +392,16 @@ func (down *DownSession) parseConfigureRequest(request *JSONRPCLine) (result int
 	return
 }
 
-func (down *DownSession) versionMaskStr() string {
+func (down *DownSessionBTC) versionMaskStr() string {
 	return fmt.Sprintf("%08x", down.versionMask)
 }
 
-func (down *DownSession) setUpSession(e EventSetUpSession) {
+func (down *DownSessionBTC) setUpSession(e EventSetUpSession) {
 	down.upSession = e.Session
 	down.upSession.SendEvent(EventAddDownSession{down})
 }
 
-func (down *DownSession) handleRequest() {
+func (down *DownSessionBTC) handleRequest() {
 	down.readLoopRunning = true
 
 	for down.readLoopRunning {
@@ -414,7 +426,7 @@ func (down *DownSession) handleRequest() {
 	}
 }
 
-func (down *DownSession) recvJSONRPC(e EventRecvJSONRPC) {
+func (down *DownSessionBTC) recvJSONRPC(e EventRecvJSONRPC) {
 	// stat will be changed in stratumHandleRequest
 	result, stratumErr := down.stratumHandleRequest(e.RPCData, e.JSONBytes)
 
@@ -435,16 +447,16 @@ func (down *DownSession) recvJSONRPC(e EventRecvJSONRPC) {
 	}
 }
 
-func (down *DownSession) SendEvent(event interface{}) {
+func (down *DownSessionBTC) SendEvent(event interface{}) {
 	down.eventChannel <- event
 }
 
-func (down *DownSession) connBroken() {
+func (down *DownSessionBTC) connBroken() {
 	down.readLoopRunning = false
 	down.SendEvent(EventConnBroken{})
 }
 
-func (down *DownSession) sendBytes(e EventSendBytes) {
+func (down *DownSessionBTC) sendBytes(e EventSendBytes) {
 	if glog.V(12) {
 		glog.Info(down.id, "sendBytes: ", string(e.Content))
 	}
@@ -455,7 +467,7 @@ func (down *DownSession) sendBytes(e EventSendBytes) {
 	}
 }
 
-func (down *DownSession) submitResponse(e EventSubmitResponse) {
+func (down *DownSessionBTC) submitResponse(e EventSubmitResponse) {
 	var response JSONRPCResponse
 	response.ID = e.ID
 	if e.Status.IsAccepted() {
@@ -471,12 +483,12 @@ func (down *DownSession) submitResponse(e EventSubmitResponse) {
 	}
 }
 
-func (down *DownSession) exit() {
+func (down *DownSessionBTC) exit() {
 	down.stat = StatExit
 	down.close()
 }
 
-func (down *DownSession) handleEvent() {
+func (down *DownSessionBTC) handleEvent() {
 	down.eventLoopRunning = true
 	for down.eventLoopRunning {
 		event := <-down.eventChannel

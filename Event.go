@@ -13,7 +13,7 @@ type EventInitFinished struct{}
 
 type EventUpSessionReady struct {
 	Slot    int
-	Session *UpSession
+	Session UpSession
 }
 
 type EventUpSessionInitFailed struct {
@@ -25,7 +25,7 @@ type EventSetUpSession struct {
 }
 
 type EventAddDownSession struct {
-	Session *DownSession
+	Session DownSession
 }
 
 type EventConnBroken struct{}

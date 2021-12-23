@@ -10,12 +10,12 @@ import (
 type UpSessionInfo struct {
 	minerNum  int
 	ready     bool
-	upSession *UpSession
+	upSession UpSession
 }
 
 type FakeUpSessionInfo struct {
 	minerNum  int
-	upSession *FakeUpSession
+	upSession FakeUpSession
 }
 
 type UpSessionManager struct {
@@ -44,7 +44,7 @@ func NewUpSessionManager(subAccount string, config *Config, parent *SessionManag
 
 	upSessions := make([]UpSessionInfo, manager.config.Advanced.PoolConnectionNumberPerSubAccount)
 	manager.upSessions = upSessions[:]
-	manager.fakeUpSession.upSession = NewFakeUpSession(manager)
+	manager.fakeUpSession.upSession = manager.config.sessionFactory.NewFakeUpSession(manager)
 
 	manager.eventChannel = make(chan interface{}, manager.config.Advanced.MessageQueueSize.PoolSessionManager)
 
@@ -66,10 +66,10 @@ func (manager *UpSessionManager) Run() {
 
 func (manager *UpSessionManager) connect(slot int) {
 	for i := range manager.config.Pools {
-		up := NewUpSession(manager, manager.config, manager.subAccount, i, slot)
+		up := manager.config.sessionFactory.NewUpSession(manager, i, slot)
 		up.Init()
 
-		if up.stat == StatAuthorized {
+		if up.Stat() == StatAuthorized {
 			go up.Run()
 			manager.SendEvent(EventUpSessionReady{slot, up})
 			return

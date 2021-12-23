@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"io/ioutil"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -88,11 +89,14 @@ type Config struct {
 			MinerSession       uint `json:"miner_session"`
 		} `json:"message_queue_size"`
 	} `json:"advanced"`
+
+	sessionFactory SessionFactory
 }
 
 // NewConfig 创建配置对象并设置默认值
 func NewConfig() (config *Config) {
 	config = new(Config)
+	config.AgentType = "btc"
 
 	config.DisconnectWhenLostAsicboost = DownSessionDisconnectWhenLostAsicboost
 	config.IpWorkerNameFormat = DefaultIpWorkerNameFormat
@@ -124,6 +128,18 @@ func (conf *Config) LoadFromFile(file string) (err error) {
 }
 
 func (conf *Config) Init() {
+	conf.AgentType = strings.ToLower(conf.AgentType)
+	switch conf.AgentType {
+	case "btc":
+		conf.sessionFactory = new(SessionFactoryBTC)
+	case "eth":
+		conf.sessionFactory = new(SessionFactoryETH)
+	default:
+		glog.Fatal("[OPTION] Unknown agent_type: ", conf.AgentType)
+		return
+	}
+	glog.Info("[OPTION] BTCAgent for ", strings.ToUpper(conf.AgentType))
+
 	if conf.MultiUserMode {
 		glog.Info("[OPTION] Multi user mode: Enabled. Sub-accounts in config file will be ignored.")
 	} else {
