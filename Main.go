@@ -7,15 +7,12 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	"github.com/golang/glog"
 )
 
 func main() {
-	var waitGroup sync.WaitGroup
-
 	// 解析命令行参数
 	configFilePath := flag.String("c", "agent_conf.json", "Path of config file")
 	logDir := flag.String("l", "", "Log directory")
@@ -48,9 +45,7 @@ func main() {
 	// 启动 HTTP 调试服务
 	if config.HTTPDebug.Enable {
 		glog.Info("HTTP debug enabled: ", config.HTTPDebug.Listen)
-		waitGroup.Add(1)
 		go func() {
-			defer waitGroup.Done()
 			err := http.ListenAndServe(config.HTTPDebug.Listen, nil)
 			if err != nil {
 				glog.Error("launch http debug service failed: ", err.Error())
@@ -72,7 +67,4 @@ func main() {
 
 	// 运行代理
 	manager.Run()
-
-	// 等待所有服务结束
-	waitGroup.Wait()
 }
