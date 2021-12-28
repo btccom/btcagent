@@ -11,7 +11,7 @@ type FakeUpSessionETH struct {
 	downSessions map[uint16]DownSession
 	eventChannel chan interface{}
 
-	fakeJob     *StratumJob
+	fakeJob     *StratumJobETH
 	exitChannel chan bool
 
 	// 用于统计断开连接的矿机数，并同步给 UpSessionManager
@@ -106,7 +106,7 @@ func (up *FakeUpSessionETH) sendUpdateMinerNum() {
 	up.disconnectedMinerCounter = 0
 }
 
-func (up *FakeUpSessionETH) updateFakeJob(e EventUpdateFakeJob) {
+func (up *FakeUpSessionETH) updateFakeJob(e EventUpdateFakeJobETH) {
 	up.fakeJob = e.FakeJob
 }
 
@@ -157,7 +157,7 @@ func (up *FakeUpSessionETH) handleEvent() {
 			up.sendUpdateMinerNum()
 		case EventTransferDownSessions:
 			up.transferDownSessions()
-		case EventUpdateFakeJob:
+		case EventUpdateFakeJobETH:
 			up.updateFakeJob(e)
 		case EventSendFakeNotify:
 			up.sendFakeNotify()

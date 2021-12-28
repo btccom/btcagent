@@ -41,7 +41,7 @@ type UpSessionBTC struct {
 	eventLoopRunning bool
 	eventChannel     chan interface{}
 
-	lastJob           *StratumJob
+	lastJob           *StratumJobBTC
 	rpcSetVersionMask []byte
 	rpcSetDifficulty  []byte
 
@@ -309,7 +309,7 @@ func (up *UpSessionBTC) close() {
 
 	if up.config.AlwaysKeepDownconn {
 		if up.lastJob != nil {
-			up.manager.SendEvent(EventUpdateFakeJob{up.lastJob})
+			up.manager.SendEvent(EventUpdateFakeJobBTC{up.lastJob})
 		}
 		for _, down := range up.downSessions {
 			go up.manager.SendEvent(EventAddDownSession{down})
@@ -631,7 +631,7 @@ func (up *UpSessionBTC) unregisterWorker(sessionID uint16) {
 }
 
 func (up *UpSessionBTC) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byte) {
-	job, err := NewStratumJob(rpcData, up.sessionID)
+	job, err := NewStratumJobBTC(rpcData, up.sessionID)
 	if err != nil {
 		glog.Warning(up.id, err.Error(), ": ", string(jsonBytes))
 		return

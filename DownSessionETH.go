@@ -189,7 +189,7 @@ func (down *DownSessionETH) parseMiningSubmit(request *JSONRPCLine) (result inte
 		return
 	}
 
-	if IsFakeJobID(jobIDStr) {
+	if IsFakeJobIDETH(jobIDStr) {
 		msg.IsFakeJob = true
 	} else {
 		jobID, convErr := strconv.ParseUint(jobIDStr, 10, 8)

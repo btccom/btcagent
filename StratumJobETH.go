@@ -6,11 +6,11 @@ import (
 	"time"
 )
 
-type StratumJob struct {
+type StratumJobETH struct {
 	JSONRPCRequest
 }
 
-func NewStratumJob(json *JSONRPCLine, sessionID uint32) (job *StratumJob, err error) {
+func NewStratumJobETH(json *JSONRPCLine, sessionID uint32) (job *StratumJobETH, err error) {
 	/*
 		Fields in order:
 			[0] Job ID. This is included when miners submit a results so work can be matched with proper transactions.
@@ -23,7 +23,7 @@ func NewStratumJob(json *JSONRPCLine, sessionID uint32) (job *StratumJob, err er
 			[7] nTime. The current time. nTime rolling should be supported, but should not increase faster than actual time.
 			[8] Clean Jobs. If true, miners should abort their current work and immediately use the new job. If false, they can still use the current job, but should move to the new one after exhausting the current nonce range.
 	*/
-	job = new(StratumJob)
+	job = new(StratumJobETH)
 	job.ID = json.ID
 	job.Method = json.Method
 	job.Params = json.Params
@@ -44,7 +44,7 @@ func NewStratumJob(json *JSONRPCLine, sessionID uint32) (job *StratumJob, err er
 	return
 }
 
-func (job *StratumJob) ToNotifyLine(firstJob bool) (bytes []byte, err error) {
+func (job *StratumJobETH) ToNotifyLine(firstJob bool) (bytes []byte, err error) {
 	if firstJob {
 		job.Params[8] = true
 	}
@@ -52,11 +52,11 @@ func (job *StratumJob) ToNotifyLine(firstJob bool) (bytes []byte, err error) {
 	return job.ToJSONBytesLine()
 }
 
-func IsFakeJobID(id string) bool {
+func IsFakeJobIDETH(id string) bool {
 	return len(id) < 1 || id[0] == 'f'
 }
 
-func (job *StratumJob) ToNewFakeJob() {
+func (job *StratumJobETH) ToNewFakeJob() {
 	now := uint64(time.Now().Unix())
 
 	// job id

@@ -309,7 +309,7 @@ func (up *UpSessionETH) close() {
 
 	if up.config.AlwaysKeepDownconn {
 		if up.lastJob != nil {
-			up.manager.SendEvent(EventUpdateFakeJob{up.lastJob})
+			up.manager.SendEvent(EventUpdateFakeJobETH{up.lastJob})
 		}
 		for _, down := range up.downSessions {
 			go up.manager.SendEvent(EventAddDownSession{down})
@@ -631,7 +631,7 @@ func (up *UpSessionETH) unregisterWorker(sessionID uint16) {
 }
 
 func (up *UpSessionETH) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byte) {
-	job, err := NewStratumJob(rpcData, up.sessionID)
+	job, err := NewStratumJobETH(rpcData, up.sessionID)
 	if err != nil {
 		glog.Warning(up.id, err.Error(), ": ", string(jsonBytes))
 		return

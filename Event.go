@@ -78,8 +78,12 @@ type EventStopUpSessionManager struct {
 	SubAccount string
 }
 
-type EventUpdateFakeJob struct {
-	FakeJob *StratumJob
+type EventUpdateFakeJobBTC struct {
+	FakeJob *StratumJobBTC
+}
+
+type EventUpdateFakeJobETH struct {
+	FakeJob *StratumJobETH
 }
 
 type EventTransferDownSessions struct{}

@@ -176,7 +176,7 @@ func (manager *UpSessionManager) updateFakeMinerNum(e EventUpdateFakeMinerNum) {
 	manager.fakeUpSession.minerNum -= e.DisconnectedMinerCounter
 }
 
-func (manager *UpSessionManager) updateFakeJob(e EventUpdateFakeJob) {
+func (manager *UpSessionManager) updateFakeJob(e interface{}) {
 	manager.fakeUpSession.upSession.SendEvent(e)
 }
 
@@ -231,7 +231,9 @@ func (manager *UpSessionManager) handleEvent() {
 			manager.updateMinerNum(e)
 		case EventUpdateFakeMinerNum:
 			manager.updateFakeMinerNum(e)
-		case EventUpdateFakeJob:
+		case EventUpdateFakeJobBTC:
+			manager.updateFakeJob(e)
+		case EventUpdateFakeJobETH:
 			manager.updateFakeJob(e)
 		case EventPrintMinerNum:
 			manager.printMinerNum()
