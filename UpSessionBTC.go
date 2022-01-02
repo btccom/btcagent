@@ -386,6 +386,11 @@ func (up *UpSessionBTC) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []b
 func (up *UpSessionBTC) handleSetDifficulty(rpcData *JSONRPCLine, jsonBytes []byte) {
 	if up.rpcSetDifficulty == nil {
 		up.rpcSetDifficulty = jsonBytes
+
+		e := EventSendBytes{up.rpcSetDifficulty}
+		for _, down := range up.downSessions {
+			go down.SendEvent(e)
+		}
 	}
 }
 
