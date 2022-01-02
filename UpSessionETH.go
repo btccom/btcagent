@@ -30,20 +30,16 @@ type UpSessionETH struct {
 	serverReader    *bufio.Reader
 	readLoopRunning bool
 
-	stat            AuthorizeStat
-	sessionID       uint32
-	versionMask     uint32
-	extraNonce2Size int
+	stat      AuthorizeStat
+	sessionID uint32
 
-	serverCapVersionRolling bool
 	serverCapSubmitResponse bool
 
 	eventLoopRunning bool
 	eventChannel     chan interface{}
 
-	lastJob           *StratumJob
-	rpcSetVersionMask []byte
-	rpcSetDifficulty  []byte
+	lastJob     *StratumJobETH
+	defaultDiff uint64
 
 	submitIDs   map[uint16]SubmitID
 	submitIndex uint16
@@ -246,9 +242,9 @@ func (up *UpSessionETH) getAgentGetCapsRequest(id string) (req JSONRPCRequest) {
 	req.ID = id
 	req.Method = "agent.get_capabilities"
 	if up.config.SubmitResponseFromServer {
-		req.SetParams(JSONRPCArray{CapVersionRolling, CapSubmitResponse})
+		req.SetParams(JSONRPCArray{CapSubmitResponse})
 	} else {
-		req.SetParams(JSONRPCArray{CapVersionRolling})
+		req.SetParams(JSONRPCArray{})
 	}
 	return
 }
@@ -261,15 +257,7 @@ func (up *UpSessionETH) sendInitRequest() (err error) {
 		return
 	}
 
-	// send configure request
 	var request JSONRPCRequest
-	request.ID = "conf"
-	request.Method = "mining.configure"
-	request.SetParams(JSONRPCArray{"version-rolling"}, JSONRPCObj{"version-rolling.mask": "ffffffff", "version-rolling.min-bit-count": 0})
-	_, err = up.writeJSONRequest(&request)
-	if err != nil {
-		return
-	}
 
 	// send subscribe request
 	request.ID = "sub"
@@ -348,55 +336,35 @@ func (up *UpSessionETH) Init() {
 	up.handleEvent()
 }
 
-func (up *UpSessionETH) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte) {
-	up.rpcSetVersionMask = jsonBytes
-
-	if len(rpcData.Params) > 0 {
-		if up.serverCapVersionRolling {
-			versionMaskHex, ok := rpcData.Params[0].(string)
-			if !ok {
-				glog.Error(up.id, "version mask is not a string: ", string(jsonBytes))
-				return
-			}
-			versionMask, err := strconv.ParseUint(versionMaskHex, 16, 32)
-			if err != nil {
-				glog.Error(up.id, "version mask is not a hex: ", string(jsonBytes))
-				return
-			}
-			up.versionMask = uint32(versionMask)
-
-			if glog.V(1) {
-				glog.Info(up.id, "AsicBoost via BTCAgent enabled, allowed version mask: ", versionMaskHex)
-			}
-		} else {
-			// server doesn't support version rolling via BTCAgent
-			up.versionMask = 0
-			rpcData.Params[0] = "00000000"
+func (up *UpSessionETH) handleSetDifficulty(rpcData *JSONRPCLineETH, jsonBytes []byte) {
+	if up.defaultDiff == 0 {
+		if len(rpcData.Params) < 1 {
+			glog.Error(up.id, "missing difficulty in mining.set_difficulty message: ", string(jsonBytes))
+			return
 		}
-	}
+		diff, ok := rpcData.Params[0].(float64)
+		if !ok {
+			glog.Error(up.id, "difficulty in mining.set_difficulty message is not a number: ", string(jsonBytes))
+			return
+		}
+		// nicehash_diff = btcpool_diff / pow(2, 32)
+		up.defaultDiff = uint64(diff * 0xffffffff)
 
-	e := EventSendBytes{up.rpcSetVersionMask}
-	for _, down := range up.downSessions {
-		if down.versionMask != 0 {
+		e := EventSetDifficulty{up.defaultDiff}
+		for _, down := range up.downSessions {
 			go down.SendEvent(e)
 		}
 	}
 }
 
-func (up *UpSessionETH) handleSetDifficulty(rpcData *JSONRPCLine, jsonBytes []byte) {
-	if up.rpcSetDifficulty == nil {
-		up.rpcSetDifficulty = jsonBytes
-	}
-}
-
-func (up *UpSessionETH) handleSubScribeResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionETH) handleSubScribeResponse(rpcData *JSONRPCLineETH, jsonBytes []byte) {
 	result, ok := rpcData.Result.([]interface{})
 	if !ok {
 		glog.Error(up.id, "subscribe result is not an array: ", string(jsonBytes))
 		up.close()
 		return
 	}
-	if len(result) < 3 {
+	if len(result) < 2 {
 		glog.Error(up.id, "subscribe result missing items: ", string(jsonBytes))
 		up.close()
 		return
@@ -414,27 +382,10 @@ func (up *UpSessionETH) handleSubScribeResponse(rpcData *JSONRPCLine, jsonBytes 
 		return
 	}
 	up.sessionID = uint32(sessionID)
-
-	extraNonce2SizeFloat, ok := result[2].(float64)
-	if !ok {
-		glog.Error(up.id, "extra nonce 2 size is not an integer: ", string(jsonBytes))
-		up.close()
-		return
-	}
-	up.extraNonce2Size = int(extraNonce2SizeFloat)
-	if up.extraNonce2Size != 8 {
-		glog.Error(up.id, "BTCAgent is not compatible with this server, extra nonce 2 should be 8 bytes but only ", up.extraNonce2Size, " bytes")
-		up.close()
-		return
-	}
 	up.stat = StatSubScribed
 }
 
-func (up *UpSessionETH) handleConfigureResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
-	// ignore
-}
-
-func (up *UpSessionETH) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionETH) handleGetCapsResponse(rpcData *JSONRPCLineETH, jsonBytes []byte) {
 	result, ok := rpcData.Result.(map[string]interface{})
 	if !ok {
 		glog.Error(up.id, "get server capabilities failed, result is not an object: ", string(jsonBytes))
@@ -449,14 +400,9 @@ func (up *UpSessionETH) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []
 	}
 	for _, capability := range capsArr {
 		switch capability {
-		case CapVersionRolling:
-			up.serverCapVersionRolling = true
 		case CapSubmitResponse:
 			up.serverCapSubmitResponse = true
 		}
-	}
-	if !up.serverCapVersionRolling {
-		glog.Warning(up.id, "[WARNING] pool server does not support ASICBoost")
 	}
 	if up.config.SubmitResponseFromServer {
 		if up.serverCapSubmitResponse {
@@ -469,7 +415,7 @@ func (up *UpSessionETH) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []
 	}
 }
 
-func (up *UpSessionETH) handleAuthorizeResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionETH) handleAuthorizeResponse(rpcData *JSONRPCLineETH, jsonBytes []byte) {
 	result, ok := rpcData.Result.(bool)
 	if !ok || !result {
 		glog.Error(up.id, "authorize failed: ", rpcData.Error)
@@ -570,7 +516,7 @@ func (up *UpSessionETH) readLine() {
 		glog.Info(up.id, "readLine: ", string(jsonBytes))
 	}
 
-	rpcData, err := NewJSONRPCLine(jsonBytes)
+	rpcData, err := NewJSONRPCLineETH(jsonBytes)
 
 	// ignore the json decode error
 	if err != nil {
@@ -578,7 +524,7 @@ func (up *UpSessionETH) readLine() {
 		return
 	}
 
-	up.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
+	up.SendEvent(EventRecvJSONRPCETH{rpcData, jsonBytes})
 }
 
 func (up *UpSessionETH) Run() {
@@ -594,21 +540,8 @@ func (up *UpSessionETH) addDownSession(e EventAddDownSession) {
 	up.downSessions[session.sessionID] = session
 	up.registerWorker(session)
 
-	if up.rpcSetVersionMask != nil && session.versionMask != 0 {
-		session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
-	}
-
-	if up.rpcSetDifficulty != nil {
-		session.SendEvent(EventSendBytes{up.rpcSetDifficulty})
-	}
-
-	if up.lastJob != nil {
-		bytes, err := up.lastJob.ToNotifyLine(true)
-		if err == nil {
-			session.SendEvent(EventSendBytes{bytes})
-		} else {
-			glog.Warning(up.id, "failed to convert job to JSON: ", err.Error(), "; ", up.lastJob)
-		}
+	if up.defaultDiff != 0 {
+		session.SendEvent(EventSetDifficulty{up.defaultDiff})
 	}
 }
 
@@ -630,7 +563,7 @@ func (up *UpSessionETH) unregisterWorker(sessionID uint16) {
 	}
 }
 
-func (up *UpSessionETH) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionETH) handleMiningNotify(rpcData *JSONRPCLineETH, jsonBytes []byte) {
 	job, err := NewStratumJobETH(rpcData, up.sessionID)
 	if err != nil {
 		glog.Warning(up.id, err.Error(), ": ", string(jsonBytes))
@@ -650,14 +583,12 @@ func (up *UpSessionETH) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byt
 	up.lastJob = job
 }
 
-func (up *UpSessionETH) recvJSONRPC(e EventRecvJSONRPC) {
+func (up *UpSessionETH) recvJSONRPC(e EventRecvJSONRPCETH) {
 	rpcData := e.RPCData
 	jsonBytes := e.JSONBytes
 
 	if len(rpcData.Method) > 0 {
 		switch rpcData.Method {
-		case "mining.set_version_mask":
-			up.handleSetVersionMask(rpcData, jsonBytes)
 		case "mining.set_difficulty":
 			up.handleSetDifficulty(rpcData, jsonBytes)
 		case "mining.notify":
@@ -671,8 +602,6 @@ func (up *UpSessionETH) recvJSONRPC(e EventRecvJSONRPC) {
 	switch rpcData.ID {
 	case "caps":
 		up.handleGetCapsResponse(rpcData, jsonBytes)
-	case "conf":
-		up.handleConfigureResponse(rpcData, jsonBytes)
 	case "sub":
 		up.handleSubScribeResponse(rpcData, jsonBytes)
 	case "auth":
@@ -753,16 +682,7 @@ func (up *UpSessionETH) handleExMessageMiningSetDiff(ex *ExMessage) {
 
 	diff := uint64(1) << msg.Base.DiffExp
 
-	var request JSONRPCRequest
-	request.Method = "mining.set_difficulty"
-	request.SetParams(diff)
-	bytes, err := request.ToJSONBytesLine()
-	if err != nil {
-		glog.Error(up.id, "failed to convert mining.set_difficulty request to JSON: ", err.Error(), "; ", request)
-		return
-	}
-
-	e := EventSendBytes{bytes}
+	e := EventSetDifficulty{diff}
 	for _, sessionID := range msg.SessionIDs {
 		down := up.downSessions[sessionID]
 		if down != nil {
@@ -776,12 +696,33 @@ func (up *UpSessionETH) handleExMessageMiningSetDiff(ex *ExMessage) {
 	}
 }
 
+func (up *UpSessionETH) handleExMessageSetExtraNonce(ex *ExMessage) {
+	var msg ExMessageSetExtranonce
+	err := msg.Unserialize(ex.Body)
+	if err != nil {
+		glog.Error(up.id, "failed to decode ex-message CMD_SET_EXTRA_NONCE: ", err.Error(), "; ", ex)
+		return
+	}
+
+	down := up.downSessions[msg.SessionID]
+	if down != nil {
+		go down.SendEvent(EventSetExtraNonce{msg.ExtraNonce})
+	} else {
+		// 客户端已断开，忽略
+		if glog.V(3) {
+			glog.Info(up.id, "cannot find down session: ", msg.SessionID)
+		}
+	}
+}
+
 func (up *UpSessionETH) recvExMessage(e EventRecvExMessage) {
 	switch e.Message.Type {
 	case CMD_SUBMIT_RESPONSE:
 		up.handleExMessageSubmitResponse(e.Message)
 	case CMD_MINING_SET_DIFF:
 		up.handleExMessageMiningSetDiff(e.Message)
+	case CMD_SET_EXTRA_NONCE:
+		up.handleExMessageSetExtraNonce(e.Message)
 	default:
 		glog.Error(up.id, "unknown ex-message: ", e.Message)
 	}
@@ -827,7 +768,7 @@ func (up *UpSessionETH) handleEvent() {
 			up.downSessionBroken(e)
 		case EventSendUpdateMinerNum:
 			up.sendUpdateMinerNum()
-		case EventRecvJSONRPC:
+		case EventRecvJSONRPCETH:
 			up.recvJSONRPC(e)
 		case EventRecvExMessage:
 			up.recvExMessage(e)

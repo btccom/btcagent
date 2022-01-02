@@ -95,7 +95,7 @@ func (down *DownSessionBTC) writeJSONResponse(jsonData *JSONRPCResponse) (int, e
 	return down.clientConn.Write(bytes)
 }
 
-func (down *DownSessionBTC) stratumHandleRequest(request *JSONRPCLine, requestJSON []byte) (result interface{}, err *StratumError) {
+func (down *DownSessionBTC) stratumHandleRequest(request *JSONRPCLineBTC, requestJSON []byte) (result interface{}, err *StratumError) {
 	switch request.Method {
 	case "mining.subscribe":
 		if down.stat != StatConnected {
@@ -153,7 +153,7 @@ func (down *DownSessionBTC) stratumHandleRequest(request *JSONRPCLine, requestJS
 	}
 }
 
-func (down *DownSessionBTC) parseMiningSubmit(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSessionBTC) parseMiningSubmit(request *JSONRPCLineBTC) (result interface{}, err *StratumError) {
 	if down.stat != StatAuthorized {
 		err = StratumErrNeedAuthorized
 
@@ -287,7 +287,7 @@ func (down *DownSessionBTC) sendReconnectRequest() {
 	go down.SendEvent(EventSendBytes{bytes})
 }
 
-func (down *DownSessionBTC) parseSubscribeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSessionBTC) parseSubscribeRequest(request *JSONRPCLineBTC) (result interface{}, err *StratumError) {
 
 	if len(request.Params) >= 1 {
 		down.clientAgent, _ = request.Params[0].(string)
@@ -299,7 +299,7 @@ func (down *DownSessionBTC) parseSubscribeRequest(request *JSONRPCLine) (result 
 	return
 }
 
-func (down *DownSessionBTC) parseAuthorizeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSessionBTC) parseAuthorizeRequest(request *JSONRPCLineBTC) (result interface{}, err *StratumError) {
 	if len(request.Params) < 1 {
 		err = StratumErrTooFewParams
 		return
@@ -356,7 +356,7 @@ func (down *DownSessionBTC) parseAuthorizeRequest(request *JSONRPCLine) (result 
 	return
 }
 
-func (down *DownSessionBTC) parseConfigureRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSessionBTC) parseConfigureRequest(request *JSONRPCLineBTC) (result interface{}, err *StratumError) {
 	// request:
 	//		{"id":3,"method":"mining.configure","params":[["version-rolling"],{"version-rolling.mask":"1fffe000","version-rolling.min-bit-count":2}]}
 	// response:
@@ -415,18 +415,18 @@ func (down *DownSessionBTC) handleRequest() {
 			glog.Info(down.id, "handleRequest: ", string(jsonBytes))
 		}
 
-		rpcData, err := NewJSONRPCLine(jsonBytes)
+		rpcData, err := NewJSONRPCLineBTC(jsonBytes)
 
 		// ignore the json decode error
 		if err != nil {
 			glog.Warning(down.id, "failed to decode JSON from miner: ", err.Error(), "; ", string(jsonBytes))
 		}
 
-		down.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
+		down.SendEvent(EventRecvJSONRPCBTC{rpcData, jsonBytes})
 	}
 }
 
-func (down *DownSessionBTC) recvJSONRPC(e EventRecvJSONRPC) {
+func (down *DownSessionBTC) recvJSONRPC(e EventRecvJSONRPCBTC) {
 	// stat will be changed in stratumHandleRequest
 	result, stratumErr := down.stratumHandleRequest(e.RPCData, e.JSONBytes)
 
@@ -496,7 +496,7 @@ func (down *DownSessionBTC) handleEvent() {
 		switch e := event.(type) {
 		case EventSetUpSession:
 			down.setUpSession(e)
-		case EventRecvJSONRPC:
+		case EventRecvJSONRPCBTC:
 			down.recvJSONRPC(e)
 		case EventSendBytes:
 			down.sendBytes(e)

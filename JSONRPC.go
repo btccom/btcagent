@@ -11,15 +11,6 @@ type JSONRPCRequest struct {
 	Params []interface{} `json:"params"`
 }
 
-type JSONRPC2Request struct {
-	ID     interface{}   `json:"id"`
-	Method string        `json:"method"`
-	Params []interface{} `json:"params"`
-
-	// Worker: ETHProxy from ethminer may contains this field
-	Worker string `json:"worker,omitempty"`
-}
-
 // JSONRPCResponse JSON RPC 响应的数据结构
 type JSONRPCResponse struct {
 	ID     interface{} `json:"id"`
@@ -27,12 +18,26 @@ type JSONRPCResponse struct {
 	Error  interface{} `json:"error"`
 }
 
-type JSONRPCLine struct {
+type JSONRPCLineBTC struct {
 	ID     interface{}   `json:"id,omitempty"`
 	Method string        `json:"method,omitempty"`
 	Params []interface{} `json:"params,omitempty"`
 	Result interface{}   `json:"result,omitempty"`
 	Error  interface{}   `json:"error,omitempty"`
+}
+
+type JSONRPCLineETH struct {
+	ID      interface{}   `json:"id,omitempty"`
+	Method  string        `json:"method,omitempty"`
+	Params  []interface{} `json:"params,omitempty"`
+	Result  interface{}   `json:"result,omitempty"`
+	Error   interface{}   `json:"error,omitempty"`
+	Height  int           `json:"height,omitempty"`
+	Header  string        `json:"header,omitempty"`
+	BaseFee string        `json:"basefee,omitempty"`
+
+	// Worker: ETHProxy from ethminer may contains this field
+	Worker string `json:"worker,omitempty"`
 }
 
 // JSONRPC2Error error object of json-rpc 2.0
@@ -86,8 +91,14 @@ func NewJSONRPC2Error(v1Err interface{}) (err *JSONRPC2Error) {
 	return
 }
 
-func NewJSONRPCLine(rpcJSON []byte) (rpcData *JSONRPCLine, err error) {
-	rpcData = new(JSONRPCLine)
+func NewJSONRPCLineBTC(rpcJSON []byte) (rpcData *JSONRPCLineBTC, err error) {
+	rpcData = new(JSONRPCLineBTC)
+	err = json.Unmarshal(rpcJSON, &rpcData)
+	return
+}
+
+func NewJSONRPCLineETH(rpcJSON []byte) (rpcData *JSONRPCLineETH, err error) {
+	rpcData = new(JSONRPCLineETH)
 	err = json.Unmarshal(rpcJSON, &rpcData)
 	return
 }
@@ -151,4 +162,19 @@ func (rpcData *JSONRPCResponse) ToJSONBytesLine() (bytes []byte, err error) {
 func (rpcData *JSONRPCResponse) ToRPC2JSONBytes() ([]byte, error) {
 	rpc2Data := JSONRPC2Response{rpcData.ID, "2.0", rpcData.Result, NewJSONRPC2Error(rpcData.Error)}
 	return json.Marshal(rpc2Data)
+}
+
+func (rpcData *JSONRPCResponse) ToRPC2JSONBytesLine() (bytes []byte, err error) {
+	bytes, err = rpcData.ToRPC2JSONBytes()
+	if err == nil {
+		bytes = append(bytes, '\n')
+	}
+	return
+}
+
+func (rpcData *JSONRPCResponse) ToJSONBytesLineWithVersion(version int) (bytes []byte, err error) {
+	if version == 2 {
+		return rpcData.ToRPC2JSONBytesLine()
+	}
+	return rpcData.ToJSONBytesLine()
 }

@@ -20,18 +20,21 @@ type DownSessionETH struct {
 	clientConn      net.Conn      // 到矿机的TCP连接
 	clientReader    *bufio.Reader // 读取矿机发送的内容
 	readLoopRunning bool          // TCP读循环是否在运行
-	stat            AuthorizeStat // 认证状态
+
+	jobDiff    uint64 // 挖矿任务难度
+	extraNonce uint32 // 由矿池指定
+
+	stat       AuthorizeStat   // 认证状态
+	protocol   StratumProtocol // 挖矿协议
+	rpcVersion int             // JSON-RPC版本
 
 	clientAgent    string // 挖矿软件名称
 	fullName       string // 完整的矿工名
 	subAccountName string // 子账户名部分
 	workerName     string // 矿机名部分
-	versionMask    uint32 // 比特币版本掩码(用于AsicBoost)
 
 	eventLoopRunning bool             // 消息循环是否在运行
 	eventChannel     chan interface{} // 消息通道
-
-	versionRollingShareCounter uint64 // ASICBoost share 提交数量
 }
 
 // NewDownSessionETH 创建一个新的 Stratum 会话
@@ -84,8 +87,19 @@ func (down *DownSessionETH) close() {
 	down.manager.sessionIDManager.FreeSessionID(down.sessionID)
 }
 
-func (down *DownSessionETH) writeJSONResponse(jsonData *JSONRPCResponse) (int, error) {
+func (down *DownSessionETH) writeJSONRequest(jsonData *JSONRPCRequest) (int, error) {
 	bytes, err := jsonData.ToJSONBytesLine()
+	if err != nil {
+		return 0, err
+	}
+	if glog.V(10) {
+		glog.Info(down.id, "writeJSONRequest: ", string(bytes))
+	}
+	return down.clientConn.Write(bytes)
+}
+
+func (down *DownSessionETH) writeJSONResponse(jsonData *JSONRPCResponse) (int, error) {
+	bytes, err := jsonData.ToJSONBytesLineWithVersion(down.rpcVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -95,7 +109,7 @@ func (down *DownSessionETH) writeJSONResponse(jsonData *JSONRPCResponse) (int, e
 	return down.clientConn.Write(bytes)
 }
 
-func (down *DownSessionETH) stratumHandleRequest(request *JSONRPCLine, requestJSON []byte) (result interface{}, err *StratumError) {
+func (down *DownSessionETH) stratumHandleRequest(request *JSONRPCLineETH, requestJSON []byte) (result interface{}, err *StratumError) {
 	switch request.Method {
 	case "mining.subscribe":
 		if down.stat != StatConnected {
@@ -108,6 +122,11 @@ func (down *DownSessionETH) stratumHandleRequest(request *JSONRPCLine, requestJS
 		}
 		return
 
+	case "eth_submitLogin":
+		down.protocol = ProtocolETHProxy
+		down.rpcVersion = 2
+		down.stat = StatSubScribed
+		fallthrough
 	case "mining.authorize":
 		if down.stat != StatSubScribed {
 			err = StratumErrNeedSubscribed
@@ -123,10 +142,6 @@ func (down *DownSessionETH) stratumHandleRequest(request *JSONRPCLine, requestJS
 
 			glog.Info(down.id, "miner authorized")
 		}
-		return
-
-	case "mining.configure":
-		result, err = down.parseConfigureRequest(request)
 		return
 
 	case "mining.submit":
@@ -153,7 +168,7 @@ func (down *DownSessionETH) stratumHandleRequest(request *JSONRPCLine, requestJS
 	}
 }
 
-func (down *DownSessionETH) parseMiningSubmit(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSessionETH) parseMiningSubmit(request *JSONRPCLineETH) (result interface{}, err *StratumError) {
 	if down.stat != StatAuthorized {
 		err = StratumErrNeedAuthorized
 
@@ -239,39 +254,10 @@ func (down *DownSessionETH) parseMiningSubmit(request *JSONRPCLine) (result inte
 	}
 	msg.Base.Nonce = uint32(nonce)
 
-	// [5] Version Mask
-	hasVersionMask := false
-	if len(request.Params) >= 6 {
-		versionMaskHex, ok := request.Params[5].(string)
-		if !ok {
-			err = StratumErrIllegalParams
-			return
-		}
-		versionMask, convErr := strconv.ParseUint(versionMaskHex, 16, 32)
-		if convErr != nil {
-			err = StratumErrIllegalParams
-			return
-		}
-		msg.VersionMask = uint32(versionMask)
-		hasVersionMask = true
-	}
-
 	// down id
 	msg.Base.SessionID = down.sessionID
 
 	go down.upSession.SendEvent(EventSubmitShare{request.ID, &msg})
-
-	// 如果 AsicBoost 丢失，就发送重连请求
-	if down.manager.config.DisconnectWhenLostAsicboost {
-		if hasVersionMask {
-			down.versionRollingShareCounter++
-		} else if down.versionRollingShareCounter > 100 {
-			glog.Warning(down.id, "AsicBoost disabled mid-way after ", down.versionRollingShareCounter, " shares, send client.reconnect")
-
-			// send reconnect request to miner
-			down.sendReconnectRequest()
-		}
-	}
 	return
 }
 
@@ -287,33 +273,48 @@ func (down *DownSessionETH) sendReconnectRequest() {
 	go down.SendEvent(EventSendBytes{bytes})
 }
 
-func (down *DownSessionETH) parseSubscribeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSessionETH) parseSubscribeRequest(request *JSONRPCLineETH) (result interface{}, err *StratumError) {
+	down.protocol = ProtocolLegacyStratum
+	down.rpcVersion = 1
+	result = true
 
 	if len(request.Params) >= 1 {
 		down.clientAgent, _ = request.Params[0].(string)
 	}
 
-	sessionIDString := Uint32ToHex(uint32(down.sessionID))
+	if len(request.Params) >= 2 {
+		// message example: {"id":1,"method":"mining.subscribe","params":["ethminer 0.15.0rc1","EthereumStratum/1.0.0"]}
+		protocol, ok := request.Params[1].(string)
 
-	result = JSONRPCArray{JSONRPCArray{JSONRPCArray{"mining.set_difficulty", sessionIDString}, JSONRPCArray{"mining.notify", sessionIDString}}, sessionIDString, 4}
+		// 判断是否为"EthereumStratum/xxx"
+		if ok && strings.HasPrefix(strings.ToLower(protocol), EthereumStratumPrefix) {
+			down.protocol = ProtocolEthereumStratum
+			sessionIDString := Uint16ToHex(down.sessionID)
+			// message example: {"id":1,"jsonrpc":"2.0","result":[["mining.notify","0001","EthereumStratum/1.0.0"],"0001"],"error":null}
+			result = JSONRPCArray{JSONRPCArray{"mining.notify", sessionIDString, EthereumStratumVersion}, sessionIDString}
+		}
+	}
+
 	return
 }
 
-func (down *DownSessionETH) parseAuthorizeRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
+func (down *DownSessionETH) parseAuthorizeRequest(request *JSONRPCLineETH) (result interface{}, err *StratumError) {
 	if len(request.Params) < 1 {
 		err = StratumErrTooFewParams
 		return
 	}
 
 	fullWorkerName, ok := request.Params[0].(string)
-
 	if !ok {
 		err = StratumErrWorkerNameMustBeString
 		return
 	}
+	if len(request.Worker) > 0 {
+		fullWorkerName = fullWorkerName + "." + request.Worker
+	}
 
 	// 矿工名
-	down.fullName = FilterWorkerName(fullWorkerName)
+	down.fullName = FilterWorkerName(StripEthAddrFromFullName(fullWorkerName))
 
 	// 截取“.”之前的做为子账户名，“.”及之后的做矿机名
 	pos := strings.IndexByte(down.fullName, '.')
@@ -356,46 +357,6 @@ func (down *DownSessionETH) parseAuthorizeRequest(request *JSONRPCLine) (result 
 	return
 }
 
-func (down *DownSessionETH) parseConfigureRequest(request *JSONRPCLine) (result interface{}, err *StratumError) {
-	// request:
-	//		{"id":3,"method":"mining.configure","params":[["version-rolling"],{"version-rolling.mask":"1fffe000","version-rolling.min-bit-count":2}]}
-	// response:
-	//		{"id":3,"result":{"version-rolling":true,"version-rolling.mask":"1fffe000"},"error":null}
-	//		{"id":null,"method":"mining.set_version_mask","params":["1fffe000"]}
-
-	if len(request.Params) < 2 {
-		err = StratumErrTooFewParams
-		return
-	}
-
-	if options, ok := request.Params[1].(map[string]interface{}); ok {
-		if obj, ok := options["version-rolling.mask"]; ok {
-			if versionMaskStr, ok := obj.(string); ok {
-				versionMask, err := strconv.ParseUint(versionMaskStr, 16, 32)
-				if err == nil {
-					down.versionMask = uint32(versionMask)
-				}
-			}
-		}
-	}
-
-	if down.versionMask != 0 {
-		// 这里响应的是虚假的版本掩码。在连接服务器后将通过 mining.set_version_mask
-		// 更新为真实的版本掩码。
-		result = JSONRPCObj{
-			"version-rolling":      true,
-			"version-rolling.mask": down.versionMaskStr()}
-		return
-	}
-
-	// 未知配置内容，不响应
-	return
-}
-
-func (down *DownSessionETH) versionMaskStr() string {
-	return fmt.Sprintf("%08x", down.versionMask)
-}
-
 func (down *DownSessionETH) setUpSession(e EventSetUpSession) {
 	down.upSession = e.Session
 	down.upSession.SendEvent(EventAddDownSession{down})
@@ -415,18 +376,18 @@ func (down *DownSessionETH) handleRequest() {
 			glog.Info(down.id, "handleRequest: ", string(jsonBytes))
 		}
 
-		rpcData, err := NewJSONRPCLine(jsonBytes)
+		rpcData, err := NewJSONRPCLineETH(jsonBytes)
 
 		// ignore the json decode error
 		if err != nil {
 			glog.Warning(down.id, "failed to decode JSON from miner: ", err.Error(), "; ", string(jsonBytes))
 		}
 
-		down.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
+		down.SendEvent(EventRecvJSONRPCETH{rpcData, jsonBytes})
 	}
 }
 
-func (down *DownSessionETH) recvJSONRPC(e EventRecvJSONRPC) {
+func (down *DownSessionETH) recvJSONRPC(e EventRecvJSONRPCETH) {
 	// stat will be changed in stratumHandleRequest
 	result, stratumErr := down.stratumHandleRequest(e.RPCData, e.JSONBytes)
 
@@ -483,6 +444,33 @@ func (down *DownSessionETH) submitResponse(e EventSubmitResponse) {
 	}
 }
 
+func (down *DownSessionETH) setDifficulty(e EventSetDifficulty) {
+	if down.protocol == ProtocolEthereumStratum && down.jobDiff != e.Difficulty {
+		diff := float64(e.Difficulty) / float64(0xffffffff)
+
+		var request JSONRPCRequest
+		request.Method = "mining.set_difficulty"
+		request.Params = JSONRPCArray{diff}
+
+		_, err := down.writeJSONRequest(&request)
+		glog.Error(down.id, "failed to send difficulty to miner: ", err.Error())
+		down.close()
+		return
+	}
+
+	down.jobDiff = e.Difficulty
+}
+
+func (down *DownSessionETH) setExtraNonce(e EventSetExtraNonce) {
+	if e.ExtraNonce == ETH_INVALID_EXTRA_NONCE {
+		glog.Error(down.id, "pool server is full and cannot allocate an extra nonce")
+		down.close()
+		return
+	}
+
+	down.extraNonce = e.ExtraNonce
+}
+
 func (down *DownSessionETH) exit() {
 	down.stat = StatExit
 	down.close()
@@ -496,12 +484,16 @@ func (down *DownSessionETH) handleEvent() {
 		switch e := event.(type) {
 		case EventSetUpSession:
 			down.setUpSession(e)
-		case EventRecvJSONRPC:
+		case EventRecvJSONRPCETH:
 			down.recvJSONRPC(e)
 		case EventSendBytes:
 			down.sendBytes(e)
 		case EventSubmitResponse:
 			down.submitResponse(e)
+		case EventSetDifficulty:
+			down.setDifficulty(e)
+		case EventSetExtraNonce:
+			down.setExtraNonce(e)
 		case EventConnBroken:
 			down.close()
 		case EventExit:

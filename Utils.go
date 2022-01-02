@@ -32,6 +32,13 @@ func Long2IP(ipLong uint32) string {
 	return b0 + "." + b1 + "." + b2 + "." + b3
 }
 
+// Uint64ToBin unit64 转二进制
+func Uint64ToBin(num uint64) []byte {
+	bytesBuffer := bytes.NewBuffer([]byte{})
+	binary.Write(bytesBuffer, binary.BigEndian, num)
+	return bytesBuffer.Bytes()
+}
+
 // Uint64ToHex unit64 转 hex
 func Uint64ToHex(num uint64) string {
 	bytesBuffer := bytes.NewBuffer([]byte{})
@@ -50,6 +57,13 @@ func Uint32ToHex(num uint32) string {
 func Uint32ToHexLE(num uint32) string {
 	bytesBuffer := bytes.NewBuffer([]byte{})
 	binary.Write(bytesBuffer, binary.LittleEndian, num)
+	return hex.EncodeToString(bytesBuffer.Bytes())
+}
+
+// Uint16ToHex uint16 转 hex
+func Uint16ToHex(num uint16) string {
+	bytesBuffer := bytes.NewBuffer([]byte{})
+	binary.Write(bytesBuffer, binary.BigEndian, num)
 	return hex.EncodeToString(bytesBuffer.Bytes())
 }
 
@@ -125,7 +139,7 @@ func IOCopyBuffer(dst io.Writer, src io.Reader, buf []byte) (bufferLen int, err 
 func StripEthAddrFromFullName(fullNameStr string) string {
 	pos := strings.Index(fullNameStr, ".")
 
-	// The Ethereum address is 42 bytes and starting with "0x" as normal
+	// The Ethereum address is 42 bytes and starting with "0x".
 	// Example: 0x00d8c82Eb65124Ea3452CaC59B64aCC230AA3482
 	if pos == 42 && fullNameStr[0] == '0' && (fullNameStr[1] == 'x' || fullNameStr[1] == 'X') {
 		return fullNameStr[pos+1:]
@@ -174,4 +188,18 @@ func IsEnabled(option bool) string {
 		return "Enabled"
 	}
 	return "Disabled"
+}
+
+func HexRemovePrefix(hexStr string) string {
+	// remove prefix "0x" or "0X"
+	if len(hexStr) >= 2 && hexStr[0] == '0' && (hexStr[1] == 'x' || hexStr[1] == 'X') {
+		hexStr = hexStr[2:]
+	}
+	return hexStr
+}
+
+func Hex2Bin(hexStr string) (bin []byte, err error) {
+	hexStr = HexRemovePrefix(hexStr)
+	bin, err = hex.DecodeString(hexStr)
+	return
 }

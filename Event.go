@@ -34,8 +34,13 @@ type EventRecvExMessage struct {
 	Message *ExMessage
 }
 
-type EventRecvJSONRPC struct {
-	RPCData   *JSONRPCLine
+type EventRecvJSONRPCBTC struct {
+	RPCData   *JSONRPCLineBTC
+	JSONBytes []byte
+}
+
+type EventRecvJSONRPCETH struct {
+	RPCData   *JSONRPCLineETH
 	JSONBytes []byte
 }
 
@@ -95,4 +100,12 @@ type EventUpSessionConnection struct {
 	Conn     net.Conn
 	Reader   *bufio.Reader
 	Error    error
+}
+
+type EventSetDifficulty struct {
+	Difficulty uint64
+}
+
+type EventSetExtraNonce struct {
+	ExtraNonce uint32
 }

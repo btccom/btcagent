@@ -1,73 +1,93 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"time"
 )
 
 type StratumJobETH struct {
-	JSONRPCRequest
+	JobID    []byte
+	SeedHash []byte
+	Header   []byte
+	BaseFee  []byte
+	IsClean  bool
 }
 
-func NewStratumJobETH(json *JSONRPCLine, sessionID uint32) (job *StratumJobETH, err error) {
+func NewStratumJobETH(json *JSONRPCLineETH, sessionID uint32) (job *StratumJobETH, err error) {
 	/*
 		Fields in order:
-			[0] Job ID. This is included when miners submit a results so work can be matched with proper transactions.
-			[1] Hash of previous block. Used to build the header.
-			[2] Generation transaction (part 1). The miner inserts ExtraNonce1 and ExtraNonce2 after this section of the transaction data.
-			[3] Generation transaction (part 2). The miner appends this after the first part of the transaction data and the two ExtraNonce values.
-			[4] List of merkle branches. The generation transaction is hashed against the merkle branches to build the final merkle root.
-			[5] Bitcoin block version. Used in the block header.
-			[6] nBits. The encoded network difficulty. Used in the block header.
-			[7] nTime. The current time. nTime rolling should be supported, but should not increase faster than actual time.
-			[8] Clean Jobs. If true, miners should abort their current work and immediately use the new job. If false, they can still use the current job, but should move to the new one after exhausting the current nonce range.
+		["params"]
+			[0] job id
+			[1] seed hash
+			[2] header hash
+			[3] is clean
+		["header"] block header hex
+		["basefee"] (optional) base fee for EIP-1559
 	*/
 	job = new(StratumJobETH)
-	job.ID = json.ID
-	job.Method = json.Method
-	job.Params = json.Params
 
-	if len(job.Params) < 9 {
-		err = fmt.Errorf("notify missing fields, should be 9 fields but only %d", len(job.Params))
+	if len(json.Header) < 1 {
+		err = fmt.Errorf("notify missing field header")
+		return
+	}
+	job.Header, err = Hex2Bin(json.Header)
+	if err != nil {
+		err = fmt.Errorf("failed to decode header: %s", err.Error())
 		return
 	}
 
-	coinbase1, ok := job.Params[2].(string)
+	job.BaseFee, err = Hex2Bin(json.BaseFee)
+	if err != nil {
+		err = fmt.Errorf("failed to decode base fee: %s", err.Error())
+		return
+	}
+
+	if len(json.Params) < 4 {
+		err = fmt.Errorf("notify missing fields, should be 4 fields but only %d", len(json.Params))
+		return
+	}
+
+	jobID, ok := json.Params[0].(string)
 	if !ok {
-		err = errors.New("wrong notify format, coinbase1 is not a string")
+		err = fmt.Errorf("job id is not a string")
+		return
+	}
+	job.JobID, err = Hex2Bin(jobID)
+	if err != nil {
+		err = fmt.Errorf("failed to decode job id: %s", err.Error())
 		return
 	}
 
-	job.Params[2] = coinbase1 + Uint32ToHex(sessionID)
+	seedHash, ok := json.Params[1].(string)
+	if !ok {
+		err = fmt.Errorf("seed hash is not a string")
+		return
+	}
+	job.SeedHash, err = Hex2Bin(seedHash)
+	if err != nil {
+		err = fmt.Errorf("failed to decode seed hash: %s", err.Error())
+		return
+	}
 
+	// succeeded
 	return
 }
 
 func (job *StratumJobETH) ToNotifyLine(firstJob bool) (bytes []byte, err error) {
-	if firstJob {
-		job.Params[8] = true
-	}
-
-	return job.ToJSONBytesLine()
+	// TODO: finish it
+	return
 }
 
 func IsFakeJobIDETH(id string) bool {
-	return len(id) < 1 || id[0] == 'f'
+	id = HexRemovePrefix(id)
+	return len(id) == len(FakeJobIDETHPrefix)+16 && id[:len(FakeJobIDETHPrefix)] == FakeJobIDETHPrefix
 }
 
 func (job *StratumJobETH) ToNewFakeJob() {
 	now := uint64(time.Now().Unix())
+	job.Header = Uint64ToBin(now)
 
-	// job id
-	job.Params[0] = fmt.Sprintf("f%d", now%0xffff)
-
-	coinbase1, _ := job.Params[2].(string)
-	pos := len(coinbase1) - 8
-	if pos < 0 {
-		pos = 0
-	}
-
-	// coinbase1
-	job.Params[2] = coinbase1[:pos] + Uint64ToHex(now)
+	// fake job id
+	job.JobID = FakeJobIDETHPrefixBin
+	job.JobID = append(job.JobID, job.Header...)
 }

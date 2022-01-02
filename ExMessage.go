@@ -18,8 +18,8 @@ const (
 	CMD_SUBMIT_RESPONSE            uint8 = 0x10 // Pool  -> Agent, response of the submit (optional)
 	CMD_SUBMIT_SHARE_WITH_VER      uint8 = 0x12 // Agent -> Pool,  mining.submit(..., nVersionMask)
 	CMD_SUBMIT_SHARE_WITH_TIME_VER uint8 = 0x13 // Agent -> Pool,  mining.submit(..., nTime, nVersionMask)
-	CMD_GET_NONCE_PREFIX           uint8 = 0x21 // Agent -> Pool,  ask the pool to allocate nonce prefix (Ethereum)
-	CMD_SET_NONCE_PREFIX           uint8 = 0x22 // Pool  -> Agent, pool nonce prefix allocation result (Ethereum)
+	CMD_GET_EXTRA_NONCE            uint8 = 0x21 // Agent -> Pool,  ask the pool to allocate nonce prefix (Ethereum)
+	CMD_SET_EXTRA_NONCE            uint8 = 0x22 // Pool  -> Agent, pool nonce prefix allocation result (Ethereum)
 )
 
 type SerializableExMessage interface {
@@ -160,6 +160,17 @@ type ExMessageSubmitResponse struct {
 }
 
 func (msg *ExMessageSubmitResponse) Unserialize(data []byte) (err error) {
+	buf := bytes.NewReader(data)
+	err = binary.Read(buf, binary.LittleEndian, msg)
+	return
+}
+
+type ExMessageSetExtranonce struct {
+	SessionID  uint16
+	ExtraNonce uint32
+}
+
+func (msg *ExMessageSetExtranonce) Unserialize(data []byte) (err error) {
 	buf := bytes.NewReader(data)
 	err = binary.Read(buf, binary.LittleEndian, msg)
 	return

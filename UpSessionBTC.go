@@ -348,7 +348,7 @@ func (up *UpSessionBTC) Init() {
 	up.handleEvent()
 }
 
-func (up *UpSessionBTC) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleSetVersionMask(rpcData *JSONRPCLineBTC, jsonBytes []byte) {
 	up.rpcSetVersionMask = jsonBytes
 
 	if len(rpcData.Params) > 0 {
@@ -383,7 +383,7 @@ func (up *UpSessionBTC) handleSetVersionMask(rpcData *JSONRPCLine, jsonBytes []b
 	}
 }
 
-func (up *UpSessionBTC) handleSetDifficulty(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleSetDifficulty(rpcData *JSONRPCLineBTC, jsonBytes []byte) {
 	if up.rpcSetDifficulty == nil {
 		up.rpcSetDifficulty = jsonBytes
 
@@ -394,7 +394,7 @@ func (up *UpSessionBTC) handleSetDifficulty(rpcData *JSONRPCLine, jsonBytes []by
 	}
 }
 
-func (up *UpSessionBTC) handleSubScribeResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleSubScribeResponse(rpcData *JSONRPCLineBTC, jsonBytes []byte) {
 	result, ok := rpcData.Result.([]interface{})
 	if !ok {
 		glog.Error(up.id, "subscribe result is not an array: ", string(jsonBytes))
@@ -435,11 +435,11 @@ func (up *UpSessionBTC) handleSubScribeResponse(rpcData *JSONRPCLine, jsonBytes 
 	up.stat = StatSubScribed
 }
 
-func (up *UpSessionBTC) handleConfigureResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleConfigureResponse(rpcData *JSONRPCLineBTC, jsonBytes []byte) {
 	// ignore
 }
 
-func (up *UpSessionBTC) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleGetCapsResponse(rpcData *JSONRPCLineBTC, jsonBytes []byte) {
 	result, ok := rpcData.Result.(map[string]interface{})
 	if !ok {
 		glog.Error(up.id, "get server capabilities failed, result is not an object: ", string(jsonBytes))
@@ -474,7 +474,7 @@ func (up *UpSessionBTC) handleGetCapsResponse(rpcData *JSONRPCLine, jsonBytes []
 	}
 }
 
-func (up *UpSessionBTC) handleAuthorizeResponse(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleAuthorizeResponse(rpcData *JSONRPCLineBTC, jsonBytes []byte) {
 	result, ok := rpcData.Result.(bool)
 	if !ok || !result {
 		glog.Error(up.id, "authorize failed: ", rpcData.Error)
@@ -575,7 +575,7 @@ func (up *UpSessionBTC) readLine() {
 		glog.Info(up.id, "readLine: ", string(jsonBytes))
 	}
 
-	rpcData, err := NewJSONRPCLine(jsonBytes)
+	rpcData, err := NewJSONRPCLineBTC(jsonBytes)
 
 	// ignore the json decode error
 	if err != nil {
@@ -583,7 +583,7 @@ func (up *UpSessionBTC) readLine() {
 		return
 	}
 
-	up.SendEvent(EventRecvJSONRPC{rpcData, jsonBytes})
+	up.SendEvent(EventRecvJSONRPCBTC{rpcData, jsonBytes})
 }
 
 func (up *UpSessionBTC) Run() {
@@ -635,7 +635,7 @@ func (up *UpSessionBTC) unregisterWorker(sessionID uint16) {
 	}
 }
 
-func (up *UpSessionBTC) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byte) {
+func (up *UpSessionBTC) handleMiningNotify(rpcData *JSONRPCLineBTC, jsonBytes []byte) {
 	job, err := NewStratumJobBTC(rpcData, up.sessionID)
 	if err != nil {
 		glog.Warning(up.id, err.Error(), ": ", string(jsonBytes))
@@ -655,7 +655,7 @@ func (up *UpSessionBTC) handleMiningNotify(rpcData *JSONRPCLine, jsonBytes []byt
 	up.lastJob = job
 }
 
-func (up *UpSessionBTC) recvJSONRPC(e EventRecvJSONRPC) {
+func (up *UpSessionBTC) recvJSONRPC(e EventRecvJSONRPCBTC) {
 	rpcData := e.RPCData
 	jsonBytes := e.JSONBytes
 
@@ -832,7 +832,7 @@ func (up *UpSessionBTC) handleEvent() {
 			up.downSessionBroken(e)
 		case EventSendUpdateMinerNum:
 			up.sendUpdateMinerNum()
-		case EventRecvJSONRPC:
+		case EventRecvJSONRPCBTC:
 			up.recvJSONRPC(e)
 		case EventRecvExMessage:
 			up.recvExMessage(e)

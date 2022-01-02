@@ -10,7 +10,7 @@ type StratumJobBTC struct {
 	JSONRPCRequest
 }
 
-func NewStratumJobBTC(json *JSONRPCLine, sessionID uint32) (job *StratumJobBTC, err error) {
+func NewStratumJobBTC(json *JSONRPCLineBTC, sessionID uint32) (job *StratumJobBTC, err error) {
 	/*
 		Fields in order:
 			[0] Job ID. This is included when miners submit a results so work can be matched with proper transactions.
