@@ -56,9 +56,14 @@ type EventUpSessionBroken struct {
 	Slot int
 }
 
-type EventSubmitShare struct {
+type EventSubmitShareBTC struct {
 	ID      interface{}
-	Message *ExMessageSubmitShare
+	Message *ExMessageSubmitShareBTC
+}
+
+type EventSubmitShareETH struct {
+	ID      interface{}
+	Message *ExMessageSubmitShareETH
 }
 
 type EventSubmitResponse struct {
@@ -108,4 +113,8 @@ type EventSetDifficulty struct {
 
 type EventSetExtraNonce struct {
 	ExtraNonce uint32
+}
+
+type EventStratumJobETH struct {
+	Job *StratumJobETH
 }

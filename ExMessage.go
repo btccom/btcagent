@@ -18,7 +18,7 @@ const (
 	CMD_SUBMIT_RESPONSE            uint8 = 0x10 // Pool  -> Agent, response of the submit (optional)
 	CMD_SUBMIT_SHARE_WITH_VER      uint8 = 0x12 // Agent -> Pool,  mining.submit(..., nVersionMask)
 	CMD_SUBMIT_SHARE_WITH_TIME_VER uint8 = 0x13 // Agent -> Pool,  mining.submit(..., nTime, nVersionMask)
-	CMD_GET_EXTRA_NONCE            uint8 = 0x21 // Agent -> Pool,  ask the pool to allocate nonce prefix (Ethereum)
+	CMD_SUBMIT_SHARE_WITH_MIX_HASH uint8 = 0x14 // Agent -> Pool, for ETH
 	CMD_SET_EXTRA_NONCE            uint8 = 0x22 // Pool  -> Agent, pool nonce prefix allocation result (Ethereum)
 )
 
@@ -83,7 +83,7 @@ func (msg *ExMessageUnregisterWorker) Serialize() []byte {
 	return buf.Bytes()
 }
 
-type ExMessageSubmitShare struct {
+type ExMessageSubmitShareBTC struct {
 	Base struct {
 		JobID       uint8
 		SessionID   uint16
@@ -97,7 +97,7 @@ type ExMessageSubmitShare struct {
 	IsFakeJob bool
 }
 
-func (msg *ExMessageSubmitShare) Serialize() []byte {
+func (msg *ExMessageSubmitShareBTC) Serialize() []byte {
 	var header ExMessageHeader
 	header.MagicNumber = ExMessageMagicNumber
 
@@ -128,6 +128,40 @@ func (msg *ExMessageSubmitShare) Serialize() []byte {
 	}
 	if msg.VersionMask != 0 {
 		binary.Write(buf, binary.LittleEndian, msg.VersionMask)
+	}
+
+	return buf.Bytes()
+}
+
+type ExMessageSubmitShareETH struct {
+	SessionID uint16
+	Nonce     uint64
+	JobID     []byte
+	MixHash   []byte
+	IsFakeJob bool
+}
+
+func (msg *ExMessageSubmitShareETH) Serialize() []byte {
+	var header ExMessageHeader
+	header.MagicNumber = ExMessageMagicNumber
+
+	if msg.MixHash == nil {
+		header.Type = CMD_SUBMIT_SHARE
+		header.Size = 4 + 2 + 8 + uint16(len(msg.JobID))
+	} else {
+		header.Type = CMD_SUBMIT_SHARE_WITH_MIX_HASH
+		header.Size = 4 + 2 + 8 + uint16(len(msg.JobID)) + uint16(len(msg.MixHash))
+	}
+
+	buf := new(bytes.Buffer)
+
+	binary.Write(buf, binary.LittleEndian, &header)
+	binary.Write(buf, binary.LittleEndian, &msg.SessionID)
+	binary.Write(buf, binary.LittleEndian, &msg.Nonce)
+
+	buf.Write(msg.JobID)
+	if msg.MixHash != nil {
+		buf.Write(msg.MixHash)
 	}
 
 	return buf.Bytes()

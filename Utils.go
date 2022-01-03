@@ -46,6 +46,13 @@ func Uint64ToHex(num uint64) string {
 	return hex.EncodeToString(bytesBuffer.Bytes())
 }
 
+// Uint32ToBin unit32 转二进制
+func Uint32ToBin(num uint32) []byte {
+	bytesBuffer := bytes.NewBuffer([]byte{})
+	binary.Write(bytesBuffer, binary.BigEndian, num)
+	return bytesBuffer.Bytes()
+}
+
 // Uint32ToHex unit32 转 hex
 func Uint32ToHex(num uint32) string {
 	bytesBuffer := bytes.NewBuffer([]byte{})
@@ -190,6 +197,13 @@ func IsEnabled(option bool) string {
 	return "Disabled"
 }
 
+func HexAddPrefix(hexStr string) string {
+	if len(hexStr) == 0 || (len(hexStr) >= 2 && hexStr[0] == '0' && (hexStr[1] == 'x' || hexStr[1] == 'X')) {
+		return hexStr
+	}
+	return "0x" + hexStr
+}
+
 func HexRemovePrefix(hexStr string) string {
 	// remove prefix "0x" or "0X"
 	if len(hexStr) >= 2 && hexStr[0] == '0' && (hexStr[1] == 'x' || hexStr[1] == 'X') {
@@ -201,5 +215,11 @@ func HexRemovePrefix(hexStr string) string {
 func Hex2Bin(hexStr string) (bin []byte, err error) {
 	hexStr = HexRemovePrefix(hexStr)
 	bin, err = hex.DecodeString(hexStr)
+	return
+}
+
+func Hex2Uint64(hexStr string) (result uint64, err error) {
+	hexStr = HexRemovePrefix(hexStr)
+	result, err = strconv.ParseUint(hexStr, 16, 64)
 	return
 }

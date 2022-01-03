@@ -44,12 +44,7 @@ func (up *FakeUpSessionETH) addDownSession(e EventAddDownSession) {
 
 	if up.manager.config.AlwaysKeepDownconn && up.fakeJob != nil {
 		up.fakeJob.ToNewFakeJob()
-		bytes, err := up.fakeJob.ToNotifyLine(true)
-		if err == nil {
-			e.Session.SendEvent(EventSendBytes{bytes})
-		} else {
-			glog.Warning("[fake-pool-connection] failed to convert fake job to JSON:", err.Error(), "; ", up.fakeJob)
-		}
+		e.Session.SendEvent(EventStratumJobETH{up.fakeJob})
 	}
 }
 
@@ -85,8 +80,8 @@ func (up *FakeUpSessionETH) sendSubmitResponse(sessionID uint16, id interface{},
 	go down.SendEvent(EventSubmitResponse{id, status})
 }
 
-func (up *FakeUpSessionETH) handleSubmitShare(e EventSubmitShare) {
-	up.sendSubmitResponse(e.Message.Base.SessionID, e.ID, STATUS_ACCEPT)
+func (up *FakeUpSessionETH) handleSubmitShare(e EventSubmitShareETH) {
+	up.sendSubmitResponse(e.Message.SessionID, e.ID, STATUS_ACCEPT)
 }
 
 func (up *FakeUpSessionETH) downSessionBroken(e EventDownSessionBroken) {
@@ -130,15 +125,9 @@ func (up *FakeUpSessionETH) sendFakeNotify() {
 	}
 
 	up.fakeJob.ToNewFakeJob()
-
-	bytes, err := up.fakeJob.ToNotifyLine(false)
-	if err != nil {
-		glog.Warning("[fake-pool-connection] failed to convert fake job to JSON:", err.Error(), "; ", up.fakeJob)
-		return
-	}
-
+	e := EventStratumJobETH{up.fakeJob}
 	for _, down := range up.downSessions {
-		go down.SendEvent(EventSendBytes{bytes})
+		go down.SendEvent(e)
 	}
 }
 
@@ -149,7 +138,7 @@ func (up *FakeUpSessionETH) handleEvent() {
 		switch e := event.(type) {
 		case EventAddDownSession:
 			up.addDownSession(e)
-		case EventSubmitShare:
+		case EventSubmitShareETH:
 			up.handleSubmitShare(e)
 		case EventDownSessionBroken:
 			up.downSessionBroken(e)

@@ -2,9 +2,10 @@ package main
 
 import (
 	"bufio"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net"
-	"strconv"
 	"strings"
 
 	"github.com/golang/glog"
@@ -21,8 +22,11 @@ type DownSessionETH struct {
 	clientReader    *bufio.Reader // 读取矿机发送的内容
 	readLoopRunning bool          // TCP读循环是否在运行
 
-	jobDiff    uint64 // 挖矿任务难度
-	extraNonce uint32 // 由矿池指定
+	jobDiff       uint64         // 挖矿任务难度
+	extraNonce    uint32         // 由矿池指定
+	hasExtraNonce bool           // 是否获得了ExtraNonce
+	isFirstJob    bool           // 是否为第一个任务
+	jobIDQueue    *JobIDQueueETH // job id 队列
 
 	stat       AuthorizeStat   // 认证状态
 	protocol   StratumProtocol // 挖矿协议
@@ -46,6 +50,7 @@ func NewDownSessionETH(manager *SessionManager, clientConn net.Conn, sessionID u
 	down.clientReader = bufio.NewReader(clientConn)
 	down.stat = StatConnected
 	down.eventChannel = make(chan interface{}, manager.config.Advanced.MessageQueueSize.MinerSession)
+	down.jobIDQueue = NewJobqueueETH(EthereumJobIDQueueSize)
 
 	down.id = fmt.Sprintf("miner#%d (%s) ", down.sessionID, down.clientConn.RemoteAddr())
 
@@ -88,7 +93,7 @@ func (down *DownSessionETH) close() {
 }
 
 func (down *DownSessionETH) writeJSONRequest(jsonData *JSONRPCRequest) (int, error) {
-	bytes, err := jsonData.ToJSONBytesLine()
+	bytes, err := jsonData.ToJSONBytesLineWithVersion(down.rpcVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -144,6 +149,8 @@ func (down *DownSessionETH) stratumHandleRequest(request *JSONRPCLineETH, reques
 		}
 		return
 
+	case "eth_submitWork":
+		fallthrough
 	case "mining.submit":
 		result, err = down.parseMiningSubmit(request)
 		if err != nil {
@@ -182,82 +189,64 @@ func (down *DownSessionETH) parseMiningSubmit(request *JSONRPCLineETH) (result i
 		return
 	}
 
-	// params:
-	// [0] Worker Name
-	// [1] Job ID
-	// [2] ExtraNonce2
-	// [3] Time
-	// [4] Nonce
-	// [5] Version Mask
+	var powHash, mixHash, nonce string
 
-	if len(request.Params) < 5 {
-		err = StratumErrTooFewParams
-		return
-	}
-
-	var msg ExMessageSubmitShare
-
-	// [1] Job ID
-	jobIDStr, ok := request.Params[1].(string)
-	if !ok {
-		err = StratumErrIllegalParams
-		return
-	}
-
-	if IsFakeJobIDETH(jobIDStr) {
-		msg.IsFakeJob = true
-	} else {
-		jobID, convErr := strconv.ParseUint(jobIDStr, 10, 8)
-		if convErr != nil {
-			err = StratumErrIllegalParams
+	switch down.protocol {
+	case ProtocolLegacyStratum:
+		if len(request.Params) < 5 {
+			err = StratumErrTooFewParams
 			return
 		}
-		msg.Base.JobID = uint8(jobID)
+		powHash, _ = request.Params[1].(string)
+		nonce, _ = request.Params[2].(string)
+		mixHash, _ = request.Params[4].(string)
+	case ProtocolETHProxy:
+		if len(request.Params) < 3 {
+			err = StratumErrTooFewParams
+			return
+		}
+		nonce, _ = request.Params[0].(string)
+		powHash, _ = request.Params[1].(string)
+		mixHash, _ = request.Params[2].(string)
+	case ProtocolEthereumStratum:
+		if len(request.Params) < 3 {
+			err = StratumErrTooFewParams
+			return
+		}
+		powHash, _ = request.Params[1].(string)
+		nonce, _ = request.Params[2].(string)
 	}
 
-	// [2] ExtraNonce2
-	extraNonce2Hex, ok := request.Params[2].(string)
-	if !ok {
+	var msg ExMessageSubmitShareETH
+	msg.SessionID = down.sessionID
+
+	powHash = HexRemovePrefix(powHash)
+	if IsFakeJobIDETH(powHash) {
+		msg.IsFakeJob = true
+	}
+
+	msg.JobID = down.jobIDQueue.Find(powHash)
+	if msg.JobID == nil {
+		err = StratumErrJobNotFound
+		return
+	}
+
+	if len(nonce) < 1 {
 		err = StratumErrIllegalParams
 		return
 	}
-	extraNonce, convErr := strconv.ParseUint(extraNonce2Hex, 16, 32)
+	var convErr error
+	msg.Nonce, convErr = Hex2Uint64(nonce)
 	if convErr != nil {
 		err = StratumErrIllegalParams
 		return
 	}
-	msg.Base.ExtraNonce2 = uint32(extraNonce)
 
-	// [3] Time
-	timeHex, ok := request.Params[3].(string)
-	if !ok {
-		err = StratumErrIllegalParams
-		return
+	if len(mixHash) > 0 {
+		msg.MixHash, _ = Hex2Bin(mixHash)
 	}
-	time, convErr := strconv.ParseUint(timeHex, 16, 32)
-	if convErr != nil {
-		err = StratumErrIllegalParams
-		return
-	}
-	msg.Time = uint32(time)
 
-	// [4] Nonce
-	nonceHex, ok := request.Params[4].(string)
-	if !ok {
-		err = StratumErrIllegalParams
-		return
-	}
-	nonce, convErr := strconv.ParseUint(nonceHex, 16, 32)
-	if convErr != nil {
-		err = StratumErrIllegalParams
-		return
-	}
-	msg.Base.Nonce = uint32(nonce)
-
-	// down id
-	msg.Base.SessionID = down.sessionID
-
-	go down.upSession.SendEvent(EventSubmitShare{request.ID, &msg})
+	go down.upSession.SendEvent(EventSubmitShareETH{request.ID, &msg})
 	return
 }
 
@@ -265,7 +254,7 @@ func (down *DownSessionETH) sendReconnectRequest() {
 	var reconnect JSONRPCRequest
 	reconnect.Method = "client.reconnect"
 	reconnect.Params = JSONRPCArray{}
-	bytes, err := reconnect.ToJSONBytesLine()
+	bytes, err := reconnect.ToJSONBytesLineWithVersion(down.rpcVersion)
 	if err != nil {
 		glog.Error(down.id, "failed to convert client.reconnect request to JSON: ", err.Error(), "; ", reconnect)
 		return
@@ -291,7 +280,8 @@ func (down *DownSessionETH) parseSubscribeRequest(request *JSONRPCLineETH) (resu
 			down.protocol = ProtocolEthereumStratum
 			sessionIDString := Uint16ToHex(down.sessionID)
 			// message example: {"id":1,"jsonrpc":"2.0","result":[["mining.notify","0001","EthereumStratum/1.0.0"],"0001"],"error":null}
-			result = JSONRPCArray{JSONRPCArray{"mining.notify", sessionIDString, EthereumStratumVersion}, sessionIDString}
+			// don't set nonce prefix
+			result = JSONRPCArray{JSONRPCArray{"mining.notify", sessionIDString, EthereumStratumVersion}}
 		}
 	}
 
@@ -358,6 +348,8 @@ func (down *DownSessionETH) parseAuthorizeRequest(request *JSONRPCLineETH) (resu
 }
 
 func (down *DownSessionETH) setUpSession(e EventSetUpSession) {
+	down.hasExtraNonce = false
+	down.isFirstJob = true
 	down.upSession = e.Session
 	down.upSession.SendEvent(EventAddDownSession{down})
 }
@@ -405,6 +397,61 @@ func (down *DownSessionETH) recvJSONRPC(e EventRecvJSONRPCETH) {
 			down.close()
 			return
 		}
+	}
+}
+
+func (down *DownSessionETH) sendJob(e EventStratumJobETH) {
+	// 还没有获得 extra nonce，不应该给矿机发送任务
+	if !down.hasExtraNonce {
+		return
+	}
+
+	powHash := e.Job.PoWHash(down.extraNonce)
+	seedHash := hex.EncodeToString(e.Job.SeedHash)
+	isClean := down.isFirstJob || e.Job.IsClean
+	target := DiffToTargetETH(down.jobDiff)
+	height := e.Job.Height()
+
+	down.jobIDQueue.Add(powHash, e.Job.JobID)
+
+	var job interface{}
+	switch down.protocol {
+	case ProtocolLegacyStratum:
+		job = JSONRPCJobETH{nil, "mining.notify", JSONRPCArray{
+			powHash,
+			powHash,
+			seedHash,
+			target,
+			isClean,
+		}, height}
+	case ProtocolETHProxy:
+		job = JSONRPC2JobETH{0, "2.0", JSONRPCArray{
+			HexAddPrefix(powHash),
+			HexAddPrefix(seedHash),
+			HexAddPrefix(target),
+		}, height}
+	case ProtocolEthereumStratum:
+		job = JSONRPCJobETH{nil, "mining.notify", JSONRPCArray{
+			powHash,
+			seedHash,
+			powHash,
+			isClean,
+		}, height}
+	}
+
+	jsonBytes, err := json.Marshal(job)
+	if err != nil {
+		glog.Error(down.id, "failed to convert mining job to JSON: ", err, ": ", job)
+	}
+	jsonBytes = append(jsonBytes, '\n')
+
+	if glog.V(12) {
+		glog.Info(down.id, "sendJob: ", string(jsonBytes))
+	}
+	_, err = down.clientConn.Write(jsonBytes)
+	if err != nil {
+		glog.Error(down.id, "failed to send job to miner: ", err.Error())
+		down.close()
 	}
 }
 
@@ -462,13 +509,14 @@ func (down *DownSessionETH) setDifficulty(e EventSetDifficulty) {
 }
 
 func (down *DownSessionETH) setExtraNonce(e EventSetExtraNonce) {
-	if e.ExtraNonce == ETH_INVALID_EXTRA_NONCE {
+	if e.ExtraNonce == EthereumInvalidExtraNonce {
 		glog.Error(down.id, "pool server is full and cannot allocate an extra nonce")
 		down.close()
 		return
 	}
 
 	down.extraNonce = e.ExtraNonce
+	down.hasExtraNonce = true
 }
 
 func (down *DownSessionETH) exit() {
@@ -486,6 +534,8 @@ func (down *DownSessionETH) handleEvent() {
 			down.setUpSession(e)
 		case EventRecvJSONRPCETH:
 			down.recvJSONRPC(e)
+		case EventStratumJobETH:
+			down.sendJob(e)
 		case EventSendBytes:
 			down.sendBytes(e)
 		case EventSubmitResponse:

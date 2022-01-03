@@ -595,22 +595,22 @@ func (up *UpSessionBTC) SendEvent(event interface{}) {
 }
 
 func (up *UpSessionBTC) addDownSession(e EventAddDownSession) {
-	session := e.Session.(*DownSessionBTC)
-	up.downSessions[session.sessionID] = session
-	up.registerWorker(session)
+	down := e.Session.(*DownSessionBTC)
+	up.downSessions[down.sessionID] = down
+	up.registerWorker(down)
 
-	if up.rpcSetVersionMask != nil && session.versionMask != 0 {
-		session.SendEvent(EventSendBytes{up.rpcSetVersionMask})
+	if up.rpcSetVersionMask != nil && down.versionMask != 0 {
+		down.SendEvent(EventSendBytes{up.rpcSetVersionMask})
 	}
 
 	if up.rpcSetDifficulty != nil {
-		session.SendEvent(EventSendBytes{up.rpcSetDifficulty})
+		down.SendEvent(EventSendBytes{up.rpcSetDifficulty})
 	}
 
 	if up.lastJob != nil {
 		bytes, err := up.lastJob.ToNotifyLine(true)
 		if err == nil {
-			session.SendEvent(EventSendBytes{bytes})
+			down.SendEvent(EventSendBytes{bytes})
 		} else {
 			glog.Warning(up.id, "failed to convert job to JSON: ", err.Error(), "; ", up.lastJob)
 		}
@@ -691,7 +691,7 @@ func (up *UpSessionBTC) recvJSONRPC(e EventRecvJSONRPCBTC) {
 	}
 }
 
-func (up *UpSessionBTC) handleSubmitShare(e EventSubmitShare) {
+func (up *UpSessionBTC) handleSubmitShare(e EventSubmitShareBTC) {
 	if e.Message.IsFakeJob {
 		up.sendSubmitResponse(e.Message.Base.SessionID, e.ID, STATUS_ACCEPT)
 		return
@@ -826,7 +826,7 @@ func (up *UpSessionBTC) handleEvent() {
 		switch e := event.(type) {
 		case EventAddDownSession:
 			up.addDownSession(e)
-		case EventSubmitShare:
+		case EventSubmitShareBTC:
 			up.handleSubmitShare(e)
 		case EventDownSessionBroken:
 			up.downSessionBroken(e)

@@ -180,7 +180,7 @@ func (down *DownSessionBTC) parseMiningSubmit(request *JSONRPCLineBTC) (result i
 		return
 	}
 
-	var msg ExMessageSubmitShare
+	var msg ExMessageSubmitShareBTC
 
 	// [1] Job ID
 	jobIDStr, ok := request.Params[1].(string)
@@ -259,7 +259,7 @@ func (down *DownSessionBTC) parseMiningSubmit(request *JSONRPCLineBTC) (result i
 	// down id
 	msg.Base.SessionID = down.sessionID
 
-	go down.upSession.SendEvent(EventSubmitShare{request.ID, &msg})
+	go down.upSession.SendEvent(EventSubmitShareBTC{request.ID, &msg})
 
 	// 如果 AsicBoost 丢失，就发送重连请求
 	if down.manager.config.DisconnectWhenLostAsicboost {

@@ -1,16 +1,33 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"time"
+
+	"github.com/holiman/uint256"
 )
 
 type StratumJobETH struct {
-	JobID    []byte
-	SeedHash []byte
-	Header   []byte
-	BaseFee  []byte
-	IsClean  bool
+	JobID     []byte
+	SeedHash  []byte
+	IsClean   bool
+	IsFakeJob bool
+	PoWHeader ETHPoWHeader
+}
+
+type JSONRPCJobETH struct {
+	ID     interface{}   `json:"id"`
+	Method string        `json:"method"`
+	Params []interface{} `json:"params"`
+	Height uint64        `json:"height"`
+}
+
+type JSONRPC2JobETH struct {
+	ID      int           `json:"id"`
+	JSONRPC string        `json:"jsonrpc"`
+	Result  []interface{} `json:"result"`
+	Height  uint64        `json:"height"`
 }
 
 func NewStratumJobETH(json *JSONRPCLineETH, sessionID uint32) (job *StratumJobETH, err error) {
@@ -30,13 +47,13 @@ func NewStratumJobETH(json *JSONRPCLineETH, sessionID uint32) (job *StratumJobET
 		err = fmt.Errorf("notify missing field header")
 		return
 	}
-	job.Header, err = Hex2Bin(json.Header)
+	header, err := Hex2Bin(json.Header)
 	if err != nil {
 		err = fmt.Errorf("failed to decode header: %s", err.Error())
 		return
 	}
 
-	job.BaseFee, err = Hex2Bin(json.BaseFee)
+	baseFee, err := Hex2Bin(json.BaseFee)
 	if err != nil {
 		err = fmt.Errorf("failed to decode base fee: %s", err.Error())
 		return
@@ -69,13 +86,23 @@ func NewStratumJobETH(json *JSONRPCLineETH, sessionID uint32) (job *StratumJobET
 		return
 	}
 
+	header = append(header, 0, 0, 0, 0) // append extra nonce
+	header = append(header, baseFee...) // append base fee
+	err = job.PoWHeader.Decode(header)
+	if err != nil {
+		err = fmt.Errorf("failed to decode block header: %s", err.Error())
+		return
+	}
+
 	// succeeded
 	return
 }
 
-func (job *StratumJobETH) ToNotifyLine(firstJob bool) (bytes []byte, err error) {
-	// TODO: finish it
-	return
+func (job *StratumJobETH) PoWHash(extraNonce uint32) string {
+	if job.IsFakeJob {
+		return hex.EncodeToString(job.JobID)
+	}
+	return hex.EncodeToString(job.PoWHeader.Hash(extraNonce).Bytes())
 }
 
 func IsFakeJobIDETH(id string) bool {
@@ -84,10 +111,25 @@ func IsFakeJobIDETH(id string) bool {
 }
 
 func (job *StratumJobETH) ToNewFakeJob() {
+	job.IsFakeJob = true
+
 	now := uint64(time.Now().Unix())
-	job.Header = Uint64ToBin(now)
+	job.PoWHeader.SetTime(now)
 
 	// fake job id
 	job.JobID = FakeJobIDETHPrefixBin
-	job.JobID = append(job.JobID, job.Header...)
+	job.JobID = append(job.JobID, Uint64ToBin(now)...)
+}
+
+func (job *StratumJobETH) Height() uint64 {
+	return job.PoWHeader.Number.Uint64()
+}
+
+func DiffToTargetETH(diff uint64) (target string) {
+	var result uint256.Int
+	result.SetUint64(diff)
+	result.Div(&EthereumPoolDiff1, &result)
+	bin := result.Bytes32()
+	target = hex.EncodeToString(bin[:])
+	return
 }

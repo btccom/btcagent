@@ -47,6 +47,14 @@ type JSONRPC2Error struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
+// JSONRPC2Request request message of json-rpc 2.0
+type JSONRPC2Request struct {
+	ID      interface{}   `json:"id"`
+	JSONRPC string        `json:"jsonrpc"`
+	Method  string        `json:"method"`
+	Params  []interface{} `json:"params"`
+}
+
 // JSONRPC2Response response message of json-rpc 2.0
 type JSONRPC2Response struct {
 	ID      interface{}    `json:"id"`
@@ -134,6 +142,30 @@ func (rpcData *JSONRPCRequest) ToJSONBytesLine() (bytes []byte, err error) {
 	return
 }
 
+func (rpcData *JSONRPCRequest) ToRPC2JSONBytes() ([]byte, error) {
+	id := rpcData.ID
+	if id == nil {
+		id = 0
+	}
+	rpc2Data := JSONRPC2Request{id, "2.0", rpcData.Method, rpcData.Params}
+	return json.Marshal(rpc2Data)
+}
+
+func (rpcData *JSONRPCRequest) ToRPC2JSONBytesLine() (bytes []byte, err error) {
+	bytes, err = rpcData.ToRPC2JSONBytes()
+	if err == nil {
+		bytes = append(bytes, '\n')
+	}
+	return
+}
+
+func (rpcData *JSONRPCRequest) ToJSONBytesLineWithVersion(version int) (bytes []byte, err error) {
+	if version == 2 {
+		return rpcData.ToRPC2JSONBytesLine()
+	}
+	return rpcData.ToJSONBytesLine()
+}
+
 // NewJSONRPCResponse 解析 JSON RPC 响应字符串并创建 JSONRPCResponse 对象
 func NewJSONRPCResponse(rpcJSON []byte) (rpcData *JSONRPCResponse, err error) {
 	rpcData = new(JSONRPCResponse)
@@ -160,7 +192,11 @@ func (rpcData *JSONRPCResponse) ToJSONBytesLine() (bytes []byte, err error) {
 }
 
 func (rpcData *JSONRPCResponse) ToRPC2JSONBytes() ([]byte, error) {
-	rpc2Data := JSONRPC2Response{rpcData.ID, "2.0", rpcData.Result, NewJSONRPC2Error(rpcData.Error)}
+	id := rpcData.ID
+	if id == nil {
+		id = 0
+	}
+	rpc2Data := JSONRPC2Response{id, "2.0", rpcData.Result, NewJSONRPC2Error(rpcData.Error)}
 	return json.Marshal(rpc2Data)
 }
 

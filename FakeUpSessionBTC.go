@@ -85,7 +85,7 @@ func (up *FakeUpSessionBTC) sendSubmitResponse(sessionID uint16, id interface{},
 	go down.SendEvent(EventSubmitResponse{id, status})
 }
 
-func (up *FakeUpSessionBTC) handleSubmitShare(e EventSubmitShare) {
+func (up *FakeUpSessionBTC) handleSubmitShare(e EventSubmitShareBTC) {
 	up.sendSubmitResponse(e.Message.Base.SessionID, e.ID, STATUS_ACCEPT)
 }
 
@@ -149,7 +149,7 @@ func (up *FakeUpSessionBTC) handleEvent() {
 		switch e := event.(type) {
 		case EventAddDownSession:
 			up.addDownSession(e)
-		case EventSubmitShare:
+		case EventSubmitShareBTC:
 			up.handleSubmitShare(e)
 		case EventDownSessionBroken:
 			up.downSessionBroken(e)

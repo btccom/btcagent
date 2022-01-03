@@ -1,6 +1,10 @@
 package main
 
-import "encoding/hex"
+import (
+	"encoding/hex"
+
+	"github.com/holiman/uint256"
+)
 
 // AuthorizeStat 认证状态
 type AuthorizeStat uint8
@@ -68,4 +72,10 @@ var FakeJobIDETHPrefixBin = []byte{
 }
 var FakeJobIDETHPrefix = hex.EncodeToString(FakeJobIDETHPrefixBin)
 
-const ETH_INVALID_EXTRA_NONCE = 0xffffffff
+const EthereumInvalidExtraNonce = 0xffffffff
+const EthereumJobIDQueueSize = 256
+
+var EthereumPoolDiff1 = uint256.Int{
+	0xffffffffffffffff, 0xffffffffffffffff,
+	0xffffffffffffffff, 0xffffffffffffffff,
+}

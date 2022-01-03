@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"strconv"
 	"time"
@@ -348,7 +349,7 @@ func (up *UpSessionETH) handleSetDifficulty(rpcData *JSONRPCLineETH, jsonBytes [
 			return
 		}
 		// nicehash_diff = btcpool_diff / pow(2, 32)
-		up.defaultDiff = uint64(diff * 0xffffffff)
+		up.defaultDiff = uint64(math.Round(diff * 0xffffffff))
 
 		e := EventSetDifficulty{up.defaultDiff}
 		for _, down := range up.downSessions {
@@ -536,12 +537,12 @@ func (up *UpSessionETH) SendEvent(event interface{}) {
 }
 
 func (up *UpSessionETH) addDownSession(e EventAddDownSession) {
-	session := e.Session.(*DownSessionETH)
-	up.downSessions[session.sessionID] = session
-	up.registerWorker(session)
+	down := e.Session.(*DownSessionETH)
+	up.downSessions[down.sessionID] = down
+	up.registerWorker(down)
 
 	if up.defaultDiff != 0 {
-		session.SendEvent(EventSetDifficulty{up.defaultDiff})
+		down.SendEvent(EventSetDifficulty{up.defaultDiff})
 	}
 }
 
@@ -570,14 +571,9 @@ func (up *UpSessionETH) handleMiningNotify(rpcData *JSONRPCLineETH, jsonBytes []
 		return
 	}
 
-	bytes, err := job.ToNotifyLine(false)
-	if err != nil {
-		glog.Warning(up.id, "failed to convert job to JSON: ", err.Error(), "; ", string(jsonBytes))
-		return
-	}
-
+	e := EventStratumJobETH{job}
 	for _, down := range up.downSessions {
-		go down.SendEvent(EventSendBytes{bytes})
+		go down.SendEvent(e)
 	}
 
 	up.lastJob = job
@@ -615,19 +611,19 @@ func (up *UpSessionETH) recvJSONRPC(e EventRecvJSONRPCETH) {
 	}
 }
 
-func (up *UpSessionETH) handleSubmitShare(e EventSubmitShare) {
+func (up *UpSessionETH) handleSubmitShare(e EventSubmitShareETH) {
 	if e.Message.IsFakeJob {
-		up.sendSubmitResponse(e.Message.Base.SessionID, e.ID, STATUS_ACCEPT)
+		up.sendSubmitResponse(e.Message.SessionID, e.ID, STATUS_ACCEPT)
 		return
 	}
 
 	_, err := up.writeExMessage(e.Message)
 
 	if up.config.SubmitResponseFromServer && up.serverCapSubmitResponse {
-		up.submitIDs[up.submitIndex] = SubmitID{e.ID, e.Message.Base.SessionID}
+		up.submitIDs[up.submitIndex] = SubmitID{e.ID, e.Message.SessionID}
 		up.submitIndex++
 	} else {
-		up.sendSubmitResponse(e.Message.Base.SessionID, e.ID, STATUS_ACCEPT)
+		up.sendSubmitResponse(e.Message.SessionID, e.ID, STATUS_ACCEPT)
 	}
 
 	if err != nil {
@@ -706,7 +702,10 @@ func (up *UpSessionETH) handleExMessageSetExtraNonce(ex *ExMessage) {
 
 	down := up.downSessions[msg.SessionID]
 	if down != nil {
-		go down.SendEvent(EventSetExtraNonce{msg.ExtraNonce})
+		down.SendEvent(EventSetExtraNonce{msg.ExtraNonce})
+		if up.lastJob != nil {
+			down.SendEvent(EventStratumJobETH{up.lastJob})
+		}
 	} else {
 		// 客户端已断开，忽略
 		if glog.V(3) {
@@ -762,7 +761,7 @@ func (up *UpSessionETH) handleEvent() {
 		switch e := event.(type) {
 		case EventAddDownSession:
 			up.addDownSession(e)
-		case EventSubmitShare:
+		case EventSubmitShareETH:
 			up.handleSubmitShare(e)
 		case EventDownSessionBroken:
 			up.downSessionBroken(e)
