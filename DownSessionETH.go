@@ -244,6 +244,7 @@ func (down *DownSessionETH) parseMiningSubmit(request *JSONRPCLineETH) (result i
 
 	if len(mixHash) > 0 {
 		msg.MixHash, _ = Hex2Bin(mixHash)
+		BinReverse(msg.MixHash) // btcpool使用小端字节序
 	}
 
 	go down.upSession.SendEvent(EventSubmitShareETH{request.ID, &msg})

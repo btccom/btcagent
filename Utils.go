@@ -223,3 +223,14 @@ func Hex2Uint64(hexStr string) (result uint64, err error) {
 	result, err = strconv.ParseUint(hexStr, 16, 64)
 	return
 }
+
+// BinReverse 颠倒字节序列
+func BinReverse(bin []byte) {
+	i := 0
+	j := len(bin) - 1
+	for i < j {
+		bin[i], bin[j] = bin[j], bin[i]
+		i++
+		j--
+	}
+}

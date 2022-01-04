@@ -74,6 +74,7 @@ func NewStratumJobETH(json *JSONRPCLineETH, sessionID uint32) (job *StratumJobET
 		err = fmt.Errorf("failed to decode job id: %s", err.Error())
 		return
 	}
+	BinReverse(job.JobID) // btcpool使用小端字节序
 
 	seedHash, ok := json.Params[1].(string)
 	if !ok {
