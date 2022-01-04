@@ -24,7 +24,7 @@ type JSONRPCJobETH struct {
 }
 
 type JSONRPC2JobETH struct {
-	ID      int           `json:"id"`
+	ID      interface{}   `json:"id"`
 	JSONRPC string        `json:"jsonrpc"`
 	Result  []interface{} `json:"result"`
 	Height  uint64        `json:"height"`
