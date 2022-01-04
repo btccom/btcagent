@@ -9,6 +9,8 @@ type EventType uint8
 
 type EventExit struct{}
 
+type EventPoolNotReady struct{}
+
 type EventInitFinished struct{}
 
 type EventUpSessionReady struct {

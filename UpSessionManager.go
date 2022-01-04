@@ -101,9 +101,15 @@ func (manager *UpSessionManager) addDownSession(e EventAddDownSession) {
 		return
 	}
 
-	// 服务器均未就绪，把矿机托管给 FakeUpSession
-	manager.fakeUpSession.minerNum++
-	e.Session.SendEvent(EventSetUpSession{manager.fakeUpSession.upSession})
+	// 服务器均未就绪，若已启用 AlwaysKeepDownconn，就把矿机托管给 FakeUpSession
+	if manager.config.AlwaysKeepDownconn {
+		manager.fakeUpSession.minerNum++
+		e.Session.SendEvent(EventSetUpSession{manager.fakeUpSession.upSession})
+		return
+	}
+
+	// 未启用 AlwaysKeepDownconn，直接断开连接，防止矿机认为 BTCAgent 连接活跃
+	e.Session.SendEvent(EventPoolNotReady{})
 }
 
 func (manager *UpSessionManager) upSessionReady(e EventUpSessionReady) {

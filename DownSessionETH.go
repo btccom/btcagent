@@ -550,6 +550,11 @@ func (down *DownSessionETH) exit() {
 	down.close()
 }
 
+func (down *DownSessionETH) poolNotReady() {
+	glog.Warning(down.id, "pool connection not ready")
+	down.exit()
+}
+
 func (down *DownSessionETH) handleEvent() {
 	down.eventLoopRunning = true
 	for down.eventLoopRunning {
@@ -574,6 +579,8 @@ func (down *DownSessionETH) handleEvent() {
 			down.close()
 		case EventExit:
 			down.exit()
+		case EventPoolNotReady:
+			down.poolNotReady()
 		default:
 			glog.Error(down.id, "unknown event: ", e)
 		}

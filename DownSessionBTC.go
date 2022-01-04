@@ -488,6 +488,11 @@ func (down *DownSessionBTC) exit() {
 	down.close()
 }
 
+func (down *DownSessionBTC) poolNotReady() {
+	glog.Warning(down.id, "pool connection not ready")
+	down.exit()
+}
+
 func (down *DownSessionBTC) handleEvent() {
 	down.eventLoopRunning = true
 	for down.eventLoopRunning {
@@ -506,6 +511,8 @@ func (down *DownSessionBTC) handleEvent() {
 			down.close()
 		case EventExit:
 			down.exit()
+		case EventPoolNotReady:
+			down.poolNotReady()
 		default:
 			glog.Error(down.id, "unknown event: ", e)
 		}
