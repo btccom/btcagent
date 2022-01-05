@@ -517,7 +517,7 @@ func (down *DownSessionETH) submitResponse(e EventSubmitResponse) {
 
 func (down *DownSessionETH) setDifficulty(e EventSetDifficulty) {
 	if down.protocol == ProtocolEthereumStratum && down.jobDiff != e.Difficulty {
-		diff := float64(e.Difficulty) / float64(0xffffffff)
+		diff := float64(e.Difficulty) / 4294967296.0
 
 		var request JSONRPCRequest
 		request.Method = "mining.set_difficulty"

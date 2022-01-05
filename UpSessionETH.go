@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"strconv"
 	"time"
@@ -349,7 +348,10 @@ func (up *UpSessionETH) handleSetDifficulty(rpcData *JSONRPCLineETH, jsonBytes [
 			return
 		}
 		// nicehash_diff = btcpool_diff / pow(2, 32)
-		up.defaultDiff = uint64(math.Round(diff * 0xffffffff))
+		up.defaultDiff = uint64(diff * 4294967296.0)
+		if glog.V(5) {
+			glog.Info(up.id, "mining.set_difficulty: ", diff, " -> ", up.defaultDiff)
+		}
 
 		e := EventSetDifficulty{up.defaultDiff}
 		for _, down := range up.downSessions {
