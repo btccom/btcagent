@@ -301,7 +301,7 @@ func (down *DownSessionETH) parseSubscribeRequest(request *JSONRPCLineETH) (resu
 			down.protocol = ProtocolEthereumStratum
 			sessionIDString := Uint16ToHex(down.sessionID)
 			// message example: {"id":1,"jsonrpc":"2.0","result":[["mining.notify","0001","EthereumStratum/1.0.0"],"0001"],"error":null}
-			// don't set nonce prefix
+			// Add a padding nonce prefix. BTCAgent doesn't need a nonce prefix, but gminer has problems when it's missing.
 			result = JSONRPCArray{JSONRPCArray{"mining.notify", sessionIDString, EthereumStratumVersion}, "00"}
 		}
 	}
