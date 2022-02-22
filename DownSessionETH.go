@@ -302,7 +302,7 @@ func (down *DownSessionETH) parseSubscribeRequest(request *JSONRPCLineETH) (resu
 			sessionIDString := Uint16ToHex(down.sessionID)
 			// message example: {"id":1,"jsonrpc":"2.0","result":[["mining.notify","0001","EthereumStratum/1.0.0"],"0001"],"error":null}
 			// don't set nonce prefix
-			result = JSONRPCArray{JSONRPCArray{"mining.notify", sessionIDString, EthereumStratumVersion}}
+			result = JSONRPCArray{JSONRPCArray{"mining.notify", sessionIDString, EthereumStratumVersion}, "00"}
 		}
 	}
 
