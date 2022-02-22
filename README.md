@@ -153,7 +153,7 @@ If you can [download a binary](https://github.com/btccom/btcagent/releases) suit
 
 #### Build on Windows
 
-It is recommended to compile via [build-all.sh](build-all.sh) in [WSL](https://aka.ms/wsl).
+It is recommended to compile via [./build-all.sh](./build-all.sh) in [WSL](https://aka.ms/wsl).
 
 If you really want to compile natively in Windows, you need [mingw-w64 gcc from MSYS2](https://www.mingw-w64.org/downloads/#msys2).
 
