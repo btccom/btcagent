@@ -14,7 +14,7 @@ build() {
     ext=""
     if [ "$1" == "windows" ]; then ext=".exe"; fi
 
-    echo "build for $1 $arch..."
+    echo "build for $os $arch..."
     GOOS="$1" GOARCH="$2" go build -o "build/btcagent-$os-$arch$ext"
 }
 
