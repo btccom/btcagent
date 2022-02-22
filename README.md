@@ -150,3 +150,13 @@ If you can [download a binary](https://github.com/btccom/btcagent/releases) suit
    ```
 
 4. You will get the executable file `btcagent` (or `btcagent.exe` on Windows).
+
+#### Build on Windows
+
+It is recommended to compile via [build-all.sh](build-all.sh) in [WSL](https://aka.ms/wsl).
+
+If you really want to compile natively in Windows, you need [mingw-w64 gcc from MSYS2](https://www.mingw-w64.org/downloads/#msys2).
+
+If you have `C:\msys64\mingw64\bin\gcc.exe` on your system, add `C:\msys64\mingw64\bin` to the environment variable `PATH`.
+
+Note that you need a 64-bit gcc to compile the 64-bit BTCAgent.

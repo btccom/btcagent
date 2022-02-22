@@ -157,3 +157,13 @@ sudo rm /etc/systemd/system/btcagent.service
    ```
 
 4. 然后就能得到可执行文件`btcagent`（Windows中为`btcagent.exe`）。
+
+#### 在 Windows 中编译
+
+建议在 [WSL](https://aka.ms/wsl) 中通过 [build-all.sh](build-all.sh) 编译。
+
+如果真的想在 Windows 中原生编译，你需要安装[来自 MSYS2 的 mingw-w64 gcc](https://www.mingw-w64.org/downloads/#msys2)。
+
+比如，如果装好后`gcc`位于`C:\msys64\mingw64\bin\gcc.exe`，就把`C:\msys64\mingw64\bin`添加到环境变量`PATH`里。
+
+注意：编译64位BTCAgent需要64位gcc。
