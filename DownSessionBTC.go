@@ -84,6 +84,17 @@ func (down *DownSessionBTC) close() {
 	down.manager.sessionIDManager.FreeSessionID(down.sessionID)
 }
 
+func (down *DownSessionBTC) writeJSONRequest(jsonData *JSONRPCRequest) (int, error) {
+	bytes, err := jsonData.ToJSONBytesLine()
+	if err != nil {
+		return 0, err
+	}
+	if glog.V(12) {
+		glog.Info(down.id, "writeJSONRequest: ", string(bytes))
+	}
+	return down.clientConn.Write(bytes)
+}
+
 func (down *DownSessionBTC) writeJSONResponse(jsonData *JSONRPCResponse) (int, error) {
 	bytes, err := jsonData.ToJSONBytesLine()
 	if err != nil {
@@ -384,16 +395,12 @@ func (down *DownSessionBTC) parseConfigureRequest(request *JSONRPCLineBTC) (resu
 		// 更新为真实的版本掩码。
 		result = JSONRPCObj{
 			"version-rolling":      true,
-			"version-rolling.mask": down.versionMaskStr()}
+			"version-rolling.mask": VersionMaskStr(down.manager.config.Advanced.BitcoinDefaultVersionMask & down.versionMask)}
 		return
 	}
 
 	// 未知配置内容，不响应
 	return
-}
-
-func (down *DownSessionBTC) versionMaskStr() string {
-	return fmt.Sprintf("%08x", down.versionMask)
 }
 
 func (down *DownSessionBTC) setUpSession(e EventSetUpSession) {
@@ -483,6 +490,18 @@ func (down *DownSessionBTC) submitResponse(e EventSubmitResponse) {
 	}
 }
 
+func (down *DownSessionBTC) setVersionMask(e EventSetVersionMask) {
+	var request JSONRPCRequest
+	request.Method = "mining.set_version_mask"
+	request.SetParams(VersionMaskStr(e.VersionMask & down.versionMask))
+
+	_, err := down.writeJSONRequest(&request)
+	if err != nil {
+		glog.Error(down.id, "failed to send set_version_mask to miner: ", err.Error())
+		down.close()
+	}
+}
+
 func (down *DownSessionBTC) exit() {
 	down.stat = StatExit
 	down.close()
@@ -507,6 +526,8 @@ func (down *DownSessionBTC) handleEvent() {
 			down.sendBytes(e)
 		case EventSubmitResponse:
 			down.submitResponse(e)
+		case EventSetVersionMask:
+			down.setVersionMask(e)
 		case EventConnBroken:
 			down.close()
 		case EventExit:

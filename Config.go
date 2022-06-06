@@ -88,6 +88,9 @@ type Config struct {
 			PoolSession        uint `json:"pool_session"`
 			MinerSession       uint `json:"miner_session"`
 		} `json:"message_queue_size"`
+
+		// 比特币的默认version mask（最开始发给矿机的version mask，连上矿池后值会被覆盖）
+		BitcoinDefaultVersionMask uint32 `json:"bitcoin_default_version_mask"`
 	} `json:"advanced"`
 
 	sessionFactory SessionFactory
@@ -113,6 +116,8 @@ func NewConfig() (config *Config) {
 	config.Advanced.MessageQueueSize.PoolSessionManager = UpSessionManagerChannelCache
 	config.Advanced.MessageQueueSize.PoolSession = UpSessionChannelCache
 	config.Advanced.MessageQueueSize.MinerSession = DownSessionChannelCache
+
+	config.Advanced.BitcoinDefaultVersionMask = BitcoinDefaultVersionMask
 
 	return
 }

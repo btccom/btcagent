@@ -57,6 +57,9 @@ const (
 	CapSubmitResponse = "subres" // Send response of mining.submit
 )
 
+// BitcoinDefaultVersionMask 比特币的默认version mask
+const BitcoinDefaultVersionMask uint32 = 0x1fffe000
+
 const DownSessionDisconnectWhenLostAsicboost = true
 const UpSessionTLSInsecureSkipVerify = true
 

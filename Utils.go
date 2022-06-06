@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"net"
 	"regexp"
@@ -233,4 +234,9 @@ func BinReverse(bin []byte) {
 		i++
 		j--
 	}
+}
+
+// VersionMaskStr 获取version mask的字符串表示
+func VersionMaskStr(mask uint32) string {
+	return fmt.Sprintf("%08x", mask)
 }

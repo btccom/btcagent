@@ -120,3 +120,7 @@ type EventSetExtraNonce struct {
 type EventStratumJobETH struct {
 	Job *StratumJobETH
 }
+
+type EventSetVersionMask struct {
+	VersionMask uint32
+}

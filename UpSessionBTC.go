@@ -41,9 +41,8 @@ type UpSessionBTC struct {
 	eventLoopRunning bool
 	eventChannel     chan interface{}
 
-	lastJob           *StratumJobBTC
-	rpcSetVersionMask []byte
-	rpcSetDifficulty  []byte
+	lastJob          *StratumJobBTC
+	rpcSetDifficulty []byte
 
 	submitIDs   map[uint16]SubmitID
 	submitIndex uint16
@@ -349,8 +348,6 @@ func (up *UpSessionBTC) Init() {
 }
 
 func (up *UpSessionBTC) handleSetVersionMask(rpcData *JSONRPCLineBTC, jsonBytes []byte) {
-	up.rpcSetVersionMask = jsonBytes
-
 	if len(rpcData.Params) > 0 {
 		if up.serverCapVersionRolling {
 			versionMaskHex, ok := rpcData.Params[0].(string)
@@ -368,14 +365,19 @@ func (up *UpSessionBTC) handleSetVersionMask(rpcData *JSONRPCLineBTC, jsonBytes 
 			if glog.V(1) {
 				glog.Info(up.id, "AsicBoost via BTCAgent enabled, allowed version mask: ", versionMaskHex)
 			}
+
+			if up.config.Advanced.BitcoinDefaultVersionMask != up.versionMask {
+				glog.Info(up.id, "Update default version mask: ", VersionMaskStr(up.config.Advanced.BitcoinDefaultVersionMask), " -> ", versionMaskHex)
+				up.config.Advanced.BitcoinDefaultVersionMask = up.versionMask
+			}
+
 		} else {
 			// server doesn't support version rolling via BTCAgent
 			up.versionMask = 0
-			rpcData.Params[0] = "00000000"
 		}
 	}
 
-	e := EventSendBytes{up.rpcSetVersionMask}
+	e := EventSetVersionMask{up.versionMask}
 	for _, down := range up.downSessions {
 		if down.versionMask != 0 {
 			go down.SendEvent(e)
@@ -599,8 +601,8 @@ func (up *UpSessionBTC) addDownSession(e EventAddDownSession) {
 	up.downSessions[down.sessionID] = down
 	up.registerWorker(down)
 
-	if up.rpcSetVersionMask != nil && down.versionMask != 0 {
-		down.SendEvent(EventSendBytes{up.rpcSetVersionMask})
+	if down.versionMask != 0 {
+		down.SendEvent(EventSetVersionMask{up.versionMask})
 	}
 
 	if up.rpcSetDifficulty != nil {
