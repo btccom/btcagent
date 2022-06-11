@@ -58,6 +58,10 @@ type EventUpSessionBroken struct {
 	Slot int
 }
 
+type EventUpSessionFull struct {
+	Slot int
+}
+
 type EventSubmitShareBTC struct {
 	ID      interface{}
 	Message *ExMessageSubmitShareBTC

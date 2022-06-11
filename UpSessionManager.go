@@ -10,6 +10,7 @@ import (
 type UpSessionInfo struct {
 	minerNum  int
 	ready     bool
+	full      bool
 	upSession UpSession
 }
 
@@ -90,7 +91,7 @@ func (manager *UpSessionManager) addDownSession(e EventAddDownSession) {
 	// 寻找连接数最少的服务器
 	for i := range manager.upSessions {
 		info := &manager.upSessions[i]
-		if info.ready && (selected == nil || info.minerNum < selected.minerNum) {
+		if info.ready && !info.full && (selected == nil || info.minerNum < selected.minerNum) {
 			selected = info
 		}
 	}
@@ -153,6 +154,11 @@ func (manager *UpSessionManager) upSessionBroken(e EventUpSessionBroken) {
 	info.minerNum = 0
 
 	go manager.connect(e.Slot)
+}
+
+func (manager *UpSessionManager) upSessionFull(e EventUpSessionFull) {
+	info := &manager.upSessions[e.Slot]
+	info.full = true
 }
 
 func (manager *UpSessionManager) updateMinerNum(e EventUpdateMinerNum) {
@@ -233,6 +239,8 @@ func (manager *UpSessionManager) handleEvent() {
 			manager.addDownSession(e)
 		case EventUpSessionBroken:
 			manager.upSessionBroken(e)
+		case EventUpSessionFull:
+			manager.upSessionFull(e)
 		case EventUpdateMinerNum:
 			manager.updateMinerNum(e)
 		case EventUpdateFakeMinerNum:
