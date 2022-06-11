@@ -295,7 +295,7 @@ func (up *UpSessionETH) close() {
 		up.manager.SendEvent(EventUpSessionBroken{up.slot})
 	}
 
-	if up.config.AlwaysKeepDownconn {
+	if up.stat != StatExit && up.config.AlwaysKeepDownconn {
 		if up.lastJob != nil {
 			up.manager.SendEvent(EventUpdateFakeJobETH{up.lastJob})
 		}
@@ -702,13 +702,13 @@ func (up *UpSessionETH) handleExMessageSetExtraNonce(ex *ExMessage) {
 		return
 	}
 
+	// 矿池服务器满了，无法连接新矿机
+	if msg.ExtraNonce == EthereumInvalidExtraNonce {
+		up.manager.SendEvent(EventUpSessionFull{up.slot})
+	}
+
 	down := up.downSessions[msg.SessionID]
 	if down != nil {
-		// 矿池服务器满了，无法连接新矿机
-		if msg.ExtraNonce == EthereumInvalidExtraNonce {
-			up.manager.SendEvent(EventUpSessionFull{up.slot})
-		}
-
 		down.SendEvent(EventSetExtraNonce{msg.ExtraNonce})
 		if up.lastJob != nil {
 			down.SendEvent(EventStratumJobETH{up.lastJob})

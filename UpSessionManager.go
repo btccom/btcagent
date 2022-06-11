@@ -164,10 +164,11 @@ func (manager *UpSessionManager) upSessionFull(e EventUpSessionFull) {
 func (manager *UpSessionManager) updateMinerNum(e EventUpdateMinerNum) {
 	defer manager.tryPrintMinerNum()
 
-	manager.upSessions[e.Slot].minerNum -= e.DisconnectedMinerCounter
+	up := &manager.upSessions[e.Slot]
+	up.minerNum -= e.DisconnectedMinerCounter
 
 	if glog.V(3) {
-		glog.Info(manager.id, "miner num update, slot: ", e.Slot, ", miners: ", manager.upSessions[e.Slot].minerNum)
+		glog.Info(manager.id, "miner num update, slot: ", e.Slot, ", miners: ", up.minerNum)
 	}
 
 	if manager.config.MultiUserMode {
@@ -179,6 +180,15 @@ func (manager *UpSessionManager) updateMinerNum(e EventUpdateMinerNum) {
 			glog.Info(manager.id, "no miners on sub-account ", manager.subAccount, ", close pool connections")
 			manager.parent.SendEvent(EventStopUpSessionManager{manager.subAccount})
 		}
+	}
+
+	if up.full && up.minerNum == 0 {
+		// 重连矿池服务器已满的空闲连接
+		go func() {
+			glog.Info(manager.id, "reconnect full pool session #", e.Slot)
+			up.upSession.SendEvent(EventExit{})
+			manager.SendEvent(EventUpSessionBroken{e.Slot})
+		}()
 	}
 }
 
