@@ -295,7 +295,7 @@ func (up *UpSessionETH) close() {
 		up.manager.SendEvent(EventUpSessionBroken{up.slot})
 	}
 
-	if up.config.AlwaysKeepDownconn {
+	if up.stat != StatExit && up.config.AlwaysKeepDownconn {
 		if up.lastJob != nil {
 			up.manager.SendEvent(EventUpdateFakeJobETH{up.lastJob})
 		}
@@ -699,6 +699,13 @@ func (up *UpSessionETH) handleExMessageSetExtraNonce(ex *ExMessage) {
 	err := msg.Unserialize(ex.Body)
 	if err != nil {
 		glog.Error(up.id, "failed to decode ex-message CMD_SET_EXTRA_NONCE: ", err.Error(), "; ", ex)
+		return
+	}
+
+	// 矿池服务器满了，无法连接新矿机
+	if msg.ExtraNonce == EthereumInvalidExtraNonce {
+		glog.Error(up.id, "pool server is full, try to reconnect")
+		up.close()
 		return
 	}
 
