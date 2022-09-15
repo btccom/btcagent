@@ -307,7 +307,7 @@ func (up *UpSessionBTC) close() {
 		up.manager.SendEvent(EventUpSessionBroken{up.slot})
 	}
 
-	if up.config.AlwaysKeepDownconn {
+	if up.stat != StatExit && up.config.AlwaysKeepDownconn {
 		if up.lastJob != nil {
 			up.manager.SendEvent(EventUpdateFakeJobBTC{up.lastJob})
 		}
