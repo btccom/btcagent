@@ -34,6 +34,7 @@
             "pool_session_manager": 64,
             "pool_session": 512,
             "miner_session": 64
-        }
+        },
+        "bitcoin_default_version_mask": 536862720
     }
 }
