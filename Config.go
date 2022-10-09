@@ -132,12 +132,6 @@ func (conf *Config) Init() {
 	switch conf.AgentType {
 	case "btc":
 		conf.sessionFactory = new(SessionFactoryBTC)
-	case "etc":
-		fallthrough
-	case "ethw":
-		fallthrough
-	case "etf":
-		fallthrough
 	case "eth":
 		conf.sessionFactory = new(SessionFactoryETH)
 	default:
