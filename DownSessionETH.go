@@ -386,15 +386,14 @@ func (down *DownSessionETH) handleRequest() {
 			return
 		}
 		if glog.V(11) {
-			glog.Info(down.id, "handleRequest: ", string(jsonBytes), ", len=", len(jsonBytes), ", hex=", hex.EncodeToString(jsonBytes))
+			glog.Info(down.id, "handleRequest: ", string(jsonBytes))
 		}
 
 		rpcData, err := NewJSONRPCLineETH(jsonBytes)
 
 		// ignore the json decode error
 		if err != nil {
-			glog.Warning(down.id, "failed to decode JSON from miner: ", err.Error(), "; ", string(jsonBytes), ", len=", len(jsonBytes), ", hex=", hex.EncodeToString(jsonBytes))
-			continue
+			glog.Warning(down.id, "failed to decode JSON from miner: ", err.Error(), "; ", string(jsonBytes))
 		}
 
 		down.SendEvent(EventRecvJSONRPCETH{rpcData, jsonBytes})
